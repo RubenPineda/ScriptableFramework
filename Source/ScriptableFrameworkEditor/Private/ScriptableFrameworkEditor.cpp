@@ -3,7 +3,7 @@
 #pragma once
 
 #include "ScriptableFrameworkEditor.h"
-#include "ScriptableClassCache.h"
+#include "ScriptableTypeCache.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableConditions/ScriptableCondition.h"
@@ -32,16 +32,16 @@ void FScriptableFrameworkEditorModule::ShutdownModule()
 	UnregisterPropertyLayouts();
 }
 
-TSharedPtr<FScriptableClassCache> FScriptableFrameworkEditorModule::GetClassCache()
+TSharedPtr<FScriptableTypeCache> FScriptableFrameworkEditorModule::GetScriptableTypeCache()
 {
-	if (!ClassCache.IsValid())
+	if (!ScriptableTypeCache.IsValid())
 	{
-		ClassCache = MakeShareable(new FScriptableClassCache());
-		ClassCache->AddRootClass(UScriptableTask::StaticClass());
-		ClassCache->AddRootClass(UScriptableCondition::StaticClass());
+		ScriptableTypeCache = MakeShareable(new FScriptableTypeCache());
+		ScriptableTypeCache->AddRootClass(UScriptableTask::StaticClass());
+		ScriptableTypeCache->AddRootClass(UScriptableCondition::StaticClass());
 	}
 
-	return ClassCache;
+	return ScriptableTypeCache;
 }
 
 void FScriptableFrameworkEditorModule::RegisterAssetActions()

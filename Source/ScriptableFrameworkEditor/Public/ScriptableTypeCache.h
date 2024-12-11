@@ -1,9 +1,9 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Kirzo. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ScriptableClassCache.generated.h"
+#include "ScriptableTypeCache.generated.h"
 
 enum class EReloadCompleteReason;
 
@@ -14,13 +14,13 @@ struct FAssetData;
  * If the class or struct is from a package that is not yet loaded, the data will update on GetStruct/Class/Scripstruct()
  */
 USTRUCT()
-struct FScriptableClassData
+struct FScriptableTypeData
 {
 	GENERATED_BODY()
 
-	FScriptableClassData() {}
-	FScriptableClassData(UStruct* InStruct);
-	FScriptableClassData(const FString& InClassAssetName, const FString& InClassPackage, const FName InStructName, UStruct* InStruct);
+	FScriptableTypeData() {}
+	FScriptableTypeData(UStruct* InStruct);
+	FScriptableTypeData(const FString& InClassAssetName, const FString& InClassPackage, const FName InStructName, UStruct* InStruct);
 
 	FName GetStructName() const { return StructName; }
 
@@ -59,10 +59,10 @@ private:
  * Caches specified classes or structs and reacts to engine events to keep the lists always up to date.
  * All the derived classes or structs are kept in the cache.
  */
-struct FScriptableClassCache
+struct FScriptableTypeCache
 {
-	FScriptableClassCache();
-	~FScriptableClassCache();
+	FScriptableTypeCache();
+	~FScriptableTypeCache();
 
 	/** Adds a Struct to keep track of */
 	void AddRootStruct(UStruct* RootStruct);
@@ -80,16 +80,16 @@ struct FScriptableClassCache
 	}
 
 	/** Returns know derived Structs based on provided base. If the base Struct is not added as root Struct, nothing is returned. */
-	void GetStructs(const UStruct* BaseStruct, TArray<TSharedPtr<FScriptableClassData>>& AvailableClasses);
+	void GetStructs(const UStruct* BaseStruct, TArray<TSharedPtr<FScriptableTypeData>>& AvailableClasses);
 	
 	/** Returns know derived Classes based on provided base. If the base Class is not added as root Class, nothing is returned. */
-	void GetClasses(const UStruct* BaseClass, TArray<TSharedPtr<FScriptableClassData>>& AvailableClasses)
+	void GetClasses(const UStruct* BaseClass, TArray<TSharedPtr<FScriptableTypeData>>& AvailableClasses)
 	{
 		GetStructs(BaseClass, AvailableClasses);
 	}
 	
 	/** Returns know derived ScriptStructs based on provided base. If the base struct is not added as root ScriptStruct, nothing is returned. */
-	void GetScripStructs(const UScriptStruct* BaseStruct, TArray<TSharedPtr<FScriptableClassData>>& AvailableClasses)
+	void GetScripStructs(const UScriptStruct* BaseStruct, TArray<TSharedPtr<FScriptableTypeData>>& AvailableClasses)
 	{
 		GetStructs(BaseStruct, AvailableClasses);
 	}
@@ -114,7 +114,7 @@ private:
 			BaseStruct = InBaseStruct;
 		} 
 		TWeakObjectPtr<UStruct> BaseStruct;
-		TArray<TSharedPtr<FScriptableClassData>> ClassData;
+		TArray<TSharedPtr<FScriptableTypeData>> ClassData;
 		bool bUpdated = false;
 	};
 

@@ -6,7 +6,7 @@
 #include "Modules/ModuleManager.h"
 #include "AssetTypeCategories.h"
 
-struct FScriptableClassCache;
+struct FScriptableTypeCache;
 
 class FScriptableFrameworkEditorModule : public IModuleInterface
 {
@@ -23,10 +23,10 @@ public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
 
-	TSharedPtr<FScriptableClassCache> GetClassCache();
+	TSharedPtr<FScriptableTypeCache> GetScriptableTypeCache();
 
 private:
-	TSharedPtr<FScriptableClassCache> ClassCache;
+	TSharedPtr<FScriptableTypeCache> ScriptableTypeCache;
 
 	void RegisterAssetActions();
 	void UnregisterAssetActions();

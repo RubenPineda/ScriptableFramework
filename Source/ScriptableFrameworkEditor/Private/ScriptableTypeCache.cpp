@@ -1,6 +1,6 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Kirzo. All Rights Reserved.
 
-#include "ScriptableClassCache.h"
+#include "ScriptableTypeCache.h"
 #include "Blueprint/BlueprintSupport.h"
 #include "Misc/FeedbackContext.h"
 #include "Modules/ModuleManager.h"
@@ -14,11 +14,11 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Misc/EnumerateRange.h"
 
-#include UE_INLINE_GENERATED_CPP_BY_NAME(ScriptableClassCache)
+#include UE_INLINE_GENERATED_CPP_BY_NAME(ScriptableTypeCache)
 
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
-FScriptableClassData::FScriptableClassData(UStruct* InStruct) :
+FScriptableTypeData::FScriptableTypeData(UStruct* InStruct) :
 	Struct(InStruct)
 {
 	if (InStruct)
@@ -27,7 +27,7 @@ FScriptableClassData::FScriptableClassData(UStruct* InStruct) :
 	}
 }
 
-FScriptableClassData::FScriptableClassData(const FString& InClassAssetName, const FString& InClassPackageName, const FName InStructName, UStruct* InStruct) :
+FScriptableTypeData::FScriptableTypeData(const FString& InClassAssetName, const FString& InClassPackageName, const FName InStructName, UStruct* InStruct) :
 	Struct(InStruct),
 	StructName(InStructName),
 	ClassAssetName(InClassAssetName),
@@ -35,7 +35,7 @@ FScriptableClassData::FScriptableClassData(const FString& InClassAssetName, cons
 {
 }
 
-UStruct* FScriptableClassData::GetStruct(bool bSilent)
+UStruct* FScriptableTypeData::GetStruct(bool bSilent)
 {
 	UStruct* Ret = Struct.Get();
 	
@@ -80,7 +80,7 @@ UStruct* FScriptableClassData::GetStruct(bool bSilent)
 	return Ret;
 }
 
-const UStruct* FScriptableClassData::GetInstanceDataStruct(bool bSilent /*= false*/)
+const UStruct* FScriptableTypeData::GetInstanceDataStruct(bool bSilent /*= false*/)
 {
 	/*if (!InstanceDataStruct.IsValid())
 	{
@@ -97,26 +97,26 @@ const UStruct* FScriptableClassData::GetInstanceDataStruct(bool bSilent /*= fals
 }
 
 //----------------------------------------------------------------------//
-//  FScriptableClassCache
+//  FScriptableTypeCache
 //----------------------------------------------------------------------//
-FScriptableClassCache::FScriptableClassCache()
+FScriptableTypeCache::FScriptableTypeCache()
 {
 	// Register with the Asset Registry to be informed when it is done loading up files.
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::GetModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-	AssetRegistryModule.Get().OnFilesLoaded().AddRaw(this, &FScriptableClassCache::InvalidateCache);
-	AssetRegistryModule.Get().OnAssetAdded().AddRaw(this, &FScriptableClassCache::OnAssetAdded);
-	AssetRegistryModule.Get().OnAssetRemoved().AddRaw(this, &FScriptableClassCache::OnAssetRemoved);
+	AssetRegistryModule.Get().OnFilesLoaded().AddRaw(this, &FScriptableTypeCache::InvalidateCache);
+	AssetRegistryModule.Get().OnAssetAdded().AddRaw(this, &FScriptableTypeCache::OnAssetAdded);
+	AssetRegistryModule.Get().OnAssetRemoved().AddRaw(this, &FScriptableTypeCache::OnAssetRemoved);
 
 	// Register to have Populate called when doing a Reload.
-	FCoreUObjectDelegates::ReloadCompleteDelegate.AddRaw(this, &FScriptableClassCache::OnReloadComplete);
+	FCoreUObjectDelegates::ReloadCompleteDelegate.AddRaw(this, &FScriptableTypeCache::OnReloadComplete);
 
 	// Register to have Populate called when a Blueprint is compiled.
 	check(GEditor);
-	GEditor->OnBlueprintCompiled().AddRaw(this, &FScriptableClassCache::InvalidateCache);
-	GEditor->OnClassPackageLoadedOrUnloaded().AddRaw(this, &FScriptableClassCache::InvalidateCache);
+	GEditor->OnBlueprintCompiled().AddRaw(this, &FScriptableTypeCache::InvalidateCache);
+	GEditor->OnClassPackageLoadedOrUnloaded().AddRaw(this, &FScriptableTypeCache::InvalidateCache);
 }
 
-FScriptableClassCache::~FScriptableClassCache()
+FScriptableTypeCache::~FScriptableTypeCache()
 {
 	// Unregister with the Asset Registry to be informed when it is done loading up files.
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("AssetRegistry")))
@@ -142,7 +142,7 @@ FScriptableClassCache::~FScriptableClassCache()
 	}
 }
 
-void FScriptableClassCache::AddRootStruct(UStruct* RootStruct)
+void FScriptableTypeCache::AddRootStruct(UStruct* RootStruct)
 {
 	if (RootClasses.ContainsByPredicate([RootStruct](const FRootClassContainer& RootClass){ return RootClass.BaseStruct == RootStruct; }))
 	{
@@ -154,7 +154,7 @@ void FScriptableClassCache::AddRootStruct(UStruct* RootStruct)
 	InvalidateCache();
 }
 
-void FScriptableClassCache::GetStructs(const UStruct* BaseStruct, TArray<TSharedPtr<FScriptableClassData>>& AvailableClasses)
+void FScriptableTypeCache::GetStructs(const UStruct* BaseStruct, TArray<TSharedPtr<FScriptableTypeData>>& AvailableClasses)
 {
 	AvailableClasses.Reset();
 	
@@ -172,12 +172,12 @@ void FScriptableClassCache::GetStructs(const UStruct* BaseStruct, TArray<TShared
 	}
 }
 
-void FScriptableClassCache::OnAssetAdded(const FAssetData& AssetData)
+void FScriptableTypeCache::OnAssetAdded(const FAssetData& AssetData)
 {
 	UpdateBlueprintClass(AssetData);
 }
 
-void FScriptableClassCache::OnAssetRemoved(const FAssetData& AssetData)
+void FScriptableTypeCache::OnAssetRemoved(const FAssetData& AssetData)
 {
 	FString AssetClassName;
 	FString AssetNativeParentClassName;
@@ -191,12 +191,12 @@ void FScriptableClassCache::OnAssetRemoved(const FAssetData& AssetData)
 		{
 			FRootClassContainer& RootClass = RootClasses[*RootClassIndex];
 			const FName ClassName(AssetClassName);
-			RootClass.ClassData.RemoveAll([&ClassName](const TSharedPtr<FScriptableClassData>& ClassData) { return ClassData->GetStructName() == ClassName; });
+			RootClass.ClassData.RemoveAll([&ClassName](const TSharedPtr<FScriptableTypeData>& ClassData) { return ClassData->GetStructName() == ClassName; });
 		}
 	}
 }
 
-void FScriptableClassCache::InvalidateCache()
+void FScriptableTypeCache::InvalidateCache()
 {
 	for (FRootClassContainer& RootClass : RootClasses)
 	{
@@ -206,12 +206,12 @@ void FScriptableClassCache::InvalidateCache()
 	ClassNameToRootIndex.Reset();
 }
 
-void FScriptableClassCache::OnReloadComplete(EReloadCompleteReason Reason)
+void FScriptableTypeCache::OnReloadComplete(EReloadCompleteReason Reason)
 {
 	InvalidateCache();
 }
 
-void FScriptableClassCache::UpdateBlueprintClass(const FAssetData& AssetData)
+void FScriptableTypeCache::UpdateBlueprintClass(const FAssetData& AssetData)
 {
 	FString AssetClassName;
 	FString AssetNativeParentClassName;
@@ -229,7 +229,7 @@ void FScriptableClassCache::UpdateBlueprintClass(const FAssetData& AssetData)
 			FRootClassContainer& RootClass = RootClasses[*RootClassIndex];
 
 			const FName ClassName(AssetClassName);
-			const int32 ClassDataIndex = RootClass.ClassData.IndexOfByPredicate([&ClassName](const TSharedPtr<FScriptableClassData>& ClassData) { return ClassData->GetStructName() == ClassName; });
+			const int32 ClassDataIndex = RootClass.ClassData.IndexOfByPredicate([&ClassName](const TSharedPtr<FScriptableTypeData>& ClassData) { return ClassData->GetStructName() == ClassName; });
 			
 			if (ClassDataIndex == INDEX_NONE)
 			{
@@ -237,14 +237,14 @@ void FScriptableClassCache::UpdateBlueprintClass(const FAssetData& AssetData)
 				UBlueprint* AssetBP = Cast<UBlueprint>(AssetOb);
 				UClass* AssetClass = AssetBP ? *AssetBP->GeneratedClass : AssetOb ? AssetOb->GetClass() : nullptr;
 
-				TSharedPtr<FScriptableClassData> NewData = MakeShareable(new FScriptableClassData(AssetData.AssetName.ToString(), AssetData.PackageName.ToString(), ClassName, AssetClass));
+				TSharedPtr<FScriptableTypeData> NewData = MakeShareable(new FScriptableTypeData(AssetData.AssetName.ToString(), AssetData.PackageName.ToString(), ClassName, AssetClass));
 				RootClass.ClassData.Add(NewData);
 			}
 		}
 	}
 }
 
-void FScriptableClassCache::CacheClasses()
+void FScriptableTypeCache::CacheClasses()
 {
 	for (TEnumerateRef<FRootClassContainer> RootClass : EnumerateRange(RootClasses))
 	{
@@ -259,7 +259,7 @@ void FScriptableClassCache::CacheClasses()
 				UClass* TestClass = *It;
 				if (TestClass->HasAnyClassFlags(CLASS_Native) && TestClass->IsChildOf(Class))
 				{
-					RootClass->ClassData.Add(MakeShareable(new FScriptableClassData(TestClass)));
+					RootClass->ClassData.Add(MakeShareable(new FScriptableTypeData(TestClass)));
 					ClassNameToRootIndex.Add(TestClass->GetName(), RootClass.GetIndex());
 				}
 			}
@@ -271,7 +271,7 @@ void FScriptableClassCache::CacheClasses()
 				UScriptStruct* TestStruct = *It;
 				if (TestStruct->IsChildOf(ScriptStruct))
 				{
-					RootClass->ClassData.Add(MakeShareable(new FScriptableClassData(TestStruct)));
+					RootClass->ClassData.Add(MakeShareable(new FScriptableTypeData(TestStruct)));
 					ClassNameToRootIndex.Add(TestStruct->GetName(), RootClass.GetIndex());
 				}
 			}
