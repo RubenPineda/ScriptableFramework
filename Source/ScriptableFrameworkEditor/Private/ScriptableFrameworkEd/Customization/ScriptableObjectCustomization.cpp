@@ -1,7 +1,10 @@
+// Copyright Kirzo. All Rights Reserved.
+
 #include "ScriptableObjectCustomization.h"
 #include "ScriptableObject.h"
 
 #include "ScriptableFrameworkEditorHelpers.h"
+#include "Widgets/SScriptableTypePicker.h"
 
 #include "PropertyCustomizationHelpers.h"
 
@@ -42,6 +45,9 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		GatherChildProperties(ChildPropertyHandle);
 	}
 
+	FName ClassCategory; FName PropCategory;
+	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
+
 	HorizontalBox = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot()
 		.AutoWidth()
@@ -55,7 +61,20 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		+ SHorizontalBox::Slot()
 		.FillWidth(0.5f)
 		[
-			PropertyHandle->CreatePropertyValueWidget(false)
+			SNew(SScriptableTypePicker)
+				.ClassCategoryMeta(ClassCategory)
+				.FilterCategoryMeta(PropCategory)
+				.Filter(PropertyHandle->GetMetaData(PropCategory))
+				.BaseClass(GetBaseClass())
+				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeStructPicked::CreateSP(this, &FScriptableObjectCustomization::OnNodePicked))
+				[
+					SNew(STextBlock)
+						.Font(IPropertyTypeCustomizationUtils::GetRegularFont())
+						.Text_Lambda([this]()
+					{
+						return ScriptableObject ? ScriptableObject->GetClass()->GetDisplayNameText() : FText::FromName(NAME_None);
+					})
+				]
 		]
 		+ SHorizontalBox::Slot()
 		.AutoWidth()
@@ -119,6 +138,16 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	}
 }
 
+UClass* FScriptableObjectCustomization::GetBaseClass() const
+{
+	UClass* MyClass = nullptr;
+	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
+	{
+		MyClass = ObjectProperty->PropertyClass;
+	}
+	return MyClass;
+}
+
 ECheckBoxState FScriptableObjectCustomization::GetEnabledCheckBoxState() const
 {
 	bool bEnabled = false;
@@ -141,39 +170,40 @@ void FScriptableObjectCustomization::OnEnabledCheckBoxChanged(ECheckBoxState New
 	}
 }
 
-void FScriptableObjectCustomization::SetScriptableObjectClass(TSubclassOf<UObject> ScriptableObjectClass)
+void FScriptableObjectCustomization::OnNodePicked(const UStruct* InStruct)
 {
-	UClass* MyClass = nullptr;
-	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
+	SetScriptableObjectType(InStruct);
+}
+
+void FScriptableObjectCustomization::SetScriptableObjectType(const UStruct* NewType)
+{
+	if (NewType->IsChildOf(GetBaseClass()))
 	{
-		MyClass = ObjectProperty->PropertyClass;
-	}
+		const UClass* ConstClass = Cast<UClass>(NewType);
+		UClass* Class = const_cast<UClass*>(ConstClass);
 
-	if (ScriptableObjectClass->IsChildOf(MyClass))
-	{
-		const FScopedTransaction Transaction(FText::FromString("Set Scriptable Object"));
+		GEditor->BeginTransaction(LOCTEXT("SetScriptableObjectType", "Set Scriptable Object Type"));
 
-		TArray<UObject*> OuterObjects;
-		PropertyHandle->GetOuterObjects(OuterObjects);
+		PropertyHandle->NotifyPreChange();
 
-		OuterObjects[0]->Modify();
-		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(PropertyHandle.ToSharedRef(), ScriptableObjectClass, EPropertyValueSetFlags::InteractiveChange);
-		PropertyUtilities->NotifyFinishedChangingProperties(FPropertyChangedEvent(PropertyHandle->GetProperty()));
-		// Extra end transaction because we use 'Interactive Change' in the CreateNewInstance call
+		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(PropertyHandle.ToSharedRef(), Class, EPropertyValueSetFlags::InteractiveChange);
+
+		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+		PropertyHandle->NotifyFinishedChangingProperties();
+
 		GEditor->EndTransaction();
-		PropertyUtilities->ForceRefresh();
-		return;
+
+		FSlateApplication::Get().DismissAllMenus();
+
+		if (PropertyUtilities)
+		{
+			PropertyUtilities->ForceRefresh();
+		}
 	}
 }
 
 void FScriptableObjectCustomization::OnUseSelected()
 {
-	UClass* MyClass = nullptr;
-	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
-	{
-		MyClass = ObjectProperty->PropertyClass;
-	}
-
 	TArray<FAssetData> SelectedAssets;
 	GEditor->GetContentBrowserSelections(SelectedAssets);
 
@@ -183,9 +213,9 @@ void FScriptableObjectCustomization::OnUseSelected()
 
 		if (SelectedBlueprint)
 		{
-			if (SelectedBlueprint->GeneratedClass && SelectedBlueprint->GeneratedClass->IsChildOf(MyClass))
+			if (SelectedBlueprint->GeneratedClass && SelectedBlueprint->GeneratedClass->IsChildOf(GetBaseClass()))
 			{
-				SetScriptableObjectClass(SelectedBlueprint->GeneratedClass);
+				SetScriptableObjectType(SelectedBlueprint->GeneratedClass);
 				return;
 			}
 		}

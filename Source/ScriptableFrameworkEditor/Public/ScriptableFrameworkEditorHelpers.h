@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Kirzo. All Rights Reserved.
 
 #pragma once
 
@@ -7,9 +7,12 @@
 
 namespace ScriptableFrameworkEditor
 {
+	static const FName MD_SystemCategory = TEXT("System");
 	static const FName MD_TaskCategory = TEXT("TaskCategory");
+	static const FName MD_TaskCategories = TEXT("TaskCategories");
 	static const FName MD_ConditionCategory = TEXT("ConditionCategory");
+	static const FName MD_ConditionCategories = TEXT("ConditionCategories");
 
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle);
-	FString GetScriptableCategory(const UClass* ScriptableClass);
+	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
 }

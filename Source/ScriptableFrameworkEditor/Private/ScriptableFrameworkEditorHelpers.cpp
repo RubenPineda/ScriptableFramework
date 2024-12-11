@@ -1,7 +1,10 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Kirzo. All Rights Reserved.
 
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "PropertyHandle.h"
+
+#include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableConditions/ScriptableCondition.h"
 
 namespace ScriptableFrameworkEditor
 {
@@ -30,12 +33,17 @@ namespace ScriptableFrameworkEditor
 		return true;
 	}
 
-	FString GetScriptableCategory(const UClass* ScriptableClass)
+	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta)
 	{
-		if (ScriptableClass->HasMetaData(MD_TaskCategory))
+		if (ScriptableClass->IsChildOf(UScriptableTask::StaticClass()))
 		{
-			return ScriptableClass->GetMetaData(MD_TaskCategory);
+			ClassCategoryMeta = MD_TaskCategory;
+			PropertyCategoryMeta = MD_TaskCategories;
 		}
-		return TEXT("Uncategorized");
+		else if (ScriptableClass->IsChildOf(UScriptableCondition::StaticClass()))
+		{
+			ClassCategoryMeta = MD_ConditionCategory;
+			PropertyCategoryMeta = MD_ConditionCategories;
+		}
 	}
 }

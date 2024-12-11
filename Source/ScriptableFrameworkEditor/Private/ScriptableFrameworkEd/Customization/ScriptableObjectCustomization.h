@@ -1,3 +1,5 @@
+// Copyright Kirzo. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -28,10 +30,14 @@ protected:
 	TSharedPtr<IPropertyHandle> EnabledPropertyHandle;
 	UScriptableObject* ScriptableObject = nullptr;
 
+	UClass* GetBaseClass() const;
+
 	ECheckBoxState GetEnabledCheckBoxState() const;
 	void OnEnabledCheckBoxChanged(ECheckBoxState NewCheckedState);
 
-	void SetScriptableObjectClass(TSubclassOf<UObject> ScriptableObjectClass);
+	void OnNodePicked(const UStruct* InStruct);
+
+	void SetScriptableObjectType(const UStruct* InStruct);
 	void OnUseSelected();
 	void OnBrowseTo();
 	void OnClear();
