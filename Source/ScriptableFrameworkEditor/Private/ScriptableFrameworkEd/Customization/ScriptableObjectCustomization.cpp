@@ -91,12 +91,20 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 
 	if (bIsBlueprintClass)
 	{
-		const FText Text = FText::Format(FText::FromString("Browse to '{0}' in Content Browser"), ScriptableObject->GetClass()->GetDisplayNameText());
+		const FText BrowseText = FText::Format(FText::FromString("Browse to '{0}' in Content Browser"), ScriptableObject->GetClass()->GetDisplayNameText());
 		HorizontalBox->InsertSlot(3)
 			.AutoWidth()
 			.VAlign(VAlign_Center)
 			[
-				PropertyCustomizationHelpers::MakeBrowseButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnBrowseTo), Text)
+				PropertyCustomizationHelpers::MakeBrowseButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnBrowseTo), BrowseText)
+			];
+
+		const FText EditText = FText::Format(FText::FromString("Edit '{0}'"), ScriptableObject->GetClass()->GetDisplayNameText());
+		HorizontalBox->InsertSlot(4)
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeEditButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnEdit), EditText)
 			];
 	}
 
@@ -229,6 +237,14 @@ void FScriptableObjectCustomization::OnBrowseTo()
 		TArray<FAssetData> SyncAssets;
 		SyncAssets.Add(FAssetData(ScriptableObject->GetClass()));
 		GEditor->SyncBrowserToObjects(SyncAssets);
+	}
+}
+
+void FScriptableObjectCustomization::OnEdit()
+{
+	if (UBlueprint* Blueprint = Cast<UBlueprint>(ScriptableObject->GetClass()->ClassGeneratedBy))
+	{
+		GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Blueprint);
 	}
 }
 

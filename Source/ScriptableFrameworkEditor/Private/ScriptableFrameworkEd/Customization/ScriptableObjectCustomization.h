@@ -40,5 +40,6 @@ protected:
 	void SetScriptableObjectType(const UStruct* InStruct);
 	void OnUseSelected();
 	void OnBrowseTo();
+	void OnEdit();
 	void OnClear();
 };
