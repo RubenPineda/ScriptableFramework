@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #include "ScriptableConditionCustomization.h"
 

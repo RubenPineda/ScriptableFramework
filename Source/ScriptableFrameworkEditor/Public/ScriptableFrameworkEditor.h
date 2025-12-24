@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #pragma once
 
@@ -10,12 +10,11 @@ struct FScriptableTypeCache;
 
 class FScriptableFrameworkEditorModule : public IModuleInterface
 {
-public:
-	static EAssetTypeCategories::Type ScriptableFramework_AssetCategory;
-
 private:
-	TArray<TSharedRef<class IAssetTypeActions>> RegisteredAssetActions;
-	TArray<FName> RegisteredClassLayouts;
+	TSharedPtr<FScriptableTypeCache> ScriptableTypeCache;
+	EAssetTypeCategories::Type ScriptableAssetCategoryBit = EAssetTypeCategories::None;
+
+	TArray<TSharedRef<class IAssetTypeActions>> RegisteredAssetTypeActions;
 	TArray<FName> RegisteredPropertyLayouts;
 
 public:
@@ -26,25 +25,18 @@ public:
 	TSharedPtr<FScriptableTypeCache> GetScriptableTypeCache();
 
 private:
-	TSharedPtr<FScriptableTypeCache> ScriptableTypeCache;
-
-	void RegisterAssetActions();
-	void UnregisterAssetActions();
-
-	void RegisterActorFactories();
+	template<typename T>
+	void RegisterAssetTypeAction();
 
 	template<typename T>
-	void RegisterActorFactory();
-
-	void RegisterClassLayouts();
-	void UnregisterClassLayouts();
-
-	template<typename TDetailsClass>
-	void RegisterClassLayout(FPropertyEditorModule& PropertyEditorModule, const FName ClassName);
-
-	void RegisterPropertyLayouts();
-	void UnregisterPropertyLayouts();
+	void RegisterAssetTypeAction(const FText& Name, FColor Color);
 
 	template<typename TPropertyType>
 	void RegisterPropertyLayout(FPropertyEditorModule& PropertyEditorModule, const FName TypeName);
+
+	void RegisterAssetTools();
+	void UnregisterAssetTools();
+
+	void RegisterPropertyLayouts();
+	void UnregisterPropertyLayouts();
 };

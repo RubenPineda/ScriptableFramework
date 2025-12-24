@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "PropertyHandle.h"

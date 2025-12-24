@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #pragma once
 
@@ -56,4 +56,30 @@ public:
 
 private:
 	virtual bool Evaluate_Implementation() const override;
+};
+
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Asset", ConditionCategory = "System"))
+class UScriptableCondition_Asset final : public UScriptableCondition
+{
+	GENERATED_BODY()
+
+public:
+	/** The asset containing the condition definition to evaluate. */
+	UPROPERTY(EditAnywhere, Category = "Condition")
+	class UScriptableConditionAsset* AssetToEvaluate;
+
+protected:
+	/** The actual instance created from the asset template. */
+	UPROPERTY(Transient)
+	UScriptableCondition* Condition;
+
+public:
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+
+private:
+	virtual bool Evaluate_Implementation() const override;
+
+	void CreateConditionInstance();
+	void ClearConditionInstance();
 };

@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #include "SScriptableTypePicker.h"
 
@@ -688,7 +688,7 @@ void SScriptableTypePicker::CollapseAll()
 {
 	FCategoryExpansionState& ExpansionState = CategoryExpansionStates.FindOrAdd(CategoryKey);
 
-	for (const TSharedPtr<FScriptableTypeItem> Item : NodeTypeTree->GetItems())
+	for (const TSharedPtr<FScriptableTypeItem> Item : NodeTypeTree->GetRootItems())
 	{
 		const FString Path = FString::Join(Item->CategoryPath, TEXT("|"));
 		ExpansionState.CollapsedCategories.Add(Path);

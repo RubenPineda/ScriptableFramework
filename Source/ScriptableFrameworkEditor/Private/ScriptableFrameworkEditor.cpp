@@ -1,12 +1,15 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #pragma once
 
 #include "ScriptableFrameworkEditor.h"
 #include "ScriptableTypeCache.h"
+#include "AssetTools/AssetTypeActions_ScriptableObjectBase.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableTaskAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableConditionAsset.h"
 
 #include "ScriptableFrameworkEd/Customization/ScriptableObjectCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
@@ -15,20 +18,18 @@
 
 #define LOCTEXT_NAMESPACE "FScriptableFrameworkEditorModule"
 
-EAssetTypeCategories::Type FScriptableFrameworkEditorModule::ScriptableFramework_AssetCategory = static_cast<EAssetTypeCategories::Type>(0);
-
 void FScriptableFrameworkEditorModule::StartupModule()
 {
-	RegisterAssetActions();
-	RegisterActorFactories();
-	RegisterClassLayouts();
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
+
+	RegisterAssetTools();
 	RegisterPropertyLayouts();
 }
 
 void FScriptableFrameworkEditorModule::ShutdownModule()
 {
-	UnregisterAssetActions();
-	UnregisterClassLayouts();
+	UnregisterAssetTools();
 	UnregisterPropertyLayouts();
 }
 
@@ -44,45 +45,47 @@ TSharedPtr<FScriptableTypeCache> FScriptableFrameworkEditorModule::GetScriptable
 	return ScriptableTypeCache;
 }
 
-void FScriptableFrameworkEditorModule::RegisterAssetActions()
+template<typename T>
+void FScriptableFrameworkEditorModule::RegisterAssetTypeAction()
 {
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 
-	// Register new asset category.
-	ScriptableFramework_AssetCategory = AssetTools.RegisterAdvancedAssetCategory(FName(TEXT("ScriptableFramework")), LOCTEXT("ScriptableFramework_AssetCategory", "Scriptable Tasks"));
+	const auto Action = MakeShared<T>(ScriptableAssetCategoryBit);
+	AssetTools.RegisterAssetTypeActions(Action);
+	RegisteredAssetTypeActions.Add(Action);
 }
 
-void FScriptableFrameworkEditorModule::UnregisterAssetActions()
+template<typename T>
+void FScriptableFrameworkEditorModule::RegisterAssetTypeAction(const FText& Name, FColor Color)
 {
-	if (FModuleManager::Get().IsModuleLoaded("AssetTools"))
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+
+	const auto Action = MakeShared<FAssetTypeActions_ScriptableObject>(ScriptableAssetCategoryBit, Name, Color, T::StaticClass());
+	AssetTools.RegisterAssetTypeActions(Action);
+	RegisteredAssetTypeActions.Add(Action);
+}
+
+template<typename TPropertyType>
+void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorModule& PropertyEditorModule, const FName TypeName)
+{
+	RegisteredPropertyLayouts.AddUnique(TypeName);
+	PropertyEditorModule.RegisterCustomPropertyTypeLayout(TypeName, FOnGetPropertyTypeCustomizationInstance::CreateStatic(&TPropertyType::MakeInstance));
+}
+
+void FScriptableFrameworkEditorModule::RegisterAssetTools()
+{
+	RegisterAssetTypeAction<UScriptableTaskAsset>(INVTEXT("Scriptable Task"), FColor(0, 169, 255));
+	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FColor(145, 2, 23));
+}
+
+void FScriptableFrameworkEditorModule::UnregisterAssetTools()
+{
+	if (auto* AssetToolsModule = FModuleManager::GetModulePtr<FAssetToolsModule>("AssetTools"))
 	{
-		IAssetTools& AssetTools = FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get();
-		for (const TSharedRef<IAssetTypeActions>& TypeAction : RegisteredAssetActions)
+		IAssetTools& AssetTools = AssetToolsModule->Get();
+		for (auto& Action : RegisteredAssetTypeActions)
 		{
-			AssetTools.UnregisterAssetTypeActions(TypeAction);
-		}
-	}
-
-	RegisteredAssetActions.Empty();
-}
-
-void FScriptableFrameworkEditorModule::RegisterActorFactories()
-{
-}
-
-void FScriptableFrameworkEditorModule::RegisterClassLayouts()
-{
-	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
-}
-
-void FScriptableFrameworkEditorModule::UnregisterClassLayouts()
-{
-	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
-	{
-		FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-		for (const FName ClassName : RegisteredClassLayouts)
-		{
-			PropertyEditorModule.UnregisterCustomClassLayout(ClassName);
+			AssetTools.UnregisterAssetTypeActions(Action);
 		}
 	}
 }
@@ -104,27 +107,6 @@ void FScriptableFrameworkEditorModule::UnregisterPropertyLayouts()
 			PropertyEditorModule.UnregisterCustomPropertyTypeLayout(TypeName);
 		}
 	}
-}
-
-template<typename T>
-void FScriptableFrameworkEditorModule::RegisterActorFactory()
-{
-	auto ActorFactory = NewObject<T>();
-	GEditor->ActorFactories.Add(ActorFactory);
-}
-
-template<typename TDetailsClass>
-void FScriptableFrameworkEditorModule::RegisterClassLayout(FPropertyEditorModule& PropertyEditorModule, const FName ClassName)
-{
-	RegisteredClassLayouts.AddUnique(ClassName);
-	PropertyEditorModule.RegisterCustomClassLayout(ClassName, FOnGetDetailCustomizationInstance::CreateStatic(&TDetailsClass::MakeInstance));
-}
-
-template<typename TPropertyType>
-void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorModule& PropertyEditorModule, const FName TypeName)
-{
-	RegisteredPropertyLayouts.AddUnique(TypeName);
-	PropertyEditorModule.RegisterCustomPropertyTypeLayout(TypeName, FOnGetPropertyTypeCustomizationInstance::CreateStatic(&TPropertyType::MakeInstance));
 }
 
 #undef LOCTEXT_NAMESPACE

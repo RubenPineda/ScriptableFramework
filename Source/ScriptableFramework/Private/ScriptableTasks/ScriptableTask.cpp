@@ -1,13 +1,12 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableTaskAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 
 #include "Algo/AnyOf.h"
 
 DEFINE_LOG_CATEGORY(LogScriptableTask);
-
-UE_DISABLE_OPTIMIZATION
 
 void UScriptableTask::OnUnregister()
 {
@@ -544,4 +543,96 @@ void UScriptableTask_Condition::OnSubTaskFinish(UScriptableTask* SubTask)
 	Finish();
 }
 
-UE_ENABLE_OPTIMIZATION
+void UScriptableTask_RunAsset::OnRegister()
+{
+	Super::OnRegister();
+
+	if (!IsValid(Task))
+	{
+		CreateTaskInstance();
+	}
+}
+
+void UScriptableTask_RunAsset::OnUnregister()
+{
+	Super::OnUnregister();
+
+	ClearTaskInstance();
+}
+
+void UScriptableTask_RunAsset::ResetTask()
+{
+	if (IsValid(Task))
+	{
+		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
+		Task->Reset();
+	}
+}
+
+void UScriptableTask_RunAsset::BeginTask()
+{
+	if (IsValid(Task))
+	{
+		Task->OnTaskFinish.AddDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
+		Task->Begin();
+	}
+	else
+	{
+		Finish();
+	}
+}
+
+void UScriptableTask_RunAsset::FinishTask()
+{
+	if (IsValid(Task))
+	{
+		Task->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
+		Task->Finish();
+		Task->Unregister();
+		Task = nullptr;
+
+		bCanEverTick = false;
+	}
+}
+
+void UScriptableTask_RunAsset::Tick(float DeltaTime)
+{
+	if (Task->CanEverTick())
+	{
+		Task->Tick(DeltaTime);
+	}
+}
+
+void UScriptableTask_RunAsset::OnSubTaskFinish(UScriptableTask* SubTask)
+{
+	SubTask->OnTaskFinish.RemoveDynamic(this, &UScriptableTask_RunAsset::OnSubTaskFinish);
+	Finish();
+}
+
+void UScriptableTask_RunAsset::CreateTaskInstance()
+{
+	ClearTaskInstance();
+
+	if (IsValid(AssetToRun) && IsValid(AssetToRun->Task))
+	{
+		// Duplicate the template from the asset to create a unique instance for this execution context.
+		// We use 'this' as the outer to keep the hierarchy clean.
+		Task = DuplicateObject<UScriptableTask>(AssetToRun->Task, this);
+
+		if (IsValid(Task))
+		{
+			Task->Register(GetOwner());
+			bCanEverTick = Task->CanEverTick();
+		}
+	}
+}
+
+void UScriptableTask_RunAsset::ClearTaskInstance()
+{
+	if (IsValid(Task))
+	{
+		Task->Unregister();
+		Task = nullptr;
+	}
+	bCanEverTick = false;
+}

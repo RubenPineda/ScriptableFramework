@@ -1,6 +1,7 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableConditionAsset.h"
 
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
@@ -17,10 +18,10 @@ bool UScriptableCondition::EvaluateCondition(UObject* Owner, UScriptableConditio
 		return true;
 	}
 
-	TGuardValue<decltype(Condition->OwnerPrivate)> OwnerGuard(Condition->OwnerPrivate, Owner);
-	TGuardValue<decltype(Condition->WorldPrivate)> WorldGuard(Condition->WorldPrivate, Owner ? Owner->GetWorld() : nullptr);
-
+	Condition->Register(Owner);
 	const bool bResult = Condition->Evaluate();
+	Condition->Unregister();
+
 	return Condition->IsNegated() ? !bResult : bResult;
 }
 
@@ -37,4 +38,51 @@ bool UScriptableCondition_AND::Evaluate_Implementation() const
 bool UScriptableCondition_OR::Evaluate_Implementation() const
 {
 	return Algo::AnyOf(Conditions, [MyOwner = GetOwner()](UScriptableCondition* Condition) { return UScriptableCondition::EvaluateCondition(MyOwner, Condition); });
+}
+
+void UScriptableCondition_Asset::OnRegister()
+{
+	Super::OnRegister();
+
+	if (!IsValid(Condition))
+	{
+		CreateConditionInstance();
+	}
+}
+
+void UScriptableCondition_Asset::OnUnregister()
+{
+	Super::OnUnregister();
+
+	ClearConditionInstance();
+}
+
+bool UScriptableCondition_Asset::Evaluate_Implementation() const
+{
+	return UScriptableCondition::EvaluateCondition(GetOwner(), Condition);
+}
+
+void UScriptableCondition_Asset::CreateConditionInstance()
+{
+	ClearConditionInstance();
+
+	if (IsValid(AssetToEvaluate) && IsValid(AssetToEvaluate->Condition))
+	{
+		// Duplicate the template to create a unique instance for this context.
+		Condition = DuplicateObject<UScriptableCondition>(AssetToEvaluate->Condition, this);
+
+		if (IsValid(Condition))
+		{
+			Condition->Register(GetOwner());
+		}
+	}
+}
+
+void UScriptableCondition_Asset::ClearConditionInstance()
+{
+	if (IsValid(Condition))
+	{
+		Condition->Unregister();
+		Condition = nullptr;
+	}
 }

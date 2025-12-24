@@ -1,4 +1,4 @@
-// Copyright Kirzo. All Rights Reserved.
+// Copyright 2025 kirzo
 
 #pragma once
 
@@ -239,4 +239,33 @@ public:
 private:
 	UFUNCTION()
 	void OnSubTaskFinish(UScriptableTask* SubTask);
+};
+
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Asset", TaskCategory = "System"))
+class UScriptableTask_RunAsset final : public UScriptableTask
+{
+	GENERATED_BODY()
+
+public:
+	/** The asset containing the task definition to run. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = ScriptableTask)
+	class UScriptableTaskAsset* AssetToRun;
+
+public:
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+	virtual void ResetTask() override;
+	virtual void BeginTask() override;
+	virtual void FinishTask() override;
+	virtual void Tick(float DeltaTime) override;
+
+private:
+	UPROPERTY(Transient)
+	UScriptableTask* Task = nullptr;
+
+	UFUNCTION()
+	void OnSubTaskFinish(UScriptableTask* SubTask);
+
+	void CreateTaskInstance();
+	void ClearTaskInstance();
 };
