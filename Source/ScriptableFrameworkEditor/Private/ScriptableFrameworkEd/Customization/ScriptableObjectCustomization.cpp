@@ -70,7 +70,27 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 						.Font(IPropertyTypeCustomizationUtils::GetRegularFont())
 						.Text_Lambda([this]()
 					{
-						return ScriptableObject ? ScriptableObject->GetClass()->GetDisplayNameText() : FText::FromName(NAME_None);
+						if (ScriptableObject)
+						{
+							static const FName CandidateProperties[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
+
+							for (const FName& PropName : CandidateProperties)
+							{
+								if (FObjectProperty* AssetProp = CastField<FObjectProperty>(ScriptableObject->GetClass()->FindPropertyByName(PropName)))
+								{
+									if (UObject* AssignedAsset = AssetProp->GetObjectPropertyValue_InContainer(ScriptableObject))
+									{
+										return FText::FromString(AssignedAsset->GetName());
+									}
+
+									return ScriptableObject->GetClass()->GetDisplayNameText();
+								}
+							}
+
+							return ScriptableObject->GetClass()->GetDisplayNameText();
+						}
+
+						return FText::FromName(NAME_None);
 					})
 				]
 		]
