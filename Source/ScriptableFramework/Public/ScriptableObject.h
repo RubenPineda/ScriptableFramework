@@ -8,6 +8,7 @@
 #include "ScriptableObjectTypes.h"
 #include "PropertyBindingPath.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "Utils/PropertyBagHelpers.h"
 #include "ScriptableObject.generated.h"
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
@@ -77,6 +78,51 @@ public:
 
 	/** Returns the mutable reference to the Context property bag. */
 	FInstancedPropertyBag& GetContext() { return Context; }
+
+	/**
+	 * Checks if the Context has a specific property.
+	 */
+	bool HasContextProperty(const FName& Name) const
+	{
+		return Context.FindPropertyDescByName(Name) != nullptr;
+	}
+
+	/**
+	 * Adds a property definition to the Context without setting a specific value.
+	 * Usage: Task->AddContextProperty<float>(TEXT("Health"));
+	 */
+	template <typename T>
+	void AddContextProperty(const FName& Name)
+	{
+		ScriptablePropertyBag::Add<T>(Context, Name);
+	}
+
+	/**
+	 * Sets a value in the Context Property Bag.
+	 * Automatically adds the property if it doesn't exist.
+	 * Usage: Task->SetContextProperty(TEXT("Health"), 100.0f);
+	 */
+	template <typename T>
+	void SetContextProperty(const FName& Name, const T& Value)
+	{
+		ScriptablePropertyBag::Set(Context, Name, Value);
+	}
+
+	/**
+	 * Retrieves a value from the Context Property Bag.
+	 * Returns a default-constructed value if the property fails or doesn't exist.
+	 * Usage: float Health = Task->GetContextProperty<float>(TEXT("Health"));
+	 */
+	template <typename T>
+	T GetContextProperty(const FName& Name) const
+	{
+		auto Result = ScriptablePropertyBag::Get<T>(Context, Name);
+		if (Result.HasValue())
+		{
+			return Result.GetValue();
+		}
+		return T();
+	}
 
 	/** Resolves and applies bindings (copies data from the context to the properties). */
 	void ResolveBindings();
