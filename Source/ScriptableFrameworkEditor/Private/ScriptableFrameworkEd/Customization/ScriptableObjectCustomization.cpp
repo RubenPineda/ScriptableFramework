@@ -4,49 +4,73 @@
 #include "ScriptableObject.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingPath.h"
-
 #include "ScriptableFrameworkEditorHelpers.h"
-#include "Widgets/SScriptableTypePicker.h"
 
+#include "Widgets/SScriptableTypePicker.h"
 #include "PropertyCustomizationHelpers.h"
 
+#include "DetailLayoutBuilder.h"
+#include "DetailCategoryBuilder.h"
 #include "DetailWidgetRow.h"
 #include "IDetailChildrenBuilder.h"
 #include "IDetailPropertyRow.h"
-#include "UObject/Field.h"
-#include "IPropertyUtilities.h"
 #include "IPropertyAccessEditor.h"
+#include "IPropertyUtilities.h"
 #include "Features/IModularFeatures.h"
 #include "Styling/AppStyle.h"
 #include "ScopedTransaction.h"
 #include "EdGraphSchema_K2.h"
 #include "StructUtils/InstancedStruct.h"
+#include "Misc/SecureHash.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
+
+UE_DISABLE_OPTIMIZATION
 
 // ------------------------------------------------------------------------------------------------
 // Helper Namespace for Binding Logic
 // ------------------------------------------------------------------------------------------------
 namespace ScriptableBindingHelpers
 {
-	FGuid GetScriptableObjectDataID(UScriptableObject* Owner)
+	/** Helper to find the owning ScriptableObject. */
+	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle)
 	{
-		if (Owner)
+		TArray<UObject*> OuterObjects;
+		InPropertyHandle->GetOuterObjects(OuterObjects);
+		for (UObject* OuterObject : OuterObjects)
 		{
-			const uint32 Hash = GetTypeHash(Owner->GetPathName());
-			return FGuid(Hash, Hash, Hash, Hash);
+			if (OuterObject)
+			{
+				if (UScriptableObject* ScriptableObject = Cast<UScriptableObject>(OuterObject))
+				{
+					return ScriptableObject;
+				}
+				if (UScriptableObject* OuterScriptableObject = OuterObject->GetTypedOuter<UScriptableObject>())
+				{
+					return OuterScriptableObject;
+				}
+			}
 		}
-		return FGuid();
+		return nullptr;
 	}
 
+	/** Generates a deterministic ID based on the owning object path using MD5. */
+	FGuid GetScriptableObjectDataID(UScriptableObject* Owner)
+	{
+		FGuid Guid;
+		if (Owner)
+		{
+			FGuid::Parse(FMD5::HashAnsiString(*Owner->GetPathName()), Guid);
+		}
+		return Guid;
+	}
+
+	/** Generates a property path for the property being edited. */
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath)
 	{
 		OutPath.Reset();
 
-		if (!ScriptableObject)
-		{
-			return;
-		}
+		if (!ScriptableObject) return;
 
 		TArray<FPropertyBindingPathSegment> PathSegments;
 		TSharedPtr<const IPropertyHandle> CurrentPropertyHandle = InPropertyHandle;
@@ -56,7 +80,7 @@ namespace ScriptableBindingHelpers
 			const FProperty* Property = CurrentPropertyHandle->GetProperty();
 			if (Property)
 			{
-				// Determine if we went too far up the hierarchy (e.g. into the owning Actor)
+				// Stop if we reach the class boundary (e.g. owning Actor properties)
 				if (const UClass* PropertyOwnerClass = Cast<UClass>(Property->GetOwnerStruct()))
 				{
 					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass))
@@ -116,6 +140,7 @@ namespace ScriptableBindingHelpers
 		}
 	}
 
+	/** Resolves the Source Path from the Binding Chain. */
 	void MakeStructPropertyPathFromBindingChain(const FGuid& StructID, const TArray<FBindingChainElement>& InBindingChain, FPropertyBindingPath& OutPath)
 	{
 		OutPath.Reset();
@@ -130,6 +155,7 @@ namespace ScriptableBindingHelpers
 		}
 	}
 
+	/** Caches binding data to avoid recalculating text/color every frame. */
 	struct FCachedBindingData : public TSharedFromThis<FCachedBindingData>
 	{
 		TWeakObjectPtr<UScriptableObject> WeakScriptableObject;
@@ -151,6 +177,11 @@ namespace ScriptableBindingHelpers
 		{
 		}
 
+		void Invalidate()
+		{
+			bIsDataCached = false;
+		}
+
 		void UpdateData()
 		{
 			static const FName PropertyIcon(TEXT("Kismet.Tabs.Variables"));
@@ -169,7 +200,7 @@ namespace ScriptableBindingHelpers
 			FEdGraphPinType PinType;
 			Schema->ConvertPropertyToPinType(PropertyHandle->GetProperty(), PinType);
 
-			if (Bindings.HasPropertyBinding(TargetPath))
+			if (Bindings.HasPropertyBinding(TargetPath)) // Bound
 			{
 				const FPropertyBindingPath* SourcePath = Bindings.GetPropertyBinding(TargetPath);
 				if (SourcePath)
@@ -188,12 +219,12 @@ namespace ScriptableBindingHelpers
 					Color = Schema->GetPinTypeColor(PinType);
 				}
 			}
-			else
+			else // Unbound
 			{
-				Text = LOCTEXT("Bind", "Bind");
+				Text = FText::GetEmpty();
 				TooltipText = LOCTEXT("BindActionTooltip", "Bind this property to a value from the Context.");
 				Image = FAppStyle::GetBrush(PropertyIcon);
-				Color = FLinearColor::White;
+				Color = Schema->GetPinTypeColor(PinType);
 			}
 
 			bIsDataCached = true;
@@ -250,10 +281,83 @@ namespace ScriptableBindingHelpers
 		FLinearColor GetColor() { if (!bIsDataCached) UpdateData(); return Color; }
 		const FSlateBrush* GetImage() { if (!bIsDataCached) UpdateData(); return Image; }
 	};
+
+	/** Static helper to create the binding widget, shared between class methods and customization loop. */
+	static TSharedPtr<SWidget> CreateBindingWidget_Internal(TSharedPtr<IPropertyHandle> InPropertyHandle, TSharedPtr<FCachedBindingData> CachedData)
+	{
+		if (!IModularFeatures::Get().IsModularFeatureAvailable("PropertyAccessEditor"))
+		{
+			return SNullWidget::NullWidget;
+		}
+
+		TArray<FBindingContextStruct> Contexts;
+		for (const FBindableStructDesc& Desc : CachedData->AccessibleStructs)
+		{
+			if (Desc.IsValid())
+			{
+				FBindingContextStruct& ContextStruct = Contexts.AddDefaulted_GetRef();
+				ContextStruct.DisplayText = FText::FromName(Desc.Name);
+				ContextStruct.Struct = const_cast<UStruct*>(Desc.Struct.Get());
+			}
+		}
+
+		FPropertyBindingWidgetArgs Args;
+		Args.Property = InPropertyHandle->GetProperty();
+		Args.bAllowPropertyBindings = true;
+		Args.bGeneratePureBindings = true;
+		Args.bAllowStructMemberBindings = true;
+		Args.bAllowUObjectFunctions = true;
+
+		Args.OnCanBindToClass = FOnCanBindToClass::CreateLambda([](UClass* InClass) { return true; });
+
+		Args.OnCanBindToContextStructWithIndex = FOnCanBindToContextStructWithIndex::CreateLambda([InPropertyHandle](const UStruct* InStruct, int32 Index)
+		{
+			if (const FStructProperty* StructProp = CastField<FStructProperty>(InPropertyHandle->GetProperty()))
+			{
+				return StructProp->Struct == InStruct;
+			}
+			return false;
+		});
+
+		Args.OnCanBindPropertyWithBindingChain = FOnCanBindPropertyWithBindingChain::CreateLambda([InPropertyHandle](FProperty* InProperty, TArrayView<const FBindingChainElement> BindingChain)
+		{
+			return FScriptablePropertyBindings::ArePropertiesCompatible(InProperty, InPropertyHandle->GetProperty());
+		});
+
+		Args.OnCanAcceptPropertyOrChildrenWithBindingChain = FOnCanAcceptPropertyOrChildrenWithBindingChain::CreateLambda([](FProperty* InProperty, TArrayView<const FBindingChainElement>)
+		{
+			return true;
+		});
+
+		Args.OnAddBinding = FOnAddBinding::CreateLambda([CachedData](FName InPropertyName, const TArray<FBindingChainElement>& InBindingChain)
+		{
+			if (CachedData) CachedData->AddBinding(InBindingChain);
+		});
+
+		Args.OnRemoveBinding = FOnRemoveBinding::CreateLambda([CachedData](FName)
+		{
+			if (CachedData) CachedData->RemoveBinding();
+		});
+
+		Args.OnCanRemoveBinding = FOnCanRemoveBinding::CreateLambda([CachedData](FName)
+		{
+			return CachedData ? CachedData->CanRemoveBinding() : false;
+		});
+
+		Args.CurrentBindingText = MakeAttributeLambda([CachedData]() { return CachedData->GetText(); });
+		Args.CurrentBindingToolTipText = MakeAttributeLambda([CachedData]() { return CachedData->GetTooltipText(); });
+		Args.CurrentBindingColor = MakeAttributeLambda([CachedData]() { return CachedData->GetColor(); });
+		Args.CurrentBindingImage = MakeAttributeLambda([CachedData]() { return CachedData->GetImage(); });
+		Args.BindButtonStyle = &FAppStyle::Get().GetWidgetStyle<FButtonStyle>("HoverHintOnly");
+
+		IPropertyAccessEditor& PropertyAccessEditor = IModularFeatures::Get().GetModularFeature<IPropertyAccessEditor>("PropertyAccessEditor");
+		return PropertyAccessEditor.MakePropertyBindingWidget(Contexts, Args);
+	}
+
 } // End Namespace
 
 // ------------------------------------------------------------------------------------------------
-// FScriptableObjectCustomization
+// FScriptableObjectCustomization Implementation
 // ------------------------------------------------------------------------------------------------
 
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -276,6 +380,13 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		TArray<void*> RawData;
 		ChildPropertyHandle->AccessRawData(RawData);
 		ScriptableObject = static_cast<UScriptableObject*>(RawData[0]);
+
+		// Get the actual ScriptableObject safely
+		UObject* ObjectValue = nullptr;
+		if (ChildPropertyHandle->GetValue(ObjectValue) == FPropertyAccess::Success)
+		{
+			ScriptableObject = Cast<UScriptableObject>(ObjectValue);
+		}
 
 		bIsBlueprintClass = IsValid(ScriptableObject) && ScriptableObject->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
 
@@ -381,6 +492,13 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 {
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
+	// Pre-fetch contexts once for optimization
+	TArray<FBindableStructDesc> AccessibleStructs;
+	if (ScriptableObject)
+	{
+		ScriptableObject->GetAccessibleStructs(ScriptableObject, AccessibleStructs);
+	}
+
 	uint32 NumberOfChild;
 	if (InPropertyHandle->GetNumChildren(NumberOfChild) == FPropertyAccess::Success)
 	{
@@ -399,39 +517,87 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 				{
 					IDetailPropertyRow& Row = ChildBuilder.AddProperty(SubPropertyHandle);
 
-					// Check if we should add the Binding Widget
 					if (ScriptableObject && IsPropertyExtendable(SubPropertyHandle))
 					{
-						TSharedPtr<SWidget> BindingWidget = GenerateBindingWidget(ScriptableObject, SubPropertyHandle);
+						// Create CachedData locally to capture it in the Reset Handler
+						FPropertyBindingPath TargetPath;
+						ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TargetPath);
+
+						TSharedPtr<ScriptableBindingHelpers::FCachedBindingData> CachedData =
+							MakeShared<ScriptableBindingHelpers::FCachedBindingData>(ScriptableObject, TargetPath, SubPropertyHandle, AccessibleStructs);
+
+						// --- RESET HANDLER ---
+						// This ensures the yellow reset arrow appears if bound, and handles unbinding upon click.
+						FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, SubPropertyHandle](TSharedPtr<IPropertyHandle> InHandle)
+						{
+							if (!ScriptableObject) return false;
+
+							FPropertyBindingPath TP;
+							ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+							{
+								return true;
+							}
+							return InHandle->DiffersFromDefault();
+						});
+
+						FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, SubPropertyHandle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+						{
+							if (!ScriptableObject) return;
+
+							FScopedTransaction Transaction(LOCTEXT("ResetToDefault", "Reset Property to Default"));
+							ScriptableObject->Modify();
+
+							FPropertyBindingPath TP;
+							ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+
+							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+							{
+								ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TP);
+
+								// Force refresh the binding widget immediately
+								if (CachedData) CachedData->Invalidate();
+							}
+
+							InHandle->ResetToDefault();
+						});
+
+						Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
+						// ---------------------
+
+						// Call Internal Helper directly
+						TSharedPtr<SWidget> BindingWidget = ScriptableBindingHelpers::CreateBindingWidget_Internal(SubPropertyHandle, CachedData);
 
 						if (BindingWidget.IsValid() && BindingWidget != SNullWidget::NullWidget)
 						{
-							// Logic to disable the property value if it is bound
-							auto IsPropertyEnabled = [this, SubPropertyHandle]() -> bool
+							// Toggle visibility of the value widget based on binding status
+							auto GetValueVisibility = [this, SubPropertyHandle]() -> EVisibility
 							{
-								if (!ScriptableObject) return true;
-
-								// Re-calculate path to check against bindings
-								// This is fast enough for Editor UI
-								FPropertyBindingPath TargetPath;
-								ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TargetPath);
-
-								// If it HAS a binding, return FALSE (Disabled/Read-only)
-								return !ScriptableObject->GetPropertyBindings().HasPropertyBinding(TargetPath);
+								if (!ScriptableObject) return EVisibility::Visible;
+								FPropertyBindingPath TP;
+								ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+								if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+								{
+									return EVisibility::Collapsed;
+								}
+								return EVisibility::Visible;
 							};
+
+							// Extract default widgets to wrap them properly (preserves FVector layouts)
+							TSharedPtr<SWidget> NameWidget, ValueWidget;
+							Row.GetDefaultWidgets(NameWidget, ValueWidget);
 
 							Row.CustomWidget()
 								.NameContent()
 								[
-									SubPropertyHandle->CreatePropertyNameWidget()
+									NameWidget ? NameWidget.ToSharedRef() : SNullWidget::NullWidget
 								]
 								.ValueContent()
 								[
-									// Wrap the Value Widget in a Box to control its Enabled state
 									SNew(SBox)
-										.IsEnabled_Lambda(IsPropertyEnabled)
+										.Visibility_Lambda(GetValueVisibility)
 										[
-											SubPropertyHandle->CreatePropertyValueWidget()
+											ValueWidget ? ValueWidget.ToSharedRef() : SNullWidget::NullWidget
 										]
 								]
 							.ExtensionContent()
@@ -459,12 +625,15 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	}
 }
 
+// ------------------------------------------------------------------------------------------------
+// General Customization Logic
+// ------------------------------------------------------------------------------------------------
+
 bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const
 {
 	const FProperty* Property = InPropertyHandle->GetProperty();
 	if (!Property) return false;
 
-	// Filter out internal/system properties
 	if (Property->HasMetaData(TEXT("NoBinding")))
 	{
 		return false;
@@ -485,81 +654,16 @@ TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScrip
 		return SNullWidget::NullWidget;
 	}
 
-	// Prepare Contexts
 	TArray<FBindableStructDesc> AccessibleStructs;
 	InScriptableObject->GetAccessibleStructs(InScriptableObject, AccessibleStructs);
 
-	TArray<FBindingContextStruct> Contexts;
-	for (const FBindableStructDesc& Desc : AccessibleStructs)
-	{
-		if (Desc.IsValid())
-		{
-			FBindingContextStruct& ContextStruct = Contexts.AddDefaulted_GetRef();
-			ContextStruct.DisplayText = FText::FromName(Desc.Name);
-			ContextStruct.Struct = const_cast<UStruct*>(Desc.Struct.Get());
-		}
-	}
-
-	// Prepare Target Path
 	FPropertyBindingPath TargetPath;
 	ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(InScriptableObject, InPropertyHandle, TargetPath);
 
-	// Create UI Cache
 	TSharedPtr<ScriptableBindingHelpers::FCachedBindingData> CachedData =
 		MakeShared<ScriptableBindingHelpers::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
 
-	// Setup Args
-	FPropertyBindingWidgetArgs Args;
-	Args.Property = InPropertyHandle->GetProperty();
-	Args.bAllowPropertyBindings = true;
-	Args.bGeneratePureBindings = true;
-	Args.bAllowStructMemberBindings = true;
-	Args.bAllowUObjectFunctions = true;
-
-	Args.OnCanBindToClass = FOnCanBindToClass::CreateLambda([](UClass* InClass) { return true; });
-
-	Args.OnCanBindToContextStructWithIndex = FOnCanBindToContextStructWithIndex::CreateLambda([InPropertyHandle, AccessibleStructs](const UStruct* InStruct, int32 Index)
-	{
-		if (const FStructProperty* StructProp = CastField<FStructProperty>(InPropertyHandle->GetProperty()))
-		{
-			return StructProp->Struct == InStruct;
-		}
-		return false;
-	});
-
-	Args.OnCanBindPropertyWithBindingChain = FOnCanBindPropertyWithBindingChain::CreateLambda([InPropertyHandle](FProperty* InProperty, TArrayView<const FBindingChainElement> BindingChain)
-	{
-		return FScriptablePropertyBindings::ArePropertiesCompatible(InProperty, InPropertyHandle->GetProperty());
-	});
-
-	Args.OnCanAcceptPropertyOrChildrenWithBindingChain = FOnCanAcceptPropertyOrChildrenWithBindingChain::CreateLambda([](FProperty* InProperty, TArrayView<const FBindingChainElement>)
-	{
-		return true;
-	});
-
-	Args.OnAddBinding = FOnAddBinding::CreateLambda([CachedData](FName InPropertyName, const TArray<FBindingChainElement>& InBindingChain)
-	{
-		if (CachedData) CachedData->AddBinding(InBindingChain);
-	});
-
-	Args.OnRemoveBinding = FOnRemoveBinding::CreateLambda([CachedData](FName)
-	{
-		if (CachedData) CachedData->RemoveBinding();
-	});
-
-	Args.OnCanRemoveBinding = FOnCanRemoveBinding::CreateLambda([CachedData](FName)
-	{
-		return CachedData ? CachedData->CanRemoveBinding() : false;
-	});
-
-	Args.CurrentBindingText = MakeAttributeLambda([CachedData]() { return CachedData->GetText(); });
-	Args.CurrentBindingToolTipText = MakeAttributeLambda([CachedData]() { return CachedData->GetTooltipText(); });
-	Args.CurrentBindingColor = MakeAttributeLambda([CachedData]() { return CachedData->GetColor(); });
-	Args.CurrentBindingImage = MakeAttributeLambda([CachedData]() { return CachedData->GetImage(); });
-	Args.BindButtonStyle = &FAppStyle::Get().GetWidgetStyle<FButtonStyle>("HoverHintOnly");
-
-	IPropertyAccessEditor& PropertyAccessEditor = IModularFeatures::Get().GetModularFeature<IPropertyAccessEditor>("PropertyAccessEditor");
-	return PropertyAccessEditor.MakePropertyBindingWidget(Contexts, Args);
+	return ScriptableBindingHelpers::CreateBindingWidget_Internal(InPropertyHandle, CachedData);
 }
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const
@@ -718,5 +822,7 @@ void FScriptableObjectCustomization::OnClear()
 	static const FString None("None");
 	PropertyHandle->SetValueFromFormattedString(None);
 }
+
+UE_ENABLE_OPTIMIZATION
 
 #undef LOCTEXT_NAMESPACE
