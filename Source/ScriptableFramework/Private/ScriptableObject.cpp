@@ -1,8 +1,11 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #include "ScriptableObject.h"
+#include "Misc/SecureHash.h"
 
 DEFINE_LOG_CATEGORY(LogScriptableObject);
+
+UE_DISABLE_OPTIMIZATION
 
 UScriptableObject::UScriptableObject()
 {
@@ -35,6 +38,46 @@ void UScriptableObject::OnWorldBeginTearDown(UWorld* InWorld)
 	if (InWorld == GetWorld())
 	{
 		Unregister();
+	}
+}
+
+UScriptableObject* UScriptableObject::GetRoot() const
+{
+	UObject* Top = const_cast<UObject*>(Cast<UObject>(this));
+	for (;;)
+	{
+		UObject* CurrentOuter = Top->GetOuter();
+		if (!IsValid(CurrentOuter) || !CurrentOuter->IsA<UScriptableObject>())
+		{
+			return Cast<UScriptableObject>(Top);
+		}
+		Top = CurrentOuter;
+	}
+}
+
+void UScriptableObject::ResolveBindings()
+{
+	UScriptableObject* Root = GetRoot();
+	if (!Root) return;
+
+	if (!Root->Context.IsValid()) return;
+
+	FPropertyBindingDataView SourceView(Root->Context.GetValue().GetScriptStruct(), Root->Context.GetMutableValue().GetMemory());
+	FPropertyBindingDataView TargetView(this);
+
+	PropertyBindings.PerformCopies(SourceView, TargetView);
+}
+
+void UScriptableObject::GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const
+{
+	const UScriptableObject* Root = GetRoot();
+
+	if (Root && Root->Context.GetPropertyBagStruct())
+	{
+		FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+		ContextDesc.Name = FName(TEXT("Context"));
+		ContextDesc.ID = FGuid::NewDeterministicGuid(Root->GetPathName(), FCrc::StrCrc32<TCHAR>(TEXT("Context")));
+		ContextDesc.Struct = Root->Context.GetPropertyBagStruct();
 	}
 }
 
@@ -76,7 +119,7 @@ void UScriptableObject::Unregister()
 	OnUnregister();
 }
 
-void UScriptableObject::RegisterObjectWithWorld(UWorld* InWorld, FRegisterComponentContext* Context)
+void UScriptableObject::RegisterObjectWithWorld(UWorld* InWorld)
 {
 	checkf(!IsUnreachable(), TEXT("%s"), *GetFullName());
 
@@ -197,3 +240,5 @@ FName FScriptableObjectTickFunction::DiagnosticContext(bool bDetailed)
 		return Target->GetClass()->GetFName();
 	}
 }
+
+UE_ENABLE_OPTIMIZATION

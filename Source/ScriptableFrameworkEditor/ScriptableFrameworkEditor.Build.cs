@@ -12,6 +12,8 @@ public class ScriptableFrameworkEditor : ModuleRules
             new string[]
             {
                 "ScriptableFramework",
+                "PropertyAccessEditor",
+                "PropertyBindingUtils"
             }
             );
 
@@ -26,7 +28,8 @@ public class ScriptableFrameworkEditor : ModuleRules
                 "UnrealEd",
                 "PropertyEditor",
                 "InputCore",
-                "Projects"
+                "Projects",
+                "BlueprintGraph"
             }
             );
     }

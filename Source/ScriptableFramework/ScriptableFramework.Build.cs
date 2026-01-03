@@ -11,6 +11,7 @@ public class ScriptableFramework : ModuleRules
         PublicDependencyModuleNames.AddRange(
             new string[] {
                 "Core",
+                "PropertyBindingUtils"
             });
 
 
@@ -19,7 +20,7 @@ public class ScriptableFramework : ModuleRules
                 "CoreUObject",
                 "Engine",
                 "Slate",
-                "SlateCore",
+                "SlateCore"
             });
     }
 }

@@ -7,6 +7,7 @@
 #include "Widgets/SScriptableTypePicker.h"
 
 #include "PropertyCustomizationHelpers.h"
+#include "ScriptableTaskBindingExtension.h"
 
 #include "DetailWidgetRow.h"
 #include "IDetailChildrenBuilder.h"
@@ -141,14 +142,21 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 {
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
+	UObject* ObjectBeingCustomized = nullptr;
+	if (ScriptableObject)
+	{
+		ObjectBeingCustomized = ScriptableObject;
+	}
+
 	uint32 NumberOfChild;
 	if (InPropertyHandle->GetNumChildren(NumberOfChild) == FPropertyAccess::Success)
 	{
+		FScriptableTaskBindingExtension BindingExt;
+
 		for (uint32 Index = 0; Index < NumberOfChild; ++Index)
 		{
 			TSharedRef<IPropertyHandle> CategoryPropertyHandle = InPropertyHandle->GetChildHandle(Index).ToSharedRef();
 
-			// Don't add category rows. Only iterate over the category
 			uint32 NumberOfChildrenInCategory;
 			CategoryPropertyHandle->GetNumChildren(NumberOfChildrenInCategory);
 			for (uint32 ChildrenInCategoryIndex = 0; ChildrenInCategoryIndex < NumberOfChildrenInCategory; ++ChildrenInCategoryIndex)
@@ -157,7 +165,12 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 				if (ScriptableFrameworkEditor::IsPropertyVisible(SubPropertyHandle))
 				{
-					ChildBuilder.AddProperty(SubPropertyHandle);
+					IDetailPropertyRow& Row = ChildBuilder.AddProperty(SubPropertyHandle);
+
+					if (ObjectBeingCustomized && BindingExt.IsPropertyExtendable(ObjectBeingCustomized->GetClass(), *SubPropertyHandle))
+					{
+						FScriptableTaskBindingExtension::ProcessPropertyRow(Row, ChildBuilder.GetParentCategory().GetParentLayout(), ObjectBeingCustomized, SubPropertyHandle);
+					}
 				}
 			}
 		}

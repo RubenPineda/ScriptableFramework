@@ -1,25 +1,27 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
+#include "StructUtils/PropertyBag.h"
 #include "ScriptableObjectTypes.h"
+#include "PropertyBindingPath.h"
+#include "Bindings/ScriptablePropertyBindings.h"
+#include "Bindings/ScriptablePropertyBindingsOwner.h"
 #include "ScriptableObject.generated.h"
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
 
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
-class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject
+class SCRIPTABLEFRAMEWORK_API UScriptableObject : public UObject, public IScriptablePropertyBindingsOwner
 {
 	GENERATED_BODY()
 
 	friend class UScriptableCondition;
 
 protected:
-	/**
-	* Indicates if this object is currently registered with a scene.
-	*/
+	/** Indicates if this object is currently registered with a scene. */
 	uint8 bRegistered : 1 = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = Tick)
@@ -32,14 +34,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = Hidden)
 	uint8 bEnabled : 1 = true;
 
+	/** Input data (Context) available for this object and its children. */
+	UPROPERTY(EditDefaultsOnly, Category = "Context", meta = (FixedLayout, NoBinding))
+	FInstancedPropertyBag Context;
+
 private:
+	/** Data bindings definition (which property copies from where). */
+	UPROPERTY()
+	FScriptablePropertyBindings PropertyBindings;
+
 	/** Cached pointer to owning object */
 	UObject* OwnerPrivate;
 
 	/**
-	* Pointer to the world that this object is currently registered with.
-	* This is only non-NULL when the object is registered.
-	*/
+	 * Pointer to the world that this object is currently registered with.
+	 * This is only non-NULL when the object is registered.
+	 */
 	UWorld* WorldPrivate;
 
 	/** If WorldPrivate isn't set this will determine the world from outers */
@@ -59,6 +69,21 @@ public:
 	FORCEINLINE virtual bool CanEverTick() const { return bCanEverTick; }
 	FORCEINLINE virtual bool IsReadyToTick() const { return true; }
 
+	/** Finds the root object of the hierarchy. */
+	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
+	UScriptableObject* GetRoot() const;
+
+	/** Returns the mutable reference to the Context property bag. */
+	FInstancedPropertyBag& GetContext() { return Context; }
+
+	/** Resolves and applies bindings (copies data from the context to the properties). */
+	void ResolveBindings();
+
+	// ~Begin IScriptablePropertyBindingsOwner
+	virtual FScriptablePropertyBindings* GetPropertyBindings() override { return &PropertyBindings; }
+	virtual void GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const override;
+	// ~End IScriptablePropertyBindingsOwner
+
 	/** Register this object. */
 	void Register(UObject* Owner);
 
@@ -66,10 +91,10 @@ public:
 	void Unregister();
 
 	/**
-	* Registers an object with a specific world.
-	* @param InWorld - The world to register the object with.
-	*/
-	void RegisterObjectWithWorld(UWorld* InWorld, FRegisterComponentContext* Context = nullptr);
+	 * Registers an object with a specific world.
+	 * @param InWorld - The world to register the object with.
+	 */
+	void RegisterObjectWithWorld(UWorld* InWorld);
 
 protected:
 	/** Called when an object is registered, after Scene is set. */
@@ -95,18 +120,18 @@ public:
 	virtual void Tick(float DeltaTime);
 
 	/**
-	* Set up a tick function for a object in the standard way.
-	* Don't tick if this is a "NeverTick" object.
-	* @param	TickFunction - structure holding the specific tick function
-	* @return  true if this object met the criteria for actually being ticked.
-	*/
+	 * Set up a tick function for a object in the standard way.
+	 * Don't tick if this is a "NeverTick" object.
+	 * @param	TickFunction - structure holding the specific tick function
+	 * @return  true if this object met the criteria for actually being ticked.
+	 */
 	bool SetupTickFunction(struct FTickFunction* TickFunction);
 
 protected:
 	/**
-	* Virtual call chain to register all tick functions
-	* @param bRegister - true to register, false, to unregister
-	*/
+	 * Virtual call chain to register all tick functions
+	 * @param bRegister - true to register, false, to unregister
+	 */
 	virtual void RegisterTickFunctions(bool bRegister);
 
 	/** Event called every frame if tick is enabled */

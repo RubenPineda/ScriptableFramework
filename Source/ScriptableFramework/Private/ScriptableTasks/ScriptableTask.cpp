@@ -1,4 +1,4 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTaskAsset.h"
@@ -29,6 +29,8 @@ void UScriptableTask::Begin()
 {
 	check(bRegistered);
 	check(Status != EScriptableTaskStatus::Begun);
+
+	ResolveBindings();
 
 	Status = EScriptableTaskStatus::Begun;
 	RegisterTickFunctions(true);
