@@ -127,9 +127,6 @@ public:
 	/** Resolves and applies bindings (copies data from the context to the properties). */
 	void ResolveBindings();
 
-	/** Retrieves the structs accessible for binding from this object. */
-	virtual void GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const;
-
 #if WITH_EDITOR
 	/** Accessor for the editor module to modify bindings directly. */
 	FScriptablePropertyBindings& GetPropertyBindings() { return PropertyBindings; }

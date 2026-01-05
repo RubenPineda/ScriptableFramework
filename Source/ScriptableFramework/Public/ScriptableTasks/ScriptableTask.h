@@ -121,7 +121,7 @@ private:
 	void OnSubTaskFinish(UScriptableTask* Task);
 };
 
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Parallel Sequence", TaskCategory = "System"))
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Parallel Sequence", TaskCategory = "System", BlockSiblingBindings = "true"))
 class UScriptableTask_ParallelSequence final : public UScriptableTask
 {
 	GENERATED_BODY()
@@ -146,7 +146,7 @@ private:
 	void OnSubTaskFinish(UScriptableTask* Task);
 };
 
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Random", TaskCategory = "System"))
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Random", TaskCategory = "System", BlockSiblingBindings = "true"))
 class UScriptableTask_Random final : public UScriptableTask
 {
 	GENERATED_BODY()
@@ -218,7 +218,7 @@ private:
 	void OnSubTaskFinish(UScriptableTask* SubTask);
 };
 
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Condition", TaskCategory = "System"))
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Condition", TaskCategory = "System", BlockSiblingBindings = "true"))
 class UScriptableTask_Condition final : public UScriptableTask
 {
 	GENERATED_BODY()

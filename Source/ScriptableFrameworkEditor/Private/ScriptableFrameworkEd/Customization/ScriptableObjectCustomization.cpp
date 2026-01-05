@@ -5,6 +5,7 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingPath.h"
 #include "ScriptableFrameworkEditorHelpers.h"
+#include "ScriptableFrameworkEditorStyle.h"
 
 #include "Widgets/SScriptableTypePicker.h"
 #include "PropertyCustomizationHelpers.h"
@@ -21,6 +22,7 @@
 #include "ScopedTransaction.h"
 #include "EdGraphSchema_K2.h"
 #include "StructUtils/InstancedStruct.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/SecureHash.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
@@ -57,12 +59,7 @@ namespace ScriptableBindingHelpers
 	/** Generates a deterministic ID based on the owning object path using MD5. */
 	FGuid GetScriptableObjectDataID(UScriptableObject* Owner)
 	{
-		FGuid Guid;
-		if (Owner)
-		{
-			FGuid::Parse(FMD5::HashAnsiString(*Owner->GetPathName()), Guid);
-		}
-		return Guid;
+		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
 	/** Generates a property path for the property being edited. */
@@ -283,7 +280,7 @@ namespace ScriptableBindingHelpers
 	};
 
 	/** Static helper to create the binding widget, shared between class methods and customization loop. */
-	static TSharedPtr<SWidget> CreateBindingWidget_Internal(TSharedPtr<IPropertyHandle> InPropertyHandle, TSharedPtr<FCachedBindingData> CachedData)
+	TSharedPtr<SWidget> CreateBindingWidget(TSharedPtr<IPropertyHandle> InPropertyHandle, TSharedPtr<FCachedBindingData> CachedData)
 	{
 		if (!IModularFeatures::Get().IsModularFeatureAvailable("PropertyAccessEditor"))
 		{
@@ -354,6 +351,150 @@ namespace ScriptableBindingHelpers
 		return PropertyAccessEditor.MakePropertyBindingWidget(Contexts, Args);
 	}
 
+	/** @return text describing the pin type, matches SPinTypeSelector. */
+	FText GetPinTypeText(const FEdGraphPinType& PinType)
+	{
+		const FName PinSubCategory = PinType.PinSubCategory;
+		const UObject* PinSubCategoryObject = PinType.PinSubCategoryObject.Get();
+		if (PinSubCategory != UEdGraphSchema_K2::PSC_Bitmask && PinSubCategoryObject)
+		{
+			if (const UField* Field = Cast<const UField>(PinSubCategoryObject))
+			{
+				return Field->GetDisplayNameText();
+			}
+			return FText::FromString(PinSubCategoryObject->GetName());
+		}
+
+		return UEdGraphSchema_K2::GetCategoryText(PinType.PinCategory, NAME_None, true);
+	}
+
+	void ModifyRow(UScriptableObject* ScriptableObject, IDetailPropertyRow& Row, TSharedPtr<FCachedBindingData> CachedData)
+	{
+		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+		TSharedPtr<IPropertyHandle> PropertyHandle = Row.GetPropertyHandle();
+
+		TSharedPtr<SWidget> NameWidget, ValueWidget;
+		Row.GetDefaultWidgets(NameWidget, ValueWidget);
+
+		FEdGraphPinType PinType;
+		Schema->ConvertPropertyToPinType(PropertyHandle->GetProperty(), PinType);
+
+		auto IsValueVisible = TAttribute<EVisibility>::Create([ScriptableObject, PropertyHandle]() -> EVisibility
+		{
+			if (!ScriptableObject) return EVisibility::Visible;
+			FPropertyBindingPath TP;
+			ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, PropertyHandle, TP);
+			return ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
+		});
+
+		const FSlateBrush* Icon = FBlueprintEditorUtils::GetIconFromPin(PinType, true);
+		FText Text = GetPinTypeText(PinType);
+
+		FText ToolTip;
+		FLinearColor IconColor = Schema->GetPinTypeColor(PinType);
+		FText Label;
+		FText LabelToolTip;
+		FSlateColor TextColor = FSlateColor::UseForeground();
+
+		const bool bIsOutputProperty = ScriptableFrameworkEditor::IsPropertyBindableOutput(PropertyHandle->GetProperty());
+
+		if (bIsOutputProperty)
+		{
+			Label = LOCTEXT("LabelOutput", "OUT");
+			LabelToolTip = LOCTEXT("OutputToolTip", "This is Output property. The node will always set it's value, other nodes can bind to it.");
+		}
+
+		TSharedPtr<SWidget> ContentWidget = SNullWidget::NullWidget;
+		if (bIsOutputProperty)
+		{
+			ContentWidget = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				.Padding(4.0f, 0.0f)
+				[
+					SNew(SImage)
+						.Image(Icon)
+						.ColorAndOpacity(IconColor)
+						.ToolTipText(ToolTip)
+				]
+
+				+ SHorizontalBox::Slot()
+				.AutoWidth()
+				.VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+						.Font(IDetailLayoutBuilder::GetDetailFont())
+						.ColorAndOpacity(TextColor)
+						.Text(Text)
+						.ToolTipText(ToolTip)
+				];
+		}
+		else
+		{
+			ContentWidget = SNew(SBox)
+				.Visibility(IsValueVisible)
+				[
+					ValueWidget.ToSharedRef()
+				];
+		}
+
+		TSharedPtr<SWidget> BindingWidget = bIsOutputProperty ? SNullWidget::NullWidget : ScriptableBindingHelpers::CreateBindingWidget(PropertyHandle, CachedData);
+
+		Row
+			.CustomWidget(true)
+			.NameContent()
+			[
+				SNew(SHorizontalBox)
+
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					[
+						NameWidget.ToSharedRef()
+					]
+
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					.Padding(4.0f, 0.0f)
+					[
+						SNew(SBorder)
+							.Padding(FMargin(6.0f, 0.0f))
+							.BorderImage(FScriptableFrameworkEditorStyle::Get().GetBrush("ScriptableFramework.Param.Background"))
+							.Visibility(Label.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+							[
+								SNew(STextBlock)
+									.TextStyle(FScriptableFrameworkEditorStyle::Get(), "ScriptableFramework.Param.Label")
+									.ColorAndOpacity(FStyleColors::Foreground)
+									.Text(Label)
+									.ToolTipText(LabelToolTip)
+							]
+					]
+
+			]
+			.ValueContent()
+			[
+				ContentWidget.ToSharedRef()
+			]
+			.ExtensionContent()
+			[
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					.Padding(2.0f, 0.0f)
+					[
+						BindingWidget.ToSharedRef()
+					]
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					[
+						PropertyHandle->CreateDefaultPropertyButtonWidgets()
+					]
+			];
+	}
 } // End Namespace
 
 // ------------------------------------------------------------------------------------------------
@@ -496,7 +637,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	TArray<FBindableStructDesc> AccessibleStructs;
 	if (ScriptableObject)
 	{
-		ScriptableObject->GetAccessibleStructs(ScriptableObject, AccessibleStructs);
+		ScriptableFrameworkEditor::GetAccessibleStructs(ScriptableObject, AccessibleStructs);
 	}
 
 	uint32 NumberOfChild;
@@ -565,59 +706,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 						Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 						// ---------------------
 
-						// Call Internal Helper directly
-						TSharedPtr<SWidget> BindingWidget = ScriptableBindingHelpers::CreateBindingWidget_Internal(SubPropertyHandle, CachedData);
-
-						if (BindingWidget.IsValid() && BindingWidget != SNullWidget::NullWidget)
-						{
-							// Toggle visibility of the value widget based on binding status
-							auto GetValueVisibility = [this, SubPropertyHandle]() -> EVisibility
-							{
-								if (!ScriptableObject) return EVisibility::Visible;
-								FPropertyBindingPath TP;
-								ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
-								if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
-								{
-									return EVisibility::Collapsed;
-								}
-								return EVisibility::Visible;
-							};
-
-							// Extract default widgets to wrap them properly (preserves FVector layouts)
-							TSharedPtr<SWidget> NameWidget, ValueWidget;
-							Row.GetDefaultWidgets(NameWidget, ValueWidget);
-
-							Row.CustomWidget()
-								.NameContent()
-								[
-									NameWidget ? NameWidget.ToSharedRef() : SNullWidget::NullWidget
-								]
-								.ValueContent()
-								[
-									SNew(SBox)
-										.Visibility_Lambda(GetValueVisibility)
-										[
-											ValueWidget ? ValueWidget.ToSharedRef() : SNullWidget::NullWidget
-										]
-								]
-							.ExtensionContent()
-								[
-									SNew(SHorizontalBox)
-										+ SHorizontalBox::Slot()
-										.AutoWidth()
-										.VAlign(VAlign_Center)
-										.Padding(2.0f, 0.0f)
-										[
-											BindingWidget.ToSharedRef()
-										]
-										+ SHorizontalBox::Slot()
-										.AutoWidth()
-										.VAlign(VAlign_Center)
-										[
-											SubPropertyHandle->CreateDefaultPropertyButtonWidgets()
-										]
-								];
-						}
+						ScriptableBindingHelpers::ModifyRow(ScriptableObject, Row, CachedData);
 					}
 				}
 			}
@@ -634,12 +723,23 @@ bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHa
 	const FProperty* Property = InPropertyHandle->GetProperty();
 	if (!Property) return false;
 
+	// 1. Filter out internal framework properties
 	if (Property->HasMetaData(TEXT("NoBinding")))
 	{
 		return false;
 	}
 
+	// 2. Filter out system flags (Config, Deprecated, etc.)
 	if (Property->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_EditorOnly | CPF_Config | CPF_Deprecated))
+	{
+		return false;
+	}
+
+	// 3. Filter out Container types (Arrays, Sets, Maps).
+	// The custom binding logic wraps the property widget in a custom row, which breaks 
+	// the native header logic of containers (causing duplicate 'Add' buttons or preventing expansion).
+	// We let Unreal handle these natively by returning false.
+	if (Property->IsA<FArrayProperty>() || Property->IsA<FSetProperty>() || Property->IsA<FMapProperty>())
 	{
 		return false;
 	}
@@ -655,7 +755,7 @@ TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScrip
 	}
 
 	TArray<FBindableStructDesc> AccessibleStructs;
-	InScriptableObject->GetAccessibleStructs(InScriptableObject, AccessibleStructs);
+	ScriptableFrameworkEditor::GetAccessibleStructs(InScriptableObject, AccessibleStructs);
 
 	FPropertyBindingPath TargetPath;
 	ScriptableBindingHelpers::MakeStructPropertyPathFromPropertyHandle(InScriptableObject, InPropertyHandle, TargetPath);
@@ -663,7 +763,7 @@ TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScrip
 	TSharedPtr<ScriptableBindingHelpers::FCachedBindingData> CachedData =
 		MakeShared<ScriptableBindingHelpers::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
 
-	return ScriptableBindingHelpers::CreateBindingWidget_Internal(InPropertyHandle, CachedData);
+	return ScriptableBindingHelpers::CreateBindingWidget(InPropertyHandle, CachedData);
 }
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const

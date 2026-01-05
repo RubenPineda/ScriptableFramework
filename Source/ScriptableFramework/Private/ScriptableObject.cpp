@@ -68,19 +68,6 @@ void UScriptableObject::ResolveBindings()
 	PropertyBindings.PerformCopies(SourceView, TargetView);
 }
 
-void UScriptableObject::GetAccessibleStructs(const UObject* TargetOuterObject, TArray<FBindableStructDesc>& OutStructDescs) const
-{
-	const UScriptableObject* Root = GetRoot();
-
-	if (Root && Root->Context.GetPropertyBagStruct())
-	{
-		FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
-		ContextDesc.Name = FName(TEXT("Context"));
-		ContextDesc.ID = FGuid::NewDeterministicGuid(Root->GetPathName(), FCrc::StrCrc32<TCHAR>(TEXT("Context")));
-		ContextDesc.Struct = Root->Context.GetPropertyBagStruct();
-	}
-}
-
 void UScriptableObject::Register(UObject* Owner)
 {
 	OwnerPrivate = Owner;

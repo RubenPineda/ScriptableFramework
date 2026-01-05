@@ -21,7 +21,7 @@
 
 void FScriptableFrameworkEditorModule::StartupModule()
 {
-	FScriptableFrameworkEditorStyle::Initialize();
+	FScriptableFrameworkEditorStyle::Register();
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
@@ -35,7 +35,7 @@ void FScriptableFrameworkEditorModule::ShutdownModule()
 	UnregisterAssetTools();
 	UnregisterPropertyLayouts();
 
-	FScriptableFrameworkEditorStyle::Shutdown();
+	FScriptableFrameworkEditorStyle::Unregister();
 }
 
 TSharedPtr<FScriptableTypeCache> FScriptableFrameworkEditorModule::GetScriptableTypeCache()
