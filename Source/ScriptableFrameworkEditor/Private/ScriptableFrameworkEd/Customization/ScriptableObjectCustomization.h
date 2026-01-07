@@ -52,4 +52,9 @@ private:
 
 	/** Generates the binding widget (the drop-down menu) for a specific property. */
 	TSharedPtr<SWidget> GenerateBindingWidget(UScriptableObject* InScriptableObject, TSharedPtr<IPropertyHandle> InPropertyHandle);
+
+	/** Applies the binding logic (reset handler, visual modification) to a newly created row. */
+	void BindPropertyRow(class IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj);
+
+	void GenerateArrayElement(TSharedRef<IPropertyHandle> ChildHandle, int32 ArrayIndex, IDetailChildrenBuilder& ChildrenBuilder);
 };

@@ -30,6 +30,10 @@ public:
 	virtual void PostLoad() override;
 	virtual UWorld* GetWorld() const override final { return (WorldPrivate ? WorldPrivate : GetWorld_Uncached()); }
 
+#if WITH_EDITOR
+	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
+#endif
+
 	// -------------------------------------------------------------------
 	//  Registration & Lifecycle
 	// -------------------------------------------------------------------

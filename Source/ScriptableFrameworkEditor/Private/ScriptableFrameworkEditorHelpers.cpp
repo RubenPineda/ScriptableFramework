@@ -59,10 +59,6 @@ namespace ScriptableObjectTraversal
 
 namespace ScriptableFrameworkEditor
 {
-	// -------------------------------------------------------------------
-	// Metadata & Visibility
-	// -------------------------------------------------------------------
-
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle)
 	{
 		if (FProperty* Property = PropertyHandle->GetProperty())
@@ -101,9 +97,78 @@ namespace ScriptableFrameworkEditor
 		return Category.StartsWith(TEXT("Output"));
 	}
 
-	// -------------------------------------------------------------------
-	// Hierarchy & Traversal
-	// -------------------------------------------------------------------
+	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp)
+	{
+		if (!SourceProp || !TargetProp) return false;
+
+		// 1. Base Case: Identical Types
+		if (SourceProp->SameType(TargetProp))
+		{
+			return true;
+		}
+
+		// Arrays must be handled strictly because CopyCompleteValue cannot convert element types (e.g. Int to Float).
+		// If SameType (Step 1) failed, it means they are not identical.
+		if (const FArrayProperty* SourceArray = CastField<FArrayProperty>(SourceProp))
+		{
+			if (const FArrayProperty* TargetArray = CastField<FArrayProperty>(TargetProp))
+			{
+				// Allow Covariance for Arrays of Objects (e.g. Array<MyActor> -> Array<AActor>)
+				// Since they are pointers, the memory layout is compatible.
+				const FObjectPropertyBase* SourceInner = CastField<FObjectPropertyBase>(SourceArray->Inner);
+				const FObjectPropertyBase* TargetInner = CastField<FObjectPropertyBase>(TargetArray->Inner);
+
+				if (SourceInner && TargetInner)
+				{
+					return SourceInner->PropertyClass->IsChildOf(TargetInner->PropertyClass);
+				}
+
+				// For any other array type (Int, Float, Struct), we require strict equality (Step 1).
+				// If we are here, they didn't match, so we reject them.
+				return false;
+			}
+
+			// Source is Array, Target is NOT Array -> Incompatible
+			return false;
+		}
+
+		// Target is Array, Source is NOT Array -> Incompatible
+		if (TargetProp->IsA<FArrayProperty>())
+		{
+			return false;
+		}
+
+		// 2. Objects: Allow if source is child of target (Inheritance)
+		// (Copied from StateTreePropertyBindings.cpp)
+		if (const FObjectPropertyBase* SourceObj = CastField<FObjectPropertyBase>(SourceProp))
+		{
+			if (const FObjectPropertyBase* TargetObj = CastField<FObjectPropertyBase>(TargetProp))
+			{
+				return SourceObj->PropertyClass->IsChildOf(TargetObj->PropertyClass);
+			}
+		}
+
+		// 3. Special Case UE5: Vectors (Struct vs Double)
+		// If both have the same C++ type (e.g., "FVector"), they are compatible even if Unreal says no.
+		if (SourceProp->GetCPPType() == TargetProp->GetCPPType())
+		{
+			return true;
+		}
+
+		// 4. Numeric Promotions (Simplified from StateTree)
+		// Allow connecting Float to Double
+		const bool bSourceIsReal = SourceProp->IsA<FFloatProperty>() || SourceProp->IsA<FDoubleProperty>();
+		const bool bTargetIsReal = TargetProp->IsA<FFloatProperty>() || TargetProp->IsA<FDoubleProperty>();
+		if (bSourceIsReal && bTargetIsReal) return true;
+
+		// Allow connecting Int to Float/Double
+		if (SourceProp->IsA<FIntProperty>() && bTargetIsReal) return true;
+
+		// Allow Bool to Numeric
+		if (SourceProp->IsA<FBoolProperty>() && TargetProp->IsA<FNumericProperty>()) return true;
+
+		return false;
+	}
 
 	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle)
 	{
@@ -170,10 +235,6 @@ namespace ScriptableFrameworkEditor
 			Desc.ID = Obj->GetBindingID();
 		}
 	}
-
-	// -------------------------------------------------------------------
-	// Path Generation
-	// -------------------------------------------------------------------
 
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath)
 	{

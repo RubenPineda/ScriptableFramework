@@ -37,6 +37,41 @@ void UScriptableObject::PostLoad()
 	}
 }
 
+#if WITH_EDITOR
+void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+
+	// Detect changes in Arrays (Remove or Clear)
+	if (PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayRemove || PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayClear)
+	{
+		const FProperty* ArrayProperty = nullptr;
+
+		// Usually, the property associated with the event in an Array change is the Array property itself.
+		if (PropertyChangedEvent.Property && PropertyChangedEvent.Property->IsA<FArrayProperty>())
+		{
+			ArrayProperty = PropertyChangedEvent.Property;
+		}
+
+		if (ArrayProperty)
+		{
+			const FName ArrayName = ArrayProperty->GetFName();
+
+			if (PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayRemove)
+			{
+				// Unreal stores the removed index in the event object using the property name
+				const int32 RemovedIndex = PropertyChangedEvent.GetArrayIndex(ArrayName.ToString());
+				PropertyBindings.HandleArrayElementRemoved(ArrayName, RemovedIndex);
+			}
+			else if (PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayClear)
+			{
+				PropertyBindings.HandleArrayClear(ArrayName);
+			}
+		}
+	}
+}
+#endif
+
 UWorld* UScriptableObject::GetWorld_Uncached() const
 {
 	UWorld* MyWorld = nullptr;

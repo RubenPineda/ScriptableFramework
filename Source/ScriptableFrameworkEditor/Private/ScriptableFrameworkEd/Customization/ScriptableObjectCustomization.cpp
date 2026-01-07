@@ -266,7 +266,7 @@ namespace ScriptableBindingUI
 			}
 
 			// 3. Check Type Compatibility
-			return FScriptablePropertyBindings::ArePropertiesCompatible(InProperty, InPropertyHandle->GetProperty());
+			return ScriptableFrameworkEditor::ArePropertiesCompatible(InProperty, InPropertyHandle->GetProperty());
 		});
 
 		Args.OnCanAcceptPropertyOrChildrenWithBindingChain = FOnCanAcceptPropertyOrChildrenWithBindingChain::CreateLambda([](FProperty* InProperty, TArrayView<const FBindingChainElement>)
@@ -428,6 +428,83 @@ namespace ScriptableBindingUI
 	}
 }
 
+/** Custom Array Builder that allows binding the Array property itself (Header) */
+class FScriptableArrayBuilder : public FDetailArrayBuilder
+{
+public:
+	FScriptableArrayBuilder(TSharedRef<IPropertyHandle> InBaseProperty, UScriptableObject* InObject, const TArray<FBindableStructDesc>& InStructs)
+		: FDetailArrayBuilder(InBaseProperty, true, true, true)
+		, ScriptableObject(InObject)
+		, AccessibleStructs(InStructs)
+	{
+	}
+
+	virtual void GenerateHeaderRowContent(FDetailWidgetRow& NodeRow) override
+	{
+		// 1. Generate the standard header (Name + "X elements" + Add/Clear buttons)
+		FDetailArrayBuilder::GenerateHeaderRowContent(NodeRow);
+
+		// 2. Inject Binding Logic into the header row
+		if (UScriptableObject* Obj = ScriptableObject.Get())
+		{
+			TSharedPtr<IPropertyHandle> Handle = GetPropertyHandle();
+
+			// Check if we can/should bind this array
+			// Note: We duplicate the check logic here or assume caller checked it.
+			// Let's assume valid since we created this builder.
+
+			FPropertyBindingPath TargetPath;
+			ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TargetPath);
+
+			TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
+				MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, AccessibleStructs);
+
+			// --- Visibility Logic ---
+			// If the array itself is bound, we hide the standard controls (ValueContent)
+			// because the array content is driven by the binding.
+			TSharedPtr<SWidget> StandardValueWidget = NodeRow.ValueContent().Widget;
+
+			auto IsValueVisible = TAttribute<EVisibility>::Create([Obj, Handle]() -> EVisibility
+			{
+				if (!Obj) return EVisibility::Visible;
+				FPropertyBindingPath TP;
+				ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TP);
+				return Obj->GetPropertyBindings().HasPropertyBinding(TP) ? EVisibility::Collapsed : EVisibility::Visible;
+			});
+
+			// Wrap the standard value widget
+			NodeRow.ValueContent()
+				[
+					SNew(SBox)
+						.Visibility(IsValueVisible)
+						.VAlign(VAlign_Center)
+						[
+							StandardValueWidget.ToSharedRef()
+						]
+				];
+
+			// --- Extension Logic (The Pill) ---
+			TSharedPtr<SWidget> BindingWidget = ScriptableBindingUI::CreateBindingWidget(Handle, CachedData);
+
+			NodeRow.ExtensionContent()
+				[
+					SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot()
+						.AutoWidth()
+						.VAlign(VAlign_Center)
+						.Padding(2.0f, 0.0f)
+						[
+							BindingWidget.ToSharedRef()
+						]
+				];
+		}
+	}
+
+private:
+	TWeakObjectPtr<UScriptableObject> ScriptableObject;
+	TArray<FBindableStructDesc> AccessibleStructs;
+};
+
 // ------------------------------------------------------------------------------------------------
 // FScriptableObjectCustomization Implementation
 // ------------------------------------------------------------------------------------------------
@@ -578,57 +655,27 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 				if (ScriptableFrameworkEditor::IsPropertyVisible(SubPropertyHandle))
 				{
-					IDetailPropertyRow& Row = ChildBuilder.AddProperty(SubPropertyHandle);
-
 					if (Obj && IsPropertyExtendable(SubPropertyHandle))
 					{
-						// Create CachedData locally to capture it in the Reset Handler
-						FPropertyBindingPath TargetPath;
-						ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, SubPropertyHandle, TargetPath);
-
-						TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
-							MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, SubPropertyHandle, AccessibleStructs);
-
-						// --- RESET HANDLER ---
-						// This ensures the yellow reset arrow appears if bound, and handles unbinding upon click.
-						FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, SubPropertyHandle](TSharedPtr<IPropertyHandle> InHandle)
+						const FProperty* Prop = SubPropertyHandle->GetProperty();
+						if (Prop->IsA<FArrayProperty>())
 						{
-							if (!ScriptableObject.IsValid()) return false;
+							TSharedRef<FScriptableArrayBuilder> ArrayBuilder = MakeShared<FScriptableArrayBuilder>(SubPropertyHandle, Obj, AccessibleStructs);
 
-							FPropertyBindingPath TP;
-							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), SubPropertyHandle, TP);
-							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
-							{
-								return true;
-							}
-							return InHandle->DiffersFromDefault();
-						});
+							// Bind the delegate to generate elements (for children bindings)
+							ArrayBuilder->OnGenerateArrayElementWidget(FOnGenerateArrayElementWidget::CreateSP(this, &FScriptableObjectCustomization::GenerateArrayElement));
 
-						FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, SubPropertyHandle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+							ChildBuilder.AddCustomBuilder(ArrayBuilder);
+						}
+						else
 						{
-							if (!ScriptableObject.IsValid()) return;
-
-							FScopedTransaction Transaction(LOCTEXT("ResetToDefault", "Reset Property to Default"));
-							ScriptableObject->Modify();
-
-							FPropertyBindingPath TP;
-							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), SubPropertyHandle, TP);
-
-							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
-							{
-								ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TP);
-
-								// Force refresh the binding widget immediately
-								if (CachedData) CachedData->Invalidate();
-							}
-
-							InHandle->ResetToDefault();
-						});
-
-						Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
-						// ---------------------
-
-						ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
+							IDetailPropertyRow& Row = ChildBuilder.AddProperty(SubPropertyHandle);
+							BindPropertyRow(Row, SubPropertyHandle, Obj);
+						}
+					}
+					else
+					{
+						ChildBuilder.AddProperty(SubPropertyHandle);
 					}
 				}
 			}
@@ -643,25 +690,19 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const
 {
 	const FProperty* Property = InPropertyHandle->GetProperty();
-	if (!Property) return false;
+	if (!Property || Property->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_EditorOnly | CPF_Config | CPF_Deprecated)) return false;
 
-	// 1. Filter out internal framework properties
+	// Filter out internal framework properties
 	if (Property->HasMetaData(TEXT("NoBinding")))
 	{
 		return false;
 	}
 
-	// 2. Filter out system flags (Config, Deprecated, etc.)
-	if (Property->HasAnyPropertyFlags(CPF_PersistentInstance | CPF_EditorOnly | CPF_Config | CPF_Deprecated))
-	{
-		return false;
-	}
-
-	// 3. Filter out Container types (Arrays, Sets, Maps).
+	// Filter out Container types (Sets, Maps).
 	// The custom binding logic wraps the property widget in a custom row, which breaks 
 	// the native header logic of containers (causing duplicate 'Add' buttons or preventing expansion).
 	// We let Unreal handle these natively by returning false.
-	if (Property->IsA<FArrayProperty>() || Property->IsA<FSetProperty>() || Property->IsA<FMapProperty>())
+	if (Property->IsA<FSetProperty>() || Property->IsA<FMapProperty>())
 	{
 		return false;
 	}
@@ -686,6 +727,67 @@ TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScrip
 		MakeShared<ScriptableBindingUI::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
 
 	return ScriptableBindingUI::CreateBindingWidget(InPropertyHandle, CachedData);
+}
+
+void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHandle> ChildHandle, int32 ArrayIndex, IDetailChildrenBuilder& ChildrenBuilder)
+{
+	IDetailPropertyRow& Row = ChildrenBuilder.AddProperty(ChildHandle);
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		if (IsPropertyExtendable(ChildHandle))
+		{
+			BindPropertyRow(Row, ChildHandle, Obj);
+		}
+	}
+}
+
+void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj)
+{
+	// Fetch accessible structs
+	TArray<FBindableStructDesc> AccessibleStructs;
+	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
+
+	// Prepare Path and Cache
+	FPropertyBindingPath TargetPath;
+	ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TargetPath);
+
+	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
+		MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, AccessibleStructs);
+
+	// Reset Handler Logic
+	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, Handle](TSharedPtr<IPropertyHandle> InHandle)
+	{
+		if (!ScriptableObject.IsValid()) return false;
+
+		FPropertyBindingPath TP;
+		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
+
+		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP)) return true;
+		return InHandle->DiffersFromDefault();
+	});
+
+	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+	{
+		if (!ScriptableObject.IsValid()) return;
+
+		FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
+		ScriptableObject->Modify();
+
+		FPropertyBindingPath TP;
+		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
+
+		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+		{
+			ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TP);
+			if (CachedData) CachedData->Invalidate();
+		}
+		InHandle->ResetToDefault();
+	});
+
+	Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
+
+	// Inject UI
+	ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
 }
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const

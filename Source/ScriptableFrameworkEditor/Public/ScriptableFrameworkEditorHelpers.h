@@ -19,13 +19,12 @@ namespace ScriptableFrameworkEditor
 	static const FName MD_ConditionCategory = TEXT("ConditionCategory");
 	static const FName MD_ConditionCategories = TEXT("ConditionCategories");
 
-	// --- Metadata & Visibility Logic ---
-
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle);
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta);
 	bool IsPropertyBindableOutput(const FProperty* Property);
 
-	// --- Object Hierarchy & Traversal ---
+	/** Checks if two properties are compatible for binding. */
+	bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
 
 	/** Finds the owning ScriptableObject from a property handle (handling inner objects). */
 	UScriptableObject* GetOuterScriptableObject(const TSharedPtr<const IPropertyHandle>& InPropertyHandle);
@@ -35,8 +34,6 @@ namespace ScriptableFrameworkEditor
 
 	/** Scans the hierarchy to find bindable sources (Parents, Siblings, Context). */
 	void GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs);
-
-	// --- Path Generation Utils ---
 
 	/** Generates a full binding path from a PropertyHandle (Source of Truth). */
 	void MakeStructPropertyPathFromPropertyHandle(UScriptableObject* ScriptableObject, TSharedPtr<const IPropertyHandle> InPropertyHandle, FPropertyBindingPath& OutPath);

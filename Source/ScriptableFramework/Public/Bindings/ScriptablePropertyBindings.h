@@ -30,12 +30,12 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBindings
 
 public:
 #if WITH_EDITOR
-	// Type Compatibility (Delegates to Unreal's property system)
-	static bool ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp);
-
 	void AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath);
 	void RemovePropertyBindings(const FPropertyBindingPath& TargetPath);
 	bool HasPropertyBinding(const FPropertyBindingPath& TargetPath) const;
+
+	void HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved);
+	void HandleArrayClear(const FName& ArrayName);
 
 	/**
 	 * Retrieves the source path bound to the specified target path, if any.

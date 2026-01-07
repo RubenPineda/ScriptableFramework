@@ -6,48 +6,6 @@
 UE_DISABLE_OPTIMIZATION
 
 #if WITH_EDITOR
-bool FScriptablePropertyBindings::ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp)
-{
-	if (!SourceProp || !TargetProp) return false;
-
-	// 1. Base Case: Identical Types
-	if (SourceProp->SameType(TargetProp))
-	{
-		return true;
-	}
-
-	// 2. Objects: Allow if source is child of target (Inheritance)
-	// (Copied from StateTreePropertyBindings.cpp)
-	if (const FObjectPropertyBase* SourceObj = CastField<FObjectPropertyBase>(SourceProp))
-	{
-		if (const FObjectPropertyBase* TargetObj = CastField<FObjectPropertyBase>(TargetProp))
-		{
-			return SourceObj->PropertyClass->IsChildOf(TargetObj->PropertyClass);
-		}
-	}
-
-	// 3. Special Case UE5: Vectors (Struct vs Double)
-	// If both have the same C++ type (e.g., "FVector"), they are compatible even if Unreal says no.
-	if (SourceProp->GetCPPType() == TargetProp->GetCPPType())
-	{
-		return true;
-	}
-
-	// 4. Numeric Promotions (Simplified from StateTree)
-	// Allow connecting Float to Double
-	const bool bSourceIsReal = SourceProp->IsA<FFloatProperty>() || SourceProp->IsA<FDoubleProperty>();
-	const bool bTargetIsReal = TargetProp->IsA<FFloatProperty>() || TargetProp->IsA<FDoubleProperty>();
-	if (bSourceIsReal && bTargetIsReal) return true;
-
-	// Allow connecting Int to Float/Double
-	if (SourceProp->IsA<FIntProperty>() && bTargetIsReal) return true;
-
-	// Allow Bool to Numeric
-	if (SourceProp->IsA<FBoolProperty>() && TargetProp->IsA<FNumericProperty>()) return true;
-
-	return false;
-}
-
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
 {
 	// If a binding already exists for this target, update it
@@ -81,6 +39,55 @@ bool FScriptablePropertyBindings::HasPropertyBinding(const FPropertyBindingPath&
 	return Bindings.ContainsByPredicate([&TargetPath](const FScriptablePropertyBinding& Binding)
 	{
 		return Binding.TargetPath == TargetPath;
+	});
+}
+
+void FScriptablePropertyBindings::HandleArrayElementRemoved(const FName& ArrayName, int32 IndexRemoved)
+{
+	if (IndexRemoved < 0) return;
+
+	// Iterate backwards to safely remove elements while iterating
+	for (int32 i = Bindings.Num() - 1; i >= 0; --i)
+	{
+		FScriptablePropertyBinding& Binding = Bindings[i];
+
+		// Check if the Target path is valid and starts with the modified Array
+		if (Binding.TargetPath.NumSegments() > 0)
+		{
+			// We get a mutable view of the segments to modify the index directly
+			TArrayView<FPropertyBindingPathSegment> Segments = Binding.TargetPath.GetMutableSegments();
+			FPropertyBindingPathSegment& RootSegment = Segments[0];
+
+			if (RootSegment.GetName() == ArrayName)
+			{
+				const int32 BindingIndex = RootSegment.GetArrayIndex();
+
+				// CASE 1: The binding belongs to the removed element -> REMOVE
+				if (BindingIndex == IndexRemoved)
+				{
+					Bindings.RemoveAt(i);
+				}
+				// CASE 2: The binding is above the removed index -> SHIFT DOWN
+				// E.g., If we remove [0], the binding pointing to [1] must now point to [0]
+				else if (BindingIndex > IndexRemoved)
+				{
+					RootSegment.SetArrayIndex(BindingIndex - 1);
+				}
+			}
+		}
+	}
+}
+
+void FScriptablePropertyBindings::HandleArrayClear(const FName& ArrayName)
+{
+	Bindings.RemoveAll([&ArrayName](const FScriptablePropertyBinding& Binding)
+	{
+		if (Binding.TargetPath.NumSegments() > 0)
+		{
+			const FPropertyBindingPathSegment& RootSegment = Binding.TargetPath.GetSegment(0);
+			return RootSegment.GetName() == ArrayName;
+		}
+		return false;
 	});
 }
 
