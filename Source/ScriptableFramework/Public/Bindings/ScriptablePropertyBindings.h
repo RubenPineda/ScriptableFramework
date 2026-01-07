@@ -17,6 +17,9 @@ struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBinding
 
 	UPROPERTY()
 	FPropertyBindingPath TargetPath;
+
+	UPROPERTY()
+	FGuid SourceID;
 };
 
 /** Container for all property bindings of an object. */

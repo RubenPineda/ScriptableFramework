@@ -56,6 +56,7 @@ void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath&
 		if (Binding.TargetPath == TargetPath)
 		{
 			Binding.SourcePath = SourcePath;
+			Binding.SourceID = SourcePath.GetStructID();
 			return;
 		}
 	}
@@ -64,6 +65,7 @@ void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath&
 	FScriptablePropertyBinding& NewBinding = Bindings.AddDefaulted_GetRef();
 	NewBinding.SourcePath = SourcePath;
 	NewBinding.TargetPath = TargetPath;
+	NewBinding.SourceID = SourcePath.GetStructID();
 }
 
 void FScriptablePropertyBindings::RemovePropertyBindings(const FPropertyBindingPath& TargetPath)
@@ -114,11 +116,11 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 	{
 		// Determine the Source Data View (Who are we copying FROM?)
 		FPropertyBindingDataView SourceView;
-		if (Binding.SourcePath.GetStructID().IsValid())
+		if (Binding.SourceID.IsValid())
 		{
 			// CASE A: Sibling Binding
 			// We look for the persistent ID in the runtime hierarchy
-			UScriptableObject* SourceObj = Root->FindBindingSource(Binding.SourcePath.GetStructID());
+			UScriptableObject* SourceObj = Root->FindBindingSource(Binding.SourceID);
 
 			if (SourceObj)
 			{
