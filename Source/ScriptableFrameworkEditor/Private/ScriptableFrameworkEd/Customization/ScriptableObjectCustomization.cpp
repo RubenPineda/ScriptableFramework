@@ -138,7 +138,7 @@ namespace ScriptableBindingUI
 					}
 					else
 					{
-						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property or task is missing.");
+						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property is missing.");
 						Image = FAppStyle::GetBrush("Icons.Error");
 						Color = FLinearColor::Red;
 					}
