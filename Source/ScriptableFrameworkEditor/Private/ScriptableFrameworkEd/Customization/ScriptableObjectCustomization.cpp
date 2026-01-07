@@ -103,16 +103,45 @@ namespace ScriptableBindingUI
 				{
 					const FBindableStructDesc* SourceDesc = AccessibleStructs.FindByPredicate([&](const FBindableStructDesc& Desc) { return Desc.ID == SourcePath->GetStructID(); });
 
-					FString DisplayString = SourceDesc ? SourceDesc->Name.ToString() : TEXT("Unknown");
+					bool bIsBindingValid = false;
+
+					// Default name if no valid source is found
+					FString DisplayString = TEXT("Unknown");
+
+					if (SourceDesc)
+					{
+						DisplayString = SourceDesc->Name.ToString();
+
+						// Create a dummy view (only types) to validate the path
+						FPropertyBindingDataView DummyView(SourceDesc->Struct, nullptr);
+
+						// ResolveIndirections returns false if any path segment does not exist
+						TArray<FPropertyBindingPathIndirection> Indirections;
+						if (SourcePath->ResolveIndirectionsWithValue(DummyView, Indirections))
+						{
+							bIsBindingValid = true;
+						}
+					}
+
 					if (!SourcePath->IsPathEmpty())
 					{
 						DisplayString += TEXT(".") + SourcePath->ToString();
 					}
 
 					Text = FText::FromString(DisplayString);
-					TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
-					Image = FAppStyle::GetBrush(PropertyIcon);
-					Color = Schema->GetPinTypeColor(PinType);
+
+					if (bIsBindingValid)
+					{
+						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
+						Image = FAppStyle::GetBrush(PropertyIcon);
+						Color = Schema->GetPinTypeColor(PinType);
+					}
+					else
+					{
+						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property or task is missing.");
+						Image = FAppStyle::GetBrush("Icons.Error");
+						Color = FLinearColor::Red;
+					}
 				}
 			}
 			else // Unbound
@@ -401,7 +430,7 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 	{
 		ScriptableObject = ScriptableFrameworkEditor::GetOuterScriptableObject(ChildPropertyHandle);
 
-		bIsBlueprintClass = IsValid(ScriptableObject) && ScriptableObject->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
+		bIsBlueprintClass = ScriptableObject.IsValid() && ScriptableObject->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
 
 		EnabledPropertyHandle = ChildPropertyHandle->GetChildHandle("bEnabled");
 		GatherChildProperties(ChildPropertyHandle);
@@ -434,15 +463,15 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 						.Font(IPropertyTypeCustomizationUtils::GetRegularFont())
 						.Text_Lambda([this]()
 					{
-						if (ScriptableObject)
+						if (UScriptableObject* Obj = ScriptableObject.Get())
 						{
 							static const FName CandidateProperties[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
 
 							for (const FName& PropName : CandidateProperties)
 							{
-								if (FObjectProperty* AssetProp = CastField<FObjectProperty>(ScriptableObject->GetClass()->FindPropertyByName(PropName)))
+								if (FObjectProperty* AssetProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(PropName)))
 								{
-									if (UObject* AssignedAsset = AssetProp->GetObjectPropertyValue_InContainer(ScriptableObject))
+									if (UObject* AssignedAsset = AssetProp->GetObjectPropertyValue_InContainer(Obj))
 									{
 										return FText::FromString(AssignedAsset->GetName());
 									}
@@ -507,9 +536,10 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 	// Pre-fetch contexts once for optimization
 	TArray<FBindableStructDesc> AccessibleStructs;
-	if (ScriptableObject)
+	UScriptableObject* Obj = ScriptableObject.Get();
+	if (Obj)
 	{
-		ScriptableFrameworkEditor::GetAccessibleStructs(ScriptableObject, AccessibleStructs);
+		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
 	}
 
 	uint32 NumberOfChild;
@@ -530,23 +560,23 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 				{
 					IDetailPropertyRow& Row = ChildBuilder.AddProperty(SubPropertyHandle);
 
-					if (ScriptableObject && IsPropertyExtendable(SubPropertyHandle))
+					if (Obj && IsPropertyExtendable(SubPropertyHandle))
 					{
 						// Create CachedData locally to capture it in the Reset Handler
 						FPropertyBindingPath TargetPath;
-						ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TargetPath);
+						ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, SubPropertyHandle, TargetPath);
 
 						TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
-							MakeShared<ScriptableBindingUI::FCachedBindingData>(ScriptableObject, TargetPath, SubPropertyHandle, AccessibleStructs);
+							MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, SubPropertyHandle, AccessibleStructs);
 
 						// --- RESET HANDLER ---
 						// This ensures the yellow reset arrow appears if bound, and handles unbinding upon click.
 						FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, SubPropertyHandle](TSharedPtr<IPropertyHandle> InHandle)
 						{
-							if (!ScriptableObject) return false;
+							if (!ScriptableObject.IsValid()) return false;
 
 							FPropertyBindingPath TP;
-							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), SubPropertyHandle, TP);
 							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
 							{
 								return true;
@@ -556,13 +586,13 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 						FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, SubPropertyHandle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
 						{
-							if (!ScriptableObject) return;
+							if (!ScriptableObject.IsValid()) return;
 
 							FScopedTransaction Transaction(LOCTEXT("ResetToDefault", "Reset Property to Default"));
 							ScriptableObject->Modify();
 
 							FPropertyBindingPath TP;
-							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject, SubPropertyHandle, TP);
+							ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), SubPropertyHandle, TP);
 
 							if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
 							{
@@ -578,7 +608,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 						Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 						// ---------------------
 
-						ScriptableBindingUI::ModifyRow(ScriptableObject, Row, CachedData);
+						ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
 					}
 				}
 			}
@@ -773,7 +803,7 @@ void FScriptableObjectCustomization::OnUseSelected()
 
 void FScriptableObjectCustomization::OnBrowseTo()
 {
-	if (ScriptableObject)
+	if (ScriptableObject.IsValid())
 	{
 		TArray<FAssetData> SyncAssets;
 		SyncAssets.Add(FAssetData(ScriptableObject->GetClass()));

@@ -29,7 +29,7 @@ protected:
 
 	TSharedPtr<IPropertyHandle> PropertyHandle;
 	TSharedPtr<IPropertyHandle> EnabledPropertyHandle;
-	UScriptableObject* ScriptableObject = nullptr;
+	TWeakObjectPtr<UScriptableObject> ScriptableObject = nullptr;
 
 	UClass* GetBaseClass() const;
 
