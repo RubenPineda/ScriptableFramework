@@ -100,56 +100,6 @@ public:
 	static UScriptableTask* RunTask(UObject* Owner, UScriptableTask* Task, FScriptableTaskEvents Events = FScriptableTaskEvents());
 };
 
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Sequence", TaskCategory = "System"))
-class UScriptableTask_Sequence final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	TArray<UScriptableTask*> Tasks;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void ResetTask() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	int32 TaskIndex = 0;
-
-	void BeginSubTask(UScriptableTask* Task);
-
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* Task);
-};
-
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Parallel Sequence", TaskCategory = "System", BlockSiblingBindings = "true"))
-class UScriptableTask_ParallelSequence final : public UScriptableTask
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced, Category = ScriptableTask, meta = (ShowOnlyInnerProperties))
-	TArray<UScriptableTask*> Tasks;
-
-	virtual void OnRegister() override;
-	virtual void OnUnregister() override;
-	virtual void ResetTask() override;
-	virtual void BeginTask() override;
-	virtual void FinishTask() override;
-	virtual void Tick(float DeltaTime) override;
-
-private:
-	int32 TaskIndex = 0;
-
-	void BeginSubTask(UScriptableTask* Task);
-
-	UFUNCTION()
-	void OnSubTaskFinish(UScriptableTask* Task);
-};
-
 UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Random", TaskCategory = "System", BlockSiblingBindings = "true"))
 class UScriptableTask_Random final : public UScriptableTask
 {
