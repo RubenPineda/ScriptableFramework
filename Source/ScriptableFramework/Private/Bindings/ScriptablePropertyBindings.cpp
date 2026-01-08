@@ -3,6 +3,8 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "ScriptableObject.h"
 
+UE_DISABLE_OPTIMIZATION
+
 #if WITH_EDITOR
 void FScriptablePropertyBindings::AddPropertyBinding(const FPropertyBindingPath& SourcePath, const FPropertyBindingPath& TargetPath)
 {
@@ -104,8 +106,6 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 {
 	if (!TargetObject) return;
 
-	UScriptableObject* Root = TargetObject->GetRoot(); // Used for sibling lookup via FindBindingSource
-
 	// Prepare the Context View in advance (it might be used by multiple bindings)
 	const FInstancedPropertyBag* Context = TargetObject->GetContext();
 
@@ -126,10 +126,8 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 		if (Binding.SourceID.IsValid())
 		{
 			// CASE A: Sibling Binding
-			// We look for the persistent ID in the runtime hierarchy
-			UScriptableObject* SourceObj = Root ? Root->FindBindingSource(Binding.SourceID) : nullptr;
-
-			if (SourceObj)
+			// Direct lookup via the injected map in TargetObject
+			if (UScriptableObject* SourceObj = TargetObject->FindBindingSource(Binding.SourceID))
 			{
 				SourceView = FPropertyBindingDataView(SourceObj);
 			}
@@ -191,3 +189,5 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 		}
 	}
 }
+
+UE_ENABLE_OPTIMIZATION

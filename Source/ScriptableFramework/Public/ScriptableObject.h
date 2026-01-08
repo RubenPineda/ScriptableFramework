@@ -104,7 +104,7 @@ public:
 	FGuid GetBindingID() const { return BindingID; }
 
 	/** Injects the shared data from the owning container. */
-	void InitRuntimeData(const FInstancedPropertyBag* InContext);
+	void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap);
 
 	/** Propagates the runtime data to a child object. */
 	void PropagateRuntimeData(UScriptableObject* Child) const;
@@ -113,14 +113,6 @@ public:
 	void ResolveBindings();
 
 	const FInstancedPropertyBag* GetContext() const { return ContextRef; }
-
-	// --- Runtime Binding Resolution (Root Only Logic) ---
-
-	/** Registers a object into the O(1) binding map. */
-	void RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource);
-
-	/** Unregisters a task from the binding map. */
-	void UnregisterBindingSource(const FGuid& InID);
 
 	/** Finds a registered task by its persistent ID. */
 	UScriptableObject* FindBindingSource(const FGuid& InID);
@@ -154,6 +146,9 @@ private:
 	/** Input data (Context) available for this object and its children. */
 	const FInstancedPropertyBag* ContextRef = nullptr;
 
+	/** Reference to the Action's Binding Source Map. */
+	const TMap<FGuid, TObjectPtr<UScriptableObject>>* BindingsMapRef = nullptr;
+
 	/** Unique identifier for bindings. Persists across duplication. */
 	UPROPERTY(meta = (NoBinding))
 	FGuid BindingID;
@@ -161,13 +156,6 @@ private:
 	/** Data bindings definition. */
 	UPROPERTY(meta = (NoBinding))
 	FScriptablePropertyBindings PropertyBindings;
-
-	/**
-	 * Lookup Map for Runtime Bindings.
-	 * Only populated on the Root object. Transient.
-	 */
-	UPROPERTY(Transient, meta = (NoBinding))
-	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
 
 	/** Cached pointers */
 	UObject* OwnerPrivate = nullptr;

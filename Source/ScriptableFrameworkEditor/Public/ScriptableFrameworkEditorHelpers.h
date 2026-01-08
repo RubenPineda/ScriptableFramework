@@ -48,4 +48,10 @@ namespace ScriptableFrameworkEditor
 
 	/** Finds the PropertyHandle for the FScriptableAction struct that contains the given child handle. */
 	TSharedPtr<IPropertyHandle> FindActionStructHandle(TSharedPtr<IPropertyHandle> ChildHandle);
+
+	// Finds the PropertyHandle corresponding to the TargetObject by walking up ---
+	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject);
+
+	// Collect siblings using Editor Handles (works for Struct Arrays)
+	void CollectSiblingsFromHandle(TSharedPtr<IPropertyHandle> ObjectHandle, TArray<const UScriptableObject*>& OutObjects);
 }

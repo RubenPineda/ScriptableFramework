@@ -184,6 +184,52 @@ namespace ScriptableFrameworkEditor
 		return nullptr;
 	}
 
+	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject)
+	{
+		TSharedPtr<IPropertyHandle> Current = StartHandle;
+		while (Current.IsValid())
+		{
+			UObject* Obj = nullptr;
+			if (Current->GetValue(Obj) == FPropertyAccess::Success && Obj == TargetObject)
+			{
+				return Current;
+			}
+			Current = Current->GetParentHandle();
+		}
+		return nullptr;
+	}
+
+	void CollectSiblingsFromHandle(TSharedPtr<IPropertyHandle> ObjectHandle, TArray<const UScriptableObject*>& OutObjects)
+	{
+		if (!ObjectHandle.IsValid()) return;
+
+		TSharedPtr<IPropertyHandle> ParentHandle = ObjectHandle->GetParentHandle();
+		if (!ParentHandle.IsValid()) return;
+
+		TSharedPtr<IPropertyHandleArray> ArrayHandle = ParentHandle->AsArray();
+		if (ArrayHandle.IsValid())
+		{
+			// It is an array. Get our index.
+			int32 MyIndex = ObjectHandle->GetIndexInArray();
+			if (MyIndex != INDEX_NONE)
+			{
+				// Iterate all previous elements
+				for (int32 i = 0; i < MyIndex; ++i)
+				{
+					TSharedRef<IPropertyHandle> Element = ArrayHandle->GetElement(i);
+					UObject* Value = nullptr;
+					if (Element->GetValue(Value) == FPropertyAccess::Success)
+					{
+						if (const UScriptableObject* Sibling = Cast<UScriptableObject>(Value))
+						{
+							OutObjects.Add(Sibling);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FBindableStructDesc>& OutStructDescs)
 	{
 		if (!TargetObject) return;
@@ -191,10 +237,8 @@ namespace ScriptableFrameworkEditor
 		if (!RootObject) return;
 
 		// 1. Context (From FScriptableAction via Handle)
-		// We try to find the Action struct walking up the handle hierarchy.
 		if (TSharedPtr<IPropertyHandle> ActionHandle = FindActionStructHandle(Handle))
 		{
-			// We access the raw data of the struct to read the Context
 			void* ActionData = nullptr;
 			if (ActionHandle->GetValueData(ActionData) == FPropertyAccess::Success && ActionData)
 			{
@@ -209,14 +253,21 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 
-		// 2. Traversal (Siblings/Parents)
 		TArray<const UScriptableObject*> AccessibleObjects;
-		const UObject* IteratorNode = TargetObject;
 
+		// 2. Siblings via Handle
+		// We try to find the handle that represents 'TargetObject' in the editor hierarchy
+		if (TSharedPtr<IPropertyHandle> ObjectHandle = FindObjectHandleInHierarchy(Handle, TargetObject))
+		{
+			CollectSiblingsFromHandle(ObjectHandle, AccessibleObjects);
+		}
+
+		// 3. Traversal (Hierarchical Parents & Siblings of Parents)
+		// This handles nested tasks (e.g., inside a Sequence Task)
+		const UObject* IteratorNode = TargetObject;
 		while (IteratorNode)
 		{
 			const UObject* ParentNode = IteratorNode->GetOuter();
-			// Stop if we hit the top of the hierarchy (Action Owner or Package)
 			if (!ParentNode || ParentNode == RootObject->GetOuter()) break;
 
 			if (const UScriptableObject* ParentScriptableObject = Cast<UScriptableObject>(ParentNode))
@@ -230,13 +281,18 @@ namespace ScriptableFrameworkEditor
 			IteratorNode = ParentNode;
 		}
 
-		// 3. Convert
+		// 4. Convert to Output
 		for (const UScriptableObject* Obj : AccessibleObjects)
 		{
-			FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
-			Desc.Name = FName(*Obj->GetName());
-			Desc.Struct = Obj->GetClass();
-			Desc.ID = Obj->GetBindingID();
+			// Ensure ID exists (runtime tasks might not have it if created dynamically, but editor tasks should)
+			if (Obj->GetBindingID().IsValid())
+			{
+				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
+				FString DisplayName = Obj->GetName();
+				Desc.Name = FName(*DisplayName);
+				Desc.Struct = Obj->GetClass();
+				Desc.ID = Obj->GetBindingID();
+			}
 		}
 	}
 
@@ -253,9 +309,20 @@ namespace ScriptableFrameworkEditor
 			const FProperty* Property = CurrentPropertyHandle->GetProperty();
 			if (Property)
 			{
-				if (const UClass* PropertyOwnerClass = Cast<UClass>(Property->GetOwnerStruct()))
+				const UStruct* OwnerStruct = Property->GetOwnerStruct();
+
+				// If it's a Class, ensure the ScriptableObject is a child of it.
+				if (const UClass* PropertyOwnerClass = Cast<UClass>(OwnerStruct))
 				{
-					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass)) break;
+					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass))
+					{
+						break;
+					}
+				}
+				// If it's the Action Struct (Container), we went too far up. Stop.
+				else if (OwnerStruct == FScriptableAction::StaticStruct())
+				{
+					break;
 				}
 
 				FPropertyBindingPathSegment& Segment = PathSegments.InsertDefaulted_GetRef(0);
