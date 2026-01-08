@@ -16,7 +16,7 @@ void FScriptableConditionCustomization::CustomizeHeader(TSharedRef<IPropertyHand
 
 	FScriptableObjectCustomization::CustomizeHeader(StructPropertyHandle, HeaderRow, CustomizationUtils);
 
-	HorizontalBox->InsertSlot(1)
+	/*HorizontalBox->InsertSlot(1)
 		.AutoWidth()
 		[
 			SNew(SCheckBox)
@@ -27,13 +27,13 @@ void FScriptableConditionCustomization::CustomizeHeader(TSharedRef<IPropertyHand
 				.ForegroundColor(FColor::Red)
 				.IsChecked(this, &FScriptableConditionCustomization::GetNegateCheckBoxState)
 				.OnCheckStateChanged(this, &FScriptableConditionCustomization::OnNegateCheckBoxChanged)
-		];
+		];*/
 }
 
-void FScriptableConditionCustomization::GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle)
-{
-	NegatePropertyHandle = ChildPropertyHandle->GetChildHandle("bNegate");
-}
+//void FScriptableConditionCustomization::GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle)
+//{
+//	NegatePropertyHandle = ChildPropertyHandle->GetChildHandle("bNegate");
+//}
 
 ECheckBoxState FScriptableConditionCustomization::GetNegateCheckBoxState() const
 {

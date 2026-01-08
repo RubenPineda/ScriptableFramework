@@ -318,4 +318,24 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 	}
+
+	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset)
+	{
+		if (!Handle.IsValid()) return;
+		UObject* NewObj = nullptr;
+		if (Handle->GetValue(NewObj) == FPropertyAccess::Success && NewObj)
+		{
+			static const FName CandidateProps[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
+			for (const FName& P : CandidateProps)
+			{
+				if (FObjectProperty* AssetProp = CastField<FObjectProperty>(NewObj->GetClass()->FindPropertyByName(P)))
+				{
+					NewObj->Modify();
+					void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
+					AssetProp->SetObjectPropertyValue(ValuePtr, Asset);
+					return;
+				}
+			}
+		}
+	}
 }

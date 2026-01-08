@@ -13,7 +13,7 @@ public:
 	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableConditionCustomization); }
 
 	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
-	virtual void GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle) override;
+	//virtual void GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle) override;
 
 private:
 	TSharedPtr<IPropertyHandle> NegatePropertyHandle;

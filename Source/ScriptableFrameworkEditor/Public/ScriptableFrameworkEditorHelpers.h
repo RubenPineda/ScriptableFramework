@@ -40,4 +40,6 @@ namespace ScriptableFrameworkEditor
 
 	/** Converts a PropertyAccess BindingChain into our FPropertyBindingPath format. */
 	void MakeStructPropertyPathFromBindingChain(const FGuid& StructID, const TArray<FBindingChainElement>& InBindingChain, FPropertyBindingPath& OutPath);
+
+	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset);
 }
