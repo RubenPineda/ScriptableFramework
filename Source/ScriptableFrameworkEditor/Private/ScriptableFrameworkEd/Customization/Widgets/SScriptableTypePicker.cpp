@@ -100,6 +100,7 @@ void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& I
 
 	TSharedRef<SWidget> ComboBoxMenuContent =
 		SNew(SBox)
+		.MinDesiredWidth(InArgs._MinListWidth)
 		.MaxDesiredHeight(InArgs._MaxListHeight)
 		[
 			SNew(SVerticalBox)
@@ -311,7 +312,7 @@ void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
 		return;
 	}
 
-	// 1. Get Category from Asset Registry Tag
+	// Get Category from Asset Registry Tag
 	static const FName CategoryTagName(TEXT("MenuCategory"));
 	FString CategoryStr;
 	AssetData.GetTagValue<FString>(CategoryTagName, CategoryStr);
