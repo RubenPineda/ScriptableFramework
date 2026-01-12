@@ -56,6 +56,22 @@ void FScriptableAction::Unregister()
 	Owner = nullptr;
 }
 
+void FScriptableAction::Reset()
+{
+	// Reset logic state
+	bIsRunning = false;
+	CurrentTaskIndex = 0;
+
+	// Propagate hard reset to all tasks
+	for (UScriptableTask* Task : Tasks)
+	{
+		if (Task)
+		{
+			Task->Reset();
+		}
+	}
+}
+
 void FScriptableAction::Begin()
 {
 	if (Tasks.IsEmpty())
@@ -78,6 +94,8 @@ void FScriptableAction::Begin()
 			BeginSubTask(Task);
 		}
 	}
+
+	OnActionBegin.Broadcast();
 }
 
 void FScriptableAction::Finish()
@@ -95,6 +113,8 @@ void FScriptableAction::Finish()
 
 	bIsRunning = false;
 	CurrentTaskIndex = 0;
+
+	OnActionFinish.Broadcast();
 }
 
 void FScriptableAction::BeginSubTask(UScriptableTask* Task)

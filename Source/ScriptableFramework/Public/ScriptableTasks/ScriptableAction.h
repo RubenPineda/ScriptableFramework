@@ -11,6 +11,8 @@
 class UScriptableObject;
 class UScriptableTask;
 
+DECLARE_MULTICAST_DELEGATE(FScriptableActionNativeDelegate);
+
 /** Defines how the tasks within the action container are executed. */
 UENUM(BlueprintType)
 enum class EScriptableActionMode : uint8
@@ -51,6 +53,9 @@ public:
 	UPROPERTY(EditAnywhere, Instanced, Category = "Tasks")
 	TArray<TObjectPtr<UScriptableTask>> Tasks;
 
+	FScriptableActionNativeDelegate OnActionBegin;
+	FScriptableActionNativeDelegate OnActionFinish;
+
 	// -------------------------------------------------------------------
 	// Runtime State (Transient)
 	// -------------------------------------------------------------------
@@ -83,6 +88,8 @@ public:
 
 	/** Cleans up tasks, unregisters them, and clears the Binding Map. */
 	void Unregister();
+
+	void Reset();
 
 	/** Starts the execution of the action. */
 	void Begin();

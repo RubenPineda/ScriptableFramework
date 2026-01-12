@@ -11,8 +11,8 @@ SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableTask, Log, All)
 class UScriptableTask;
 class UScriptableCondition;
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnScriptableTaskFinishedNative, UScriptableTask* /*Task*/);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScriptableTaskEventSignature, UScriptableTask*, Task);
+DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableTaskNativeDelegate, UScriptableTask* /*Task*/);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScriptableTaskDelegate, UScriptableTask*, Task);
 
 UENUM()
 enum class EScriptableTaskStatus : uint8
@@ -22,8 +22,8 @@ enum class EScriptableTaskStatus : uint8
 
 struct SCRIPTABLEFRAMEWORK_API FScriptableTaskEvents
 {
-	FScriptableTaskEventSignature OnTaskBegin;
-	FScriptableTaskEventSignature OnTaskFinish;
+	FScriptableTaskDelegate OnTaskBegin;
+	FScriptableTaskDelegate OnTaskFinish;
 };
 
 /** Flow control settings for the task. */
@@ -94,14 +94,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
 	void Finish();
 
-	FOnScriptableTaskFinishedNative OnTaskBeginNative;
-	FOnScriptableTaskFinishedNative OnTaskFinishNative;
+	FScriptableTaskNativeDelegate OnTaskBeginNative;
+	FScriptableTaskNativeDelegate OnTaskFinishNative;
 
 	UPROPERTY(BlueprintAssignable)
-	FScriptableTaskEventSignature OnTaskBegin;
+	FScriptableTaskDelegate OnTaskBegin;
 
 	UPROPERTY(BlueprintAssignable)
-	FScriptableTaskEventSignature OnTaskFinish;
+	FScriptableTaskDelegate OnTaskFinish;
 
 private:
 	virtual void ResetTask();

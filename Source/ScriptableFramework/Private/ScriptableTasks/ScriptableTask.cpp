@@ -26,6 +26,7 @@ void UScriptableTask::Reset()
 	{
 		Status = EScriptableTaskStatus::None;
 		CurrentLoopIndex = 0;
+		bDoOnceFinished = false;
 		ResetTask();
 	}
 }
