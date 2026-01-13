@@ -8,12 +8,24 @@
 #include "AssetTools/AssetTypeActions_ScriptableObjectBase.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableTaskAsset.h"
-#include "ScriptableConditions/ScriptableCondition.h"
-#include "ScriptableConditions/ScriptableConditionAsset.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableTasks/ScriptableAction.h"
 
-#include "ScriptableFrameworkEd/Customization/ScriptableObjectCustomization.h"
+#include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
+#include "ScriptableConditions/ScriptableRequirement.h"
+
+#include "ScriptableFrameworkEd/Customization/ScriptableTaskCustomization.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableActionCustomization.h"
+
+#include "ScriptableFrameworkEd/Customization/ScriptableRequirementCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
+
+#include "ScriptableConditions/ScriptableCondition_Group.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
+
+#include "Bindings/ScriptableParameterDef.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableParameterDefCustomization.h"
 
 #include "AssetToolsModule.h"
 
@@ -86,8 +98,8 @@ void FScriptableFrameworkEditorModule::RegisterPropertyLayout(FPropertyEditorMod
 
 void FScriptableFrameworkEditorModule::RegisterAssetTools()
 {
-	RegisterAssetTypeAction<UScriptableTaskAsset>(INVTEXT("Scriptable Task"), FColor(0, 169, 255));
-	RegisterAssetTypeAction<UScriptableConditionAsset>(INVTEXT("Scriptable Condition"), FColor(145, 2, 23));
+	RegisterAssetTypeAction<UScriptableActionAsset>(INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor.ToFColor(true));
+	RegisterAssetTypeAction<UScriptableRequirementAsset>(INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::ScriptableConditionColor.ToFColor(true));
 }
 
 void FScriptableFrameworkEditorModule::UnregisterAssetTools()
@@ -105,8 +117,12 @@ void FScriptableFrameworkEditorModule::UnregisterAssetTools()
 void FScriptableFrameworkEditorModule::RegisterLayouts()
 {
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	RegisterPropertyLayout<FScriptableObjectCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
+	RegisterPropertyLayout<FScriptableTaskCustomization>(PropertyEditorModule, UScriptableTask::StaticClass()->GetFName());
 	RegisterPropertyLayout<FScriptableConditionCustomization>(PropertyEditorModule, UScriptableCondition::StaticClass()->GetFName());
+	RegisterPropertyLayout<FScriptableActionCustomization>(PropertyEditorModule, FScriptableAction::StaticStruct()->GetFName());
+	RegisterPropertyLayout<FScriptableRequirementCustomization>(PropertyEditorModule, FScriptableRequirement::StaticStruct()->GetFName());
+	RegisterPropertyLayout<FScriptableConditionGroupCustomization>(PropertyEditorModule, UScriptableCondition_Group::StaticClass()->GetFName());
+	RegisterPropertyLayout<FScriptableParameterDefCustomization>(PropertyEditorModule, FScriptableParameterDef::StaticStruct()->GetFName());
 }
 
 void FScriptableFrameworkEditorModule::UnregisterLayouts()

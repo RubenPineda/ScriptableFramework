@@ -12,9 +12,9 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 
 #include "ScriptableTasks/ScriptableTask.h"
-#include "ScriptableTasks/ScriptableTaskAsset.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
-#include "ScriptableConditions/ScriptableConditionAsset.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
@@ -98,6 +98,7 @@ void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& I
 
 	TSharedRef<SWidget> ComboBoxMenuContent =
 		SNew(SBox)
+		.MinDesiredWidth(InArgs._MinListWidth)
 		.MaxDesiredHeight(InArgs._MaxListHeight)
 		[
 			SNew(SVerticalBox)
@@ -252,6 +253,18 @@ TSharedPtr<SScriptableTypePicker::FScriptableTypeItem> SScriptableTypePicker::Fi
 	return NewItem;
 }
 
+FText SScriptableTypePicker::GetNodeCategory(const UStruct* Struct)
+{
+	if (const UClass* Class = Cast<const UClass>(Struct))
+	{
+		if (Class->HasAnyClassFlags(CLASS_CompiledFromBlueprint))
+		{
+			return Class->GetMetaDataText(TEXT("Category"));
+		}
+	}
+	return Struct->GetMetaDataText(ClassCategoryMeta);
+}
+
 void SScriptableTypePicker::AddNode(const UStruct* Struct)
 {
 	if (!Struct || !RootNode.IsValid())
@@ -259,13 +272,13 @@ void SScriptableTypePicker::AddNode(const UStruct* Struct)
 		return;
 	}
 
-	const FText CategoryName = Struct->GetMetaDataText(ClassCategoryMeta);
+	const FText CategoryName = GetNodeCategory(Struct);
 
 	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
 
 	if (!CategoryName.IsEmpty())
 	{
-		// Split into subcategories and trim
+		// Parse "Combat|Melee" -> ["Combat", "Melee"]
 		TArray<FString> CategoryPath;
 		CategoryName.ToString().ParseIntoArray(CategoryPath, TEXT("|"));
 		for (FString& SubCategory : CategoryPath)
@@ -274,10 +287,6 @@ void SScriptableTypePicker::AddNode(const UStruct* Struct)
 		}
 
 		// Create items for the entire category path
-		// eg. "Math|Boolean|AND" 
-		// Math 
-		//   > Boolean
-		//     > AND
 		for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
 		{
 			ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
@@ -294,6 +303,66 @@ void SScriptableTypePicker::AddNode(const UStruct* Struct)
 	Item->IconColor = FLinearColor::Gray;
 }
 
+void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
+{
+	if (!RootNode.IsValid())
+	{
+		return;
+	}
+
+	// Get Category from Asset Registry Tag
+	static const FName CategoryTagName(TEXT("MenuCategory"));
+	FString CategoryStr;
+	AssetData.GetTagValue<FString>(CategoryTagName, CategoryStr);
+
+	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
+
+	if (!CategoryStr.IsEmpty())
+	{
+		// Parse "Combat|Melee" -> ["Combat", "Melee"]
+		TArray<FString> CategoryPath;
+		CategoryStr.ParseIntoArray(CategoryPath, TEXT("|"), true);
+		for (FString& SubCategory : CategoryPath)
+		{
+			SubCategory.TrimStartAndEndInline();
+		}
+
+		// Create items for the entire category path
+		for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
+		{
+			ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
+		}
+	}
+	check(ParentItem);
+
+	TSharedPtr<FScriptableTypeItem> Item = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
+	Item->AssetData = AssetData;
+
+	// Resolve Icon
+	FName IconName = NAME_None;
+
+	if (AssetData.IsInstanceOf<UScriptableActionAsset>())
+	{
+		IconName = "ClassIcon.ScriptableActionAsset";
+	}
+	else if (AssetData.IsInstanceOf<UScriptableRequirementAsset>())
+	{
+		IconName = "ClassIcon.ScriptableRequirementAsset";
+	}
+
+	if (!IconName.IsNone())
+	{
+		Item->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::Get().GetStyleSetName(), IconName);
+		Item->IconColor = FLinearColor::White;
+	}
+	else
+	{
+		// Fallback generic icon
+		Item->Icon = FSlateIconFinder::FindIconForClass(UObject::StaticClass());
+		Item->IconColor = FLinearColor::White;
+	}
+}
+
 bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
 {
 	if (!Struct || !RootNode.IsValid())
@@ -306,7 +375,7 @@ bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
 		return true;
 	}
 
-	const FText CategoryName = Struct->GetMetaDataText(ClassCategoryMeta);
+	const FText CategoryName = GetNodeCategory(Struct);
 
 	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
 
@@ -416,11 +485,11 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 
 	if (BaseClass && BaseClass->IsChildOf(UScriptableTask::StaticClass()))
 	{
-		AssetClassToSearch = UScriptableTaskAsset::StaticClass();
+		AssetClassToSearch = UScriptableActionAsset::StaticClass();
 	}
 	else if (BaseClass && BaseClass->IsChildOf(UScriptableCondition::StaticClass()))
 	{
-		AssetClassToSearch = UScriptableConditionAsset::StaticClass();
+		AssetClassToSearch = UScriptableRequirementAsset::StaticClass();
 	}
 
 	if (AssetClassToSearch)
@@ -440,58 +509,7 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 		// Add found assets to the tree.
 		for (const FAssetData& Asset : AssetDataList)
 		{
-			// Create a virtual root category "Project Assets" to group them.
-			TArray<FString> CategoryPath;
-			CategoryPath.Add(TEXT("Project Assets"));
-
-			// Use the asset's folder path as subcategories
-			FString PathStr = Asset.PackagePath.ToString();
-
-			// Remove the "/Game/" prefix to avoid redundant top-level categories.
-			if (PathStr.StartsWith(TEXT("/Game/")))
-			{
-				PathStr.RemoveFromStart(TEXT("/Game/"));
-			}
-
-			// Split the path into the category array (e.g., "Folder/SubFolder" -> ["Folder", "SubFolder"]).
-			if (!PathStr.IsEmpty())
-			{
-				PathStr.ParseIntoArray(CategoryPath, TEXT("/"), true);
-			}
-
-			// Find or create the category structure in the tree.
-			TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
-			for (int32 i = 0; i < CategoryPath.Num(); ++i)
-			{
-				// Note: using MakeArrayView with index to pass a valid mutable view to the helper function.
-				ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), i + 1));
-			}
-
-			// Add the leaf node (the actual Asset).
-			TSharedPtr<FScriptableTypeItem> NewItem = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
-			NewItem->AssetData = Asset;
-
-			FName IconName = NAME_None;
-
-			if (AssetClassToSearch->IsChildOf(UScriptableTaskAsset::StaticClass()))
-			{
-				IconName = "ClassIcon.ScriptableTaskAsset";
-			}
-			else if (AssetClassToSearch->IsChildOf(UScriptableConditionAsset::StaticClass()))
-			{
-				IconName = "ClassIcon.ScriptableConditionAsset";
-			}
-
-			if (!IconName.IsNone())
-			{
-				NewItem->Icon = FSlateIcon(FScriptableFrameworkEditorStyle::Get().GetStyleSetName(), IconName);
-				NewItem->IconColor = FLinearColor::White;
-			}
-			else
-			{
-				NewItem->Icon = FSlateIconFinder::FindIconForClass(AssetClassToSearch);
-				NewItem->IconColor = FLinearColor::White;
-			}
+			AddNode(Asset);
 		}
 	}
 

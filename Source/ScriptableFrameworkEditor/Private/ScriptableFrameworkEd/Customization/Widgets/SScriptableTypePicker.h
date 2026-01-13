@@ -30,6 +30,7 @@ public:
 		, _ContentPadding(_ComboBoxStyle->ContentPadding)
 		, _ForegroundColor(FSlateColor::UseStyle())
 		, _Method()
+		, _MinListWidth(200.0f)
 		, _MaxListHeight(450.0f)
 		, _HasDownArrow(true)
 		, _SearchVisibility()
@@ -55,6 +56,9 @@ public:
 		SLATE_ATTRIBUTE(FSlateColor, ForegroundColor)
 
 		SLATE_ARGUMENT(TOptional<EPopupMethod>, Method)
+
+		/** The min widht of the combo box menu */
+		SLATE_ARGUMENT(float, MinListWidth)
 
 		/** The max height of the combo box menu */
 		SLATE_ARGUMENT(float, MaxListHeight)
@@ -115,7 +119,9 @@ private:
 
 	static void SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items);
 	static TSharedPtr<FScriptableTypeItem> FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath);
+	FText GetNodeCategory(const UStruct* Struct);
 	void AddNode(const UStruct* Struct);
+	void AddNode(const FAssetData& AssetData);
 	bool MatchesFilter(const UStruct* Struct);
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
 

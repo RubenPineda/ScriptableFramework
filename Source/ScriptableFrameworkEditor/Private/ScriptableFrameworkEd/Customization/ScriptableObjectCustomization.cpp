@@ -4,6 +4,10 @@
 #include "ScriptableObject.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingPath.h"
+
+#include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableConditions/ScriptableRequirementAsset.h"
+
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditorStyle.h"
 
@@ -101,9 +105,9 @@ namespace ScriptableBindingUI
 				{
 					const FBindableStructDesc* SourceDesc = AccessibleStructs.FindByPredicate([&](const FBindableStructDesc& Desc) { return Desc.ID == SourcePath->GetStructID(); });
 
-					bool bIsBindingValid = false;
+					bool bIsPathValid = false;
+					bool bIsTypeCompatible = false;
 
-					// Default name if no valid source is found
 					FString DisplayString = TEXT("Unknown");
 
 					if (SourceDesc)
@@ -113,32 +117,53 @@ namespace ScriptableBindingUI
 						// Create a dummy view (only types) to validate the path
 						FPropertyBindingDataView DummyView(SourceDesc->Struct, nullptr);
 
-						// ResolveIndirections returns false if any path segment does not exist
 						TArray<FPropertyBindingPathIndirection> Indirections;
 						if (SourcePath->ResolveIndirectionsWithValue(DummyView, Indirections))
 						{
-							bIsBindingValid = true;
+							bIsPathValid = true;
+
+							if (Indirections.Num() > 0)
+							{
+								const FProperty* SourceProp = Indirections.Last().GetProperty();
+								const FProperty* TargetProp = PropertyHandle->GetProperty();
+
+								if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, TargetProp))
+								{
+									bIsTypeCompatible = true;
+								}
+							}
 						}
 					}
 
-					if (!SourcePath->IsPathEmpty())
-					{
-						DisplayString += TEXT(".") + SourcePath->ToString();
-					}
-
-					Text = FText::FromString(DisplayString);
-
-					if (bIsBindingValid)
-					{
-						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
-						Image = FAppStyle::GetBrush(PropertyIcon);
-						Color = Schema->GetPinTypeColor(PinType);
-					}
-					else
+					if (!SourceDesc || !bIsPathValid)
 					{
 						TooltipText = LOCTEXT("BindingErrorTooltip", "ERROR: The source property is missing.");
 						Image = FAppStyle::GetBrush("Icons.Error");
 						Color = FLinearColor::Red;
+					}
+					else if (!bIsTypeCompatible)
+					{
+						TooltipText = LOCTEXT("BindingTypeMismatch", "ERROR: Type Mismatch (Source type changed).");
+						Image = FAppStyle::GetBrush("Icons.Error");
+						Color = FLinearColor::Red;
+					}
+					else
+					{
+						if (!SourcePath->IsPathEmpty())
+						{
+							DisplayString += TEXT(".") + SourcePath->ToString();
+						}
+
+						Text = FText::FromString(DisplayString);
+						TooltipText = FText::Format(LOCTEXT("BindingTooltip", "Bound to {0}"), Text);
+						Image = FAppStyle::GetBrush(PropertyIcon);
+						Color = Schema->GetPinTypeColor(PinType);
+					}
+
+					if (Text.IsEmpty())
+					{
+						if (!SourcePath->IsPathEmpty()) DisplayString += TEXT(".") + SourcePath->ToString();
+						Text = FText::FromString(DisplayString);
 					}
 				}
 			}
@@ -507,122 +532,200 @@ private:
 // FScriptableObjectCustomization Implementation
 // ------------------------------------------------------------------------------------------------
 
+FScriptableObjectCustomization::~FScriptableObjectCustomization()
+{
+	// Clean up the global delegate
+	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
+}
+
 void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
 {
-	TArray<UObject*> OuterObjects;
-	InPropertyHandle->GetOuterObjects(OuterObjects);
+	InitCustomization(InPropertyHandle, CustomizationUtils);
 
-	if (OuterObjects.Num() > 1)
+	if (ScriptableObject.IsValid())
 	{
-		return;
-	}
-
-	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
-	PropertyHandle = InPropertyHandle;
-
-	TSharedPtr<IPropertyHandle> ChildPropertyHandle = PropertyHandle->GetChildHandle(0);
-	if (ChildPropertyHandle)
-	{
-		ScriptableObject = ScriptableFrameworkEditor::GetOuterScriptableObject(ChildPropertyHandle);
-
-		bIsBlueprintClass = ScriptableObject.IsValid() && ScriptableObject->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
-
-		EnabledPropertyHandle = ChildPropertyHandle->GetChildHandle("bEnabled");
-		GatherChildProperties(ChildPropertyHandle);
-	}
-
-	FName ClassCategory; FName PropCategory;
-	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
-
-	HorizontalBox = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		[
-			SNew(SCheckBox)
-				.ToolTipText(LOCTEXT("ScriptableObjectEnabledTooltip", "Enable or disable the object."))
-				.ForegroundColor(FColor::Green)
-				.IsChecked(this, &FScriptableObjectCustomization::GetEnabledCheckBoxState)
-				.OnCheckStateChanged(this, &FScriptableObjectCustomization::OnEnabledCheckBoxChanged)
-		]
-	+ SHorizontalBox::Slot()
-		.FillWidth(0.5f)
-		[
-			SNew(SScriptableTypePicker)
-				.ClassCategoryMeta(ClassCategory)
-				.FilterCategoryMeta(PropCategory)
-				.Filter(PropertyHandle->GetMetaData(PropCategory))
-				.BaseClass(GetBaseClass())
-				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnNodePicked))
-				[
-					SNew(STextBlock)
-						.Font(IPropertyTypeCustomizationUtils::GetRegularFont())
-						.Text_Lambda([this]()
-					{
-						if (UScriptableObject* Obj = ScriptableObject.Get())
-						{
-							static const FName CandidateProperties[] = { FName("AssetToRun"), FName("AssetToEvaluate") };
-
-							for (const FName& PropName : CandidateProperties)
-							{
-								if (FObjectProperty* AssetProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(PropName)))
-								{
-									if (UObject* AssignedAsset = AssetProp->GetObjectPropertyValue_InContainer(Obj))
-									{
-										return FText::FromString(AssignedAsset->GetName());
-									}
-
-									return ScriptableObject->GetClass()->GetDisplayNameText();
-								}
-							}
-
-							return ScriptableObject->GetClass()->GetDisplayNameText();
-						}
-
-						return FText::FromName(NAME_None);
-					})
-				]
-		]
-	+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.VAlign(VAlign_Center)
-		[
-			PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
-		]
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.VAlign(VAlign_Center)
-		[
-			PropertyCustomizationHelpers::MakeClearButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnClear))
-		];
-
-	if (bIsBlueprintClass)
-	{
-		const FText BrowseText = FText::Format(FText::FromString("Browse to '{0}' in Content Browser"), ScriptableObject->GetClass()->GetDisplayNameText());
-		HorizontalBox->InsertSlot(3)
-			.AutoWidth()
-			.VAlign(VAlign_Center)
-			[
-				PropertyCustomizationHelpers::MakeBrowseButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnBrowseTo), BrowseText)
-			];
-
-		const FText EditText = FText::Format(FText::FromString("Edit '{0}'"), ScriptableObject->GetClass()->GetDisplayNameText());
-		HorizontalBox->InsertSlot(4)
-			.AutoWidth()
-			.VAlign(VAlign_Center)
-			[
-				PropertyCustomizationHelpers::MakeEditButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnEdit), EditText)
-			];
+		HeaderRow.OverrideResetToDefault(FResetToDefaultOverride::Create(
+			FIsResetToDefaultVisible::CreateSP(this, &FScriptableObjectCustomization::IsResetToDefaultVisible),
+			FResetToDefaultHandler::CreateSP(this, &FScriptableObjectCustomization::OnResetToDefault)
+		));
 	}
 
 	HeaderRow
 		.NameContent()
 		[
-			PropertyHandle->CreatePropertyNameWidget()
+			GetHeaderNameContent().ToSharedRef()
 		]
 		.ValueContent()
 		[
-			HorizontalBox.ToSharedRef()
+			GetHeaderValueContent().ToSharedRef()
+		]
+		.ExtensionContent()
+		[
+			GetHeaderExtensionContent().ToSharedRef()
 		];
+}
+
+void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils)
+{
+	PropertyHandle = InPropertyHandle;
+	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
+
+	UObject* Object = nullptr;
+	PropertyHandle->GetValue(Object);
+	UScriptableObject* ScriptableObj = Cast<UScriptableObject>(Object);
+	ScriptableObject = ScriptableObj; // Cache weak pointer
+
+	if (ScriptableObj)
+	{
+		NodeDescription = ScriptableObj->GetClass()->GetToolTipText();
+		NodeTitle = GetDisplayTitle(ScriptableObj);
+	}
+	else
+	{
+		NodeTitle = FText::FromString(TEXT("None"));
+	}
+
+	// Subscribe to global editor event
+	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableObjectCustomization::OnObjectPropertyChanged);
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent()
+{
+	TSharedPtr<SHorizontalBox> NameBox = SNew(SHorizontalBox);
+
+	// Checkbox
+	NameBox->AddSlot()
+		.AutoWidth().Padding(0, 0, 4, 0).VAlign(VAlign_Center)
+		[
+			SNew(SCheckBox)
+				.Visibility(ScriptableObject.IsValid() ? EVisibility::Visible : EVisibility::Collapsed)
+				.IsChecked(this, &FScriptableObjectCustomization::OnGetEnabled)
+				.OnCheckStateChanged(this, &FScriptableObjectCustomization::OnSetEnabled)
+				.ToolTipText(LOCTEXT("Toggle", "Enable/Disable"))
+		];
+
+	// Title
+	NameBox->AddSlot()
+		.FillWidth(1.0f).VAlign(VAlign_Center)
+		[
+			SNew(STextBlock)
+				.Text(NodeTitle)
+				.Font(IDetailLayoutBuilder::GetDetailFontBold())
+				.ToolTipText(NodeDescription)
+				.ColorAndOpacity(ScriptableObject.IsValid() ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground())
+		];
+
+	return NameBox;
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderValueContent()
+{
+	return SNew(SHorizontalBox);
+}
+
+TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionContent()
+{
+	TSharedPtr<SHorizontalBox> ExtensionBox = SNew(SHorizontalBox);
+	UScriptableObject* ScriptableObj = ScriptableObject.Get();
+
+	FName ClassCategory; FName PropCategory;
+	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
+
+	// Missmatch warning
+	if (ScriptableObj && IsWrapperClass(ScriptableObj->GetClass()))
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(0, 0, 4, 0)
+			[
+				SNew(SImage)
+					.Image(FAppStyle::Get().GetBrush("Icons.Warning"))
+					.ColorAndOpacity(FLinearColor::Yellow)
+					.Visibility_Lambda([this]()
+				{
+					FText Dummy;
+					return GetContextWarning(Dummy) ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+					.ToolTipText_Lambda([this]()
+				{
+					FText Tooltip;
+					GetContextWarning(Tooltip);
+					return Tooltip;
+				})
+			];
+	}
+
+	// Picker
+	ExtensionBox->AddSlot()
+		.AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SScriptableTypePicker)
+				.HasDownArrow(false)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.ToolTipText(LOCTEXT("ChangeType", "Change Object Type"))
+				.BaseClass(GetBaseClass())
+				.ClassCategoryMeta(ClassCategory)
+				.FilterCategoryMeta(PropCategory)
+				.Filter(PropertyHandle->GetMetaData(PropCategory))
+				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
+				.Content()
+				[
+					SNew(SImage)
+						.ColorAndOpacity(FSlateColor::UseForeground())
+						.Image(FAppStyle::Get().GetBrush(ScriptableObj ? "Icons.Refresh" : "Icons.PlusCircle"))
+				]
+		];
+
+	// Use Selected
+	ExtensionBox->AddSlot()
+		.AutoWidth().VAlign(VAlign_Center)
+		[
+			PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
+		];
+
+	if (ScriptableObj)
+	{
+		// Clear
+		ExtensionBox->AddSlot()
+			.AutoWidth().VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeClearButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnClear))
+			];
+
+		// Browse / Edit
+		const bool bIsBlueprint = ScriptableObj->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
+		const bool bIsWrapper = IsWrapperClass(ScriptableObj->GetClass());
+
+		if (bIsBlueprint || bIsWrapper)
+		{
+			FText BrowseTxt = FText::Format(LOCTEXT("Browse", "Browse to '{0}'"), NodeTitle);
+			ExtensionBox->AddSlot()
+				.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
+				[
+					PropertyCustomizationHelpers::MakeBrowseButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnBrowse), BrowseTxt)
+				];
+
+			FText EditTxt = FText::Format(LOCTEXT("Edit", "Edit '{0}'"), NodeTitle);
+			ExtensionBox->AddSlot()
+				.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
+				[
+					PropertyCustomizationHelpers::MakeEditButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnEdit), EditTxt)
+				];
+		}
+	}
+
+	// Delete (if in Array)
+	if (PropertyHandle->GetIndexInArray() != INDEX_NONE)
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeDeleteButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnDelete), LOCTEXT("Delete", "Remove from list"))
+			];
+	}
+
+	return ExtensionBox;
 }
 
 void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> InPropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -634,7 +737,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	UScriptableObject* Obj = ScriptableObject.Get();
 	if (Obj)
 	{
-		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
+		ScriptableFrameworkEditor::GetAccessibleStructs(Obj, InPropertyHandle, AccessibleStructs);
 	}
 
 	uint32 NumberOfChild;
@@ -682,7 +785,331 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 }
 
 // ------------------------------------------------------------------------------------------------
-// General Customization Logic
+// Helpers
+// ------------------------------------------------------------------------------------------------
+
+UClass* FScriptableObjectCustomization::GetBaseClass() const
+{
+	UClass* MyClass = nullptr;
+	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
+	{
+		MyClass = ObjectProperty->PropertyClass;
+	}
+	return MyClass;
+}
+
+bool FScriptableObjectCustomization::IsWrapperClass(const UClass* Class) const
+{
+	return Class ? Class->IsChildOf(GetWrapperClass()) : false;
+}
+
+UObject* FScriptableObjectCustomization::GetInnerAsset(UScriptableObject* Obj) const
+{
+	if (!Obj) return nullptr;
+
+	static const FName NAME_Asset = TEXT("Asset");
+	if (FObjectProperty* AssetProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(NAME_Asset)))
+	{
+		if (UObject* Asset = AssetProp->GetObjectPropertyValue_InContainer(Obj))
+		{
+			return Asset;
+		}
+	}
+	return nullptr;
+}
+
+FText FScriptableObjectCustomization::GetDisplayTitle(UScriptableObject* Obj) const
+{
+	if (!Obj) return FText::GetEmpty();
+
+	if (IsWrapperClass(Obj->GetClass()))
+	{
+		if (UObject* Inner = GetInnerAsset(Obj))
+		{
+			return FText::FromString(Inner->GetName());
+		}
+	}
+	return Obj->GetClass()->GetDisplayNameText();
+}
+
+// ------------------------------------------------------------------------------------------------
+// Logic Implementations (Member Functions)
+// ------------------------------------------------------------------------------------------------
+
+ECheckBoxState FScriptableObjectCustomization::OnGetEnabled() const
+{
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		return Obj->IsEnabled() ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+	}
+	return ECheckBoxState::Unchecked;
+}
+
+void FScriptableObjectCustomization::OnSetEnabled(ECheckBoxState NewState)
+{
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		// We manipulate the child property handle for Undo/Redo support
+		if (TSharedPtr<IPropertyHandle> EnabledHandle = PropertyHandle->GetChildHandle("bEnabled"))
+		{
+			EnabledHandle->SetValue(NewState == ECheckBoxState::Checked);
+		}
+	}
+}
+
+bool FScriptableObjectCustomization::IsResetToDefaultVisible(TSharedPtr<IPropertyHandle> Handle) const
+{
+	UObject* Obj = nullptr;
+	return Handle.IsValid() && Handle->GetValue(Obj) == FPropertyAccess::Success && Obj != nullptr;
+}
+
+void FScriptableObjectCustomization::OnResetToDefault(TSharedPtr<IPropertyHandle> Handle)
+{
+	UObject* Obj = nullptr;
+	if (Handle->GetValue(Obj) == FPropertyAccess::Success && Obj)
+	{
+		// Re-instantiate the same class (reset to defaults)
+		InstantiateClass(Obj->GetClass());
+	}
+}
+
+void FScriptableObjectCustomization::OnDelete()
+{
+	if (PropertyHandle.IsValid())
+	{
+		TSharedPtr<IPropertyHandle> ParentHandle = PropertyHandle->GetParentHandle();
+		if (ParentHandle.IsValid() && ParentHandle->AsArray().IsValid())
+		{
+			ParentHandle->AsArray()->DeleteItem(PropertyHandle->GetIndexInArray());
+		}
+	}
+}
+
+void FScriptableObjectCustomization::OnClear()
+{
+	static const FString None("None");
+	PropertyHandle->SetValueFromFormattedString(None);
+}
+
+void FScriptableObjectCustomization::OnBrowse()
+{
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		UObject* Target = Obj->GetClass()->ClassGeneratedBy; // Default: Blueprint
+
+		if (IsWrapperClass(Obj->GetClass()))
+		{
+			if (UObject* Inner = GetInnerAsset(Obj))
+			{
+				Target = Inner;
+			}
+		}
+
+		if (Target)
+		{
+			TArray<FAssetData> SyncAssets = { FAssetData(Target) };
+			GEditor->SyncBrowserToObjects(SyncAssets);
+		}
+	}
+}
+
+void FScriptableObjectCustomization::OnEdit()
+{
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		UObject* Target = Obj->GetClass()->ClassGeneratedBy; // Default: Blueprint
+
+		if (IsWrapperClass(Obj->GetClass()))
+		{
+			if (UObject* Inner = GetInnerAsset(Obj))
+			{
+				Target = Inner;
+			}
+		}
+
+		if (Target)
+		{
+			GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Target);
+		}
+	}
+}
+
+void FScriptableObjectCustomization::OnUseSelected()
+{
+	TArray<FAssetData> SelectedAssets;
+	GEditor->GetContentBrowserSelections(SelectedAssets);
+
+	for (const FAssetData& AssetData : SelectedAssets)
+	{
+		// 1. Check for Blueprint Class
+		if (UBlueprint* SelectedBlueprint = Cast<UBlueprint>(AssetData.GetAsset()))
+		{
+			if (SelectedBlueprint->GeneratedClass && SelectedBlueprint->GeneratedClass->IsChildOf(GetBaseClass()))
+			{
+				InstantiateClass(SelectedBlueprint->GeneratedClass);
+				return;
+			}
+		}
+		// 2. Check for Task/Condition Asset (Wrappers)
+		if (AssetData.IsInstanceOf<UScriptableObjectAsset>())
+		{
+			OnAssetPicked(AssetData);
+			return;
+		}
+	}
+}
+
+bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
+{
+	UScriptableObject* Wrapper = ScriptableObject.Get();
+	if (!Wrapper) return false;
+
+	// Get the Inner Asset
+	UScriptableObjectAsset* InnerAsset = Cast<UScriptableObjectAsset>(GetInnerAsset(Wrapper));
+	if (!InnerAsset) return false;
+
+	// If the asset doesn't require anything, everything is OK.
+	const FInstancedPropertyBag* RequiredContext = InnerAsset->GetContext();
+	if (!RequiredContext || RequiredContext->GetNumPropertiesInBag() == 0) return false;
+
+	// Get Available Contexts (Outer Scope)
+	TArray<FBindableStructDesc> AvailableContexts;
+	ScriptableFrameworkEditor::GetAccessibleStructs(Wrapper, PropertyHandle, AvailableContexts);
+
+	TArray<FString> MissingParams;
+
+	// Iterate Requirements
+	const UPropertyBag* BagStruct = RequiredContext->GetPropertyBagStruct();
+	for (TFieldIterator<FProperty> It(BagStruct); It; ++It)
+	{
+		const FProperty* ReqProp = *It;
+		const FName ReqName = ReqProp->GetFName();
+		bool bFound = false;
+
+		// Search in all available bags (Global Context, Local Variables, etc.)
+		for (const FBindableStructDesc& ContextDesc : AvailableContexts)
+		{
+			if (const UStruct* Struct = ContextDesc.Struct.Get())
+			{
+				if (const FProperty* SourceProp = Struct->FindPropertyByName(ReqName))
+				{
+					// Found a variable with the same name.
+					// Now check for type compatibility.
+					if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, ReqProp))
+					{
+						bFound = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!bFound)
+		{
+			MissingParams.Add(ReqName.ToString());
+		}
+	}
+
+	if (MissingParams.Num() > 0)
+	{
+		FString MissingStr = FString::Join(MissingParams, TEXT(", "));
+		OutTooltip = FText::Format(LOCTEXT("ContextWarning", "Missing Context Parameters.\nThe asset expects these variables, but they are not found in the current context:\n- {0}"), FText::FromString(MissingStr));
+		return true;
+	}
+
+	return false;
+}
+
+void FScriptableObjectCustomization::OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData)
+{
+	if (AssetData.IsValid())
+	{
+		OnAssetPicked(AssetData);
+	}
+	else if (const UClass* PickedClass = Cast<UClass>(InStruct))
+	{
+		InstantiateClass(PickedClass);
+	}
+}
+
+void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
+{
+	if (AssetData.IsInstanceOf(UScriptableObjectAsset::StaticClass()))
+	{
+		UClass* WrapperClass = GetWrapperClass();
+		if (WrapperClass)
+		{
+			InstantiateClass(WrapperClass, [&]()
+			{
+				ScriptableFrameworkEditor::SetWrapperAssetProperty(PropertyHandle, AssetData.GetAsset());
+			});
+		}
+	}
+}
+
+void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass, TFunction<void()> OnInstanceCreated)
+{
+	if (NewClass->IsChildOf(GetBaseClass()))
+	{
+		FScopedTransaction Transaction(LOCTEXT("InstantiateClass", "Instantiate Class"));
+		PropertyHandle->NotifyPreChange();
+
+		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(
+			PropertyHandle.ToSharedRef(),
+			const_cast<UClass*>(NewClass),
+			EPropertyValueSetFlags::InteractiveChange
+		);
+
+		if (OnInstanceCreated)
+		{
+			OnInstanceCreated();
+		}
+
+		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+
+		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
+	}
+}
+
+void FScriptableObjectCustomization::OnObjectPropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
+{
+	// Safety Checks
+	if (!ScriptableObject.IsValid() || !PropertyUtilities.IsValid())
+	{
+		return;
+	}
+
+	// Filter: Only care if the Object that changed is the Asset owning this Action
+	// (ScriptableObject->GetOuter() is the Asset)
+	if (InObject == ScriptableObject->GetOuter())
+	{
+		const FName PropertyName = (InEvent.Property) ? InEvent.Property->GetFName() : NAME_None;
+		const FName MemberName = (InEvent.MemberProperty) ? InEvent.MemberProperty->GetFName() : NAME_None;
+
+		// Filter
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
+		{
+			// This allows PostEditChangeProperty to fully complete (migrating the PropertyBag)
+			// before we try to read it again in the UI.
+			if (GEditor)
+			{
+				GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FScriptableObjectCustomization::HandleForceRefresh));
+			}
+		}
+	}
+}
+
+void FScriptableObjectCustomization::HandleForceRefresh()
+{
+	// Check validity again as customization might have been destroyed in the meantime
+	if (PropertyUtilities.IsValid())
+	{
+		PropertyUtilities->ForceRefresh();
+	}
+}
+
+// ------------------------------------------------------------------------------------------------
+// General Binding & Children Logic
 // ------------------------------------------------------------------------------------------------
 
 bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const
@@ -708,25 +1135,6 @@ bool FScriptableObjectCustomization::IsPropertyExtendable(TSharedPtr<IPropertyHa
 	return true;
 }
 
-TSharedPtr<SWidget> FScriptableObjectCustomization::GenerateBindingWidget(UScriptableObject* InScriptableObject, TSharedPtr<IPropertyHandle> InPropertyHandle)
-{
-	if (!IModularFeatures::Get().IsModularFeatureAvailable("PropertyAccessEditor"))
-	{
-		return SNullWidget::NullWidget;
-	}
-
-	TArray<FBindableStructDesc> AccessibleStructs;
-	ScriptableFrameworkEditor::GetAccessibleStructs(InScriptableObject, AccessibleStructs);
-
-	FPropertyBindingPath TargetPath;
-	ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(InScriptableObject, InPropertyHandle, TargetPath);
-
-	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
-		MakeShared<ScriptableBindingUI::FCachedBindingData>(InScriptableObject, TargetPath, InPropertyHandle, AccessibleStructs);
-
-	return ScriptableBindingUI::CreateBindingWidget(InPropertyHandle, CachedData);
-}
-
 void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHandle> ChildHandle, int32 ArrayIndex, IDetailChildrenBuilder& ChildrenBuilder)
 {
 	IDetailPropertyRow& Row = ChildrenBuilder.AddProperty(ChildHandle);
@@ -741,208 +1149,48 @@ void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHa
 
 void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj)
 {
-	// Fetch accessible structs
+	// 1. Fetch available variables (Need Action Handle for this to find Context)
 	TArray<FBindableStructDesc> AccessibleStructs;
-	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, AccessibleStructs);
+	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, Handle, AccessibleStructs);
 
-	// Prepare Path and Cache
+	// 2. Paths
 	FPropertyBindingPath TargetPath;
 	ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(Obj, Handle, TargetPath);
 
 	TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
 		MakeShared<ScriptableBindingUI::FCachedBindingData>(Obj, TargetPath, Handle, AccessibleStructs);
 
-	// Reset Handler Logic
-	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, Handle](TSharedPtr<IPropertyHandle> InHandle)
+	// 3. Reset Handler Logic (Local to Object now!)
+	FIsResetToDefaultVisible IsResetVisible = FIsResetToDefaultVisible::CreateLambda([this, TargetPath, Handle](TSharedPtr<IPropertyHandle> InHandle)
 	{
-		if (!ScriptableObject.IsValid()) return false;
-
-		FPropertyBindingPath TP;
-		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
-
-		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP)) return true;
+		if (UScriptableObject* MyObj = ScriptableObject.Get())
+		{
+			// Check local bindings
+			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath)) return true;
+		}
 		return InHandle->DiffersFromDefault();
 	});
 
-	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
+	FResetToDefaultHandler ResetHandler = FResetToDefaultHandler::CreateLambda([this, TargetPath, Handle, CachedData](TSharedPtr<IPropertyHandle> InHandle)
 	{
-		if (!ScriptableObject.IsValid()) return;
-
-		FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
-		ScriptableObject->Modify();
-
-		FPropertyBindingPath TP;
-		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(ScriptableObject.Get(), Handle, TP);
-
-		if (ScriptableObject->GetPropertyBindings().HasPropertyBinding(TP))
+		if (UScriptableObject* MyObj = ScriptableObject.Get())
 		{
-			ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TP);
-			if (CachedData) CachedData->Invalidate();
+			FScopedTransaction Transaction(LOCTEXT("Reset", "Reset Property"));
+			MyObj->Modify();
+
+			// Remove local binding
+			if (MyObj->GetPropertyBindings().HasPropertyBinding(TargetPath))
+			{
+				MyObj->GetPropertyBindings().RemovePropertyBindings(TargetPath);
+				if (CachedData) CachedData->Invalidate();
+			}
 		}
 		InHandle->ResetToDefault();
 	});
 
 	Row.OverrideResetToDefault(FResetToDefaultOverride::Create(IsResetVisible, ResetHandler));
 
-	// Inject UI
 	ScriptableBindingUI::ModifyRow(Obj, Row, CachedData);
-}
-
-UClass* FScriptableObjectCustomization::GetBaseClass() const
-{
-	UClass* MyClass = nullptr;
-	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
-	{
-		MyClass = ObjectProperty->PropertyClass;
-	}
-	return MyClass;
-}
-
-ECheckBoxState FScriptableObjectCustomization::GetEnabledCheckBoxState() const
-{
-	bool bEnabled = false;
-
-	if (EnabledPropertyHandle.IsValid())
-	{
-		EnabledPropertyHandle->GetValue(bEnabled);
-	}
-
-	return bEnabled ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-}
-
-void FScriptableObjectCustomization::OnEnabledCheckBoxChanged(ECheckBoxState NewCheckedState)
-{
-	const bool bEnabled = (NewCheckedState == ECheckBoxState::Checked);
-	if (EnabledPropertyHandle.IsValid())
-	{
-		EnabledPropertyHandle->SetValue(bEnabled);
-		EnabledPropertyHandle->RequestRebuildChildren();
-	}
-}
-
-void FScriptableObjectCustomization::OnNodePicked(const UStruct* InStruct, const FAssetData& InAssetData)
-{
-	if (InAssetData.IsValid())
-	{
-		OnAssetPicked(InAssetData);
-	}
-	else if (InStruct)
-	{
-		SetScriptableObjectType(InStruct);
-	}
-}
-
-void FScriptableObjectCustomization::SetScriptableObjectType(const UStruct* NewType)
-{
-	if (NewType->IsChildOf(GetBaseClass()))
-	{
-		const UClass* ConstClass = Cast<UClass>(NewType);
-		UClass* Class = const_cast<UClass*>(ConstClass);
-
-		GEditor->BeginTransaction(LOCTEXT("SetScriptableObjectType", "Set Scriptable Object Type"));
-
-		PropertyHandle->NotifyPreChange();
-
-		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(PropertyHandle.ToSharedRef(), Class, EPropertyValueSetFlags::InteractiveChange);
-
-		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-		PropertyHandle->NotifyFinishedChangingProperties();
-
-		GEditor->EndTransaction();
-
-		FSlateApplication::Get().DismissAllMenus();
-
-		if (PropertyUtilities)
-		{
-			PropertyUtilities->ForceRefresh();
-		}
-	}
-}
-
-void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
-{
-	UClass* WrapperClass = nullptr;
-	FName PropertyName = NAME_None;
-
-	if (AssetData.AssetClassPath.GetAssetName() == "ScriptableTaskAsset")
-	{
-		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableTask_RunAsset"));
-		PropertyName = FName("AssetToRun");
-	}
-	else if (AssetData.AssetClassPath.GetAssetName() == "ScriptableConditionAsset")
-	{
-		WrapperClass = FindObject<UClass>(nullptr, TEXT("/Script/ScriptableFramework.ScriptableCondition_Asset"));
-		PropertyName = FName("AssetToEvaluate");
-	}
-
-	if (WrapperClass)
-	{
-		GEditor->BeginTransaction(LOCTEXT("SetScriptableAsset", "Set Scriptable Asset"));
-		PropertyHandle->NotifyPreChange();
-
-		PropertyCustomizationHelpers::CreateNewInstanceOfEditInlineObjectClass(PropertyHandle.ToSharedRef(), WrapperClass, EPropertyValueSetFlags::InteractiveChange);
-
-		UObject* NewObj = nullptr;
-		if (PropertyHandle->GetValue(NewObj) == FPropertyAccess::Success && NewObj)
-		{
-			if (FObjectProperty* AssetProp = CastField<FObjectProperty>(WrapperClass->FindPropertyByName(PropertyName)))
-			{
-				void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
-				AssetProp->SetObjectPropertyValue(ValuePtr, AssetData.GetAsset());
-			}
-		}
-
-		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
-		PropertyHandle->NotifyFinishedChangingProperties();
-		GEditor->EndTransaction();
-
-		FSlateApplication::Get().DismissAllMenus();
-		if (PropertyUtilities) PropertyUtilities->ForceRefresh();
-	}
-}
-
-void FScriptableObjectCustomization::OnUseSelected()
-{
-	TArray<FAssetData> SelectedAssets;
-	GEditor->GetContentBrowserSelections(SelectedAssets);
-
-	for (const FAssetData& AssetData : SelectedAssets)
-	{
-		UBlueprint* SelectedBlueprint = Cast<UBlueprint>(AssetData.GetAsset());
-
-		if (SelectedBlueprint)
-		{
-			if (SelectedBlueprint->GeneratedClass && SelectedBlueprint->GeneratedClass->IsChildOf(GetBaseClass()))
-			{
-				SetScriptableObjectType(SelectedBlueprint->GeneratedClass);
-				return;
-			}
-		}
-	}
-}
-
-void FScriptableObjectCustomization::OnBrowseTo()
-{
-	if (ScriptableObject.IsValid())
-	{
-		TArray<FAssetData> SyncAssets;
-		SyncAssets.Add(FAssetData(ScriptableObject->GetClass()));
-		GEditor->SyncBrowserToObjects(SyncAssets);
-	}
-}
-
-void FScriptableObjectCustomization::OnEdit()
-{
-	if (UBlueprint* Blueprint = Cast<UBlueprint>(ScriptableObject->GetClass()->ClassGeneratedBy))
-	{
-		GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Blueprint);
-	}
-}
-
-void FScriptableObjectCustomization::OnClear()
-{
-	static const FString None("None");
-	PropertyHandle->SetValueFromFormattedString(None);
 }
 
 #undef LOCTEXT_NAMESPACE

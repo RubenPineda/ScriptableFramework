@@ -112,15 +112,6 @@ void UScriptableObject::Register(UObject* Owner)
 
 		if (IsRegistered())
 		{
-			// Before calling OnRegister, we ensure this object is discoverable by the Root.
-			if (BindingID.IsValid())
-			{
-				if (UScriptableObject* Root = GetRoot())
-				{
-					Root->RegisterBindingSource(BindingID, this);
-				}
-			}
-
 			OnRegister();
 		}
 	}
@@ -137,14 +128,6 @@ void UScriptableObject::Unregister()
 		return;
 	}
 
-	if (BindingID.IsValid())
-	{
-		if (UScriptableObject* Root = GetRoot())
-		{
-			Root->UnregisterBindingSource(BindingID);
-		}
-	}
-
 	FWorldDelegates::OnWorldBeginTearDown.Remove(OnWorldBeginTearDownHandle);
 	RegisterTickFunctions(false);
 
@@ -153,6 +136,9 @@ void UScriptableObject::Unregister()
 
 	WorldPrivate = nullptr;
 	bRegistered = false;
+
+	ContextRef = nullptr;
+	BindingsMapRef = nullptr;
 
 	OnUnregister();
 }
@@ -305,34 +291,33 @@ FName FScriptableObjectTickFunction::DiagnosticContext(bool bDetailed)
 //  Data Binding & Context
 // -------------------------------------------------------------------
 
+void UScriptableObject::InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap)
+{
+	ContextRef = InContext;
+	BindingsMapRef = InBindingMap;
+}
+
+void UScriptableObject::PropagateRuntimeData(UScriptableObject* Child) const
+{
+	if (Child)
+	{
+		Child->InitRuntimeData(ContextRef, BindingsMapRef);
+	}
+}
+
 void UScriptableObject::ResolveBindings()
 {
 	PropertyBindings.ResolveBindings(this);
 }
 
-void UScriptableObject::RegisterBindingSource(const FGuid& InID, UScriptableObject* InSource)
-{
-	if (InID.IsValid() && InSource)
-	{
-		// If I am the Root, I store it. If I am a child, this function shouldn't be called directly on me
-		// generally, but strictly speaking GetRoot() returns 'this' if I am the root.
-		BindingSourceMap.Add(InID, InSource);
-	}
-}
-
-void UScriptableObject::UnregisterBindingSource(const FGuid& InID)
-{
-	if (InID.IsValid())
-	{
-		BindingSourceMap.Remove(InID);
-	}
-}
-
 UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
 {
-	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
+	if (BindingsMapRef)
 	{
-		return Found->Get();
+		if (const TObjectPtr<UScriptableObject>* Found = BindingsMapRef->Find(InID))
+		{
+			return Found->Get();
+		}
 	}
 	return nullptr;
 }

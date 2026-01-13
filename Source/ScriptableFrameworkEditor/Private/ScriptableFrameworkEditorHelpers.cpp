@@ -3,8 +3,10 @@
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "PropertyHandle.h"
 #include "ScriptableObject.h"
+#include "ScriptableContainer.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableConditions/ScriptableRequirement.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
 
@@ -63,7 +65,7 @@ namespace ScriptableFrameworkEditor
 	{
 		if (FProperty* Property = PropertyHandle->GetProperty())
 		{
-			if (Property->GetMetaData(TEXT("Category")) == TEXT("Hidden")) return false;
+			if (Property->HasMetaData(TEXT("Hidden")) || Property->GetMetaData(TEXT("Category")) == TEXT("Hidden")) return false;
 			if (Property->HasAllPropertyFlags(CPF_Edit | CPF_DisableEditOnInstance))
 			{
 				if (UObject* Object = Property->GetOwnerUObject())
@@ -107,14 +109,11 @@ namespace ScriptableFrameworkEditor
 			return true;
 		}
 
-		// Arrays must be handled strictly because CopyCompleteValue cannot convert element types (e.g. Int to Float).
-		// If SameType (Step 1) failed, it means they are not identical.
+		// Arrays
 		if (const FArrayProperty* SourceArray = CastField<FArrayProperty>(SourceProp))
 		{
 			if (const FArrayProperty* TargetArray = CastField<FArrayProperty>(TargetProp))
 			{
-				// Allow Covariance for Arrays of Objects (e.g. Array<MyActor> -> Array<AActor>)
-				// Since they are pointers, the memory layout is compatible.
 				const FObjectPropertyBase* SourceInner = CastField<FObjectPropertyBase>(SourceArray->Inner);
 				const FObjectPropertyBase* TargetInner = CastField<FObjectPropertyBase>(TargetArray->Inner);
 
@@ -122,24 +121,13 @@ namespace ScriptableFrameworkEditor
 				{
 					return SourceInner->PropertyClass->IsChildOf(TargetInner->PropertyClass);
 				}
-
-				// For any other array type (Int, Float, Struct), we require strict equality (Step 1).
-				// If we are here, they didn't match, so we reject them.
 				return false;
 			}
-
-			// Source is Array, Target is NOT Array -> Incompatible
 			return false;
 		}
+		if (TargetProp->IsA<FArrayProperty>()) return false;
 
-		// Target is Array, Source is NOT Array -> Incompatible
-		if (TargetProp->IsA<FArrayProperty>())
-		{
-			return false;
-		}
-
-		// 2. Objects: Allow if source is child of target (Inheritance)
-		// (Copied from StateTreePropertyBindings.cpp)
+		// 2. Objects: Covariance
 		if (const FObjectPropertyBase* SourceObj = CastField<FObjectPropertyBase>(SourceProp))
 		{
 			if (const FObjectPropertyBase* TargetObj = CastField<FObjectPropertyBase>(TargetProp))
@@ -148,23 +136,11 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 
-		// 3. Special Case UE5: Vectors (Struct vs Double)
-		// If both have the same C++ type (e.g., "FVector"), they are compatible even if Unreal says no.
-		if (SourceProp->GetCPPType() == TargetProp->GetCPPType())
-		{
-			return true;
-		}
-
-		// 4. Numeric Promotions (Simplified from StateTree)
-		// Allow connecting Float to Double
+		// 3. Numeric Promotions
 		const bool bSourceIsReal = SourceProp->IsA<FFloatProperty>() || SourceProp->IsA<FDoubleProperty>();
 		const bool bTargetIsReal = TargetProp->IsA<FFloatProperty>() || TargetProp->IsA<FDoubleProperty>();
 		if (bSourceIsReal && bTargetIsReal) return true;
-
-		// Allow connecting Int to Float/Double
 		if (SourceProp->IsA<FIntProperty>() && bTargetIsReal) return true;
-
-		// Allow Bool to Numeric
 		if (SourceProp->IsA<FBoolProperty>() && TargetProp->IsA<FNumericProperty>()) return true;
 
 		return false;
@@ -190,26 +166,120 @@ namespace ScriptableFrameworkEditor
 		return Owner ? Owner->GetBindingID() : FGuid();
 	}
 
-	void ScriptableFrameworkEditor::GetAccessibleStructs(const UScriptableObject* TargetObject, TArray<FBindableStructDesc>& OutStructDescs)
+	TSharedPtr<IPropertyHandle> FindContainerStructHandle(TSharedPtr<IPropertyHandle> ChildHandle)
+	{
+		TSharedPtr<IPropertyHandle> Current = ChildHandle;
+		while (Current.IsValid())
+		{
+			if (const FStructProperty* StructProp = CastField<FStructProperty>(Current->GetProperty()))
+			{
+				if (StructProp->Struct && StructProp->Struct->IsChildOf<FScriptableContainer>())
+				{
+					return Current;
+				}
+			}
+			Current = Current->GetParentHandle();
+		}
+		return nullptr;
+	}
+
+	TSharedPtr<IPropertyHandle> FindObjectHandleInHierarchy(TSharedPtr<IPropertyHandle> StartHandle, const UObject* TargetObject)
+	{
+		TSharedPtr<IPropertyHandle> Current = StartHandle;
+		while (Current.IsValid())
+		{
+			UObject* Obj = nullptr;
+			if (Current->GetValue(Obj) == FPropertyAccess::Success && Obj == TargetObject)
+			{
+				return Current;
+			}
+			Current = Current->GetParentHandle();
+		}
+		return nullptr;
+	}
+
+	void CollectSiblingsFromHandle(TSharedPtr<IPropertyHandle> ObjectHandle, TArray<const UScriptableObject*>& OutObjects)
+	{
+		if (!ObjectHandle.IsValid()) return;
+
+		TSharedPtr<IPropertyHandle> ParentHandle = ObjectHandle->GetParentHandle();
+		if (!ParentHandle.IsValid()) return;
+
+		TSharedPtr<IPropertyHandleArray> ArrayHandle = ParentHandle->AsArray();
+		if (ArrayHandle.IsValid())
+		{
+			// It is an array. Get our index.
+			int32 MyIndex = ObjectHandle->GetIndexInArray();
+			if (MyIndex != INDEX_NONE)
+			{
+				// Iterate all previous elements
+				for (int32 i = 0; i < MyIndex; ++i)
+				{
+					TSharedRef<IPropertyHandle> Element = ArrayHandle->GetElement(i);
+					UObject* Value = nullptr;
+					if (Element->GetValue(Value) == FPropertyAccess::Success)
+					{
+						if (const UScriptableObject* Sibling = Cast<UScriptableObject>(Value))
+						{
+							OutObjects.Add(Sibling);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FBindableStructDesc>& OutStructDescs)
 	{
 		if (!TargetObject) return;
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
 		if (!RootObject) return;
 
-		// 1. Context
-		const FInstancedPropertyBag& Bag = RootObject->GetContext();
-		if (Bag.IsValid())
+		// 1. Context Hierarchy (Single Effective Scope)
+		// We walk up the hierarchy to find the closest valid Context.
+		// If a container (like a Group Requirement) has no variables, we skip it and keep looking up.
+
+		TSharedPtr<IPropertyHandle> CurrentSearchHandle = Handle;
+		bool bFoundContext = false;
+
+		while (TSharedPtr<IPropertyHandle> ContainerHandle = FindContainerStructHandle(CurrentSearchHandle))
 		{
-			FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
-			ContextDesc.Name = FName(TEXT("Context"));
-			ContextDesc.Struct = Bag.GetPropertyBagStruct();
-			ContextDesc.ID = FGuid();
+			void* StructData = nullptr;
+			if (ContainerHandle->GetValueData(StructData) == FPropertyAccess::Success && StructData)
+			{
+				const FScriptableContainer* Container = static_cast<const FScriptableContainer*>(StructData);
+
+				// Only consider this context if it actually has properties defined.
+				if (Container->HasContext() && Container->Context.GetNumPropertiesInBag() > 0)
+				{
+					FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					ContextDesc.Name = FName(TEXT("Context")); // Always named "Context" as it's the only one visible
+					ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
+					ContextDesc.ID = FGuid();
+
+					bFoundContext = true;
+					break; // Stop searching. We only expose the most relevant (local) context.
+				}
+			}
+
+			// Move search up past this container
+			CurrentSearchHandle = ContainerHandle->GetParentHandle();
 		}
 
-		// 2. Traversal
+		// -------------------------------------------------------------------------------
+		// 2. Siblings via Handle
+		// -------------------------------------------------------------------------------
 		TArray<const UScriptableObject*> AccessibleObjects;
-		const UObject* IteratorNode = TargetObject;
 
+		if (TSharedPtr<IPropertyHandle> ObjectHandle = FindObjectHandleInHierarchy(Handle, TargetObject))
+		{
+			CollectSiblingsFromHandle(ObjectHandle, AccessibleObjects);
+		}
+
+		// -------------------------------------------------------------------------------
+		// 3. Traversal (Hierarchical Parents & Siblings of Parents)
+		// -------------------------------------------------------------------------------
+		const UObject* IteratorNode = TargetObject;
 		while (IteratorNode)
 		{
 			const UObject* ParentNode = IteratorNode->GetOuter();
@@ -226,13 +296,17 @@ namespace ScriptableFrameworkEditor
 			IteratorNode = ParentNode;
 		}
 
-		// 3. Convert
+		// 4. Convert to Output
 		for (const UScriptableObject* Obj : AccessibleObjects)
 		{
-			FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
-			Desc.Name = FName(*Obj->GetName());
-			Desc.Struct = Obj->GetClass();
-			Desc.ID = Obj->GetBindingID();
+			if (Obj->GetBindingID().IsValid())
+			{
+				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
+				FString DisplayName = Obj->GetName();
+				Desc.Name = FName(*DisplayName);
+				Desc.Struct = Obj->GetClass();
+				Desc.ID = Obj->GetBindingID();
+			}
 		}
 	}
 
@@ -249,9 +323,20 @@ namespace ScriptableFrameworkEditor
 			const FProperty* Property = CurrentPropertyHandle->GetProperty();
 			if (Property)
 			{
-				if (const UClass* PropertyOwnerClass = Cast<UClass>(Property->GetOwnerStruct()))
+				const UStruct* OwnerStruct = Property->GetOwnerStruct();
+
+				// If it's a Class, ensure the ScriptableObject is a child of it.
+				if (const UClass* PropertyOwnerClass = Cast<UClass>(OwnerStruct))
 				{
-					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass)) break;
+					if (!ScriptableObject->GetClass()->IsChildOf(PropertyOwnerClass))
+					{
+						break;
+					}
+				}
+				// If it's the Container Struct, we went too far up. Stop.
+				else if (OwnerStruct->IsChildOf<FScriptableContainer>())
+				{
+					break;
 				}
 
 				FPropertyBindingPathSegment& Segment = PathSegments.InsertDefaulted_GetRef(0);
@@ -315,6 +400,22 @@ namespace ScriptableFrameworkEditor
 			if (const FProperty* Property = Element.Field.Get<FProperty>())
 			{
 				OutPath.AddPathSegment(Property->GetFName(), Element.ArrayIndex);
+			}
+		}
+	}
+
+	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset)
+	{
+		if (!Handle.IsValid()) return;
+		UObject* NewObj = nullptr;
+		if (Handle->GetValue(NewObj) == FPropertyAccess::Success && NewObj)
+		{
+			static const FName NAME_Asset = TEXT("Asset");
+			if (FObjectProperty* AssetProp = CastField<FObjectProperty>(NewObj->GetClass()->FindPropertyByName(NAME_Asset)))
+			{
+				NewObj->Modify();
+				void* ValuePtr = AssetProp->ContainerPtrToValuePtr<void>(NewObj);
+				AssetProp->SetObjectPropertyValue(ValuePtr, Asset);
 			}
 		}
 	}

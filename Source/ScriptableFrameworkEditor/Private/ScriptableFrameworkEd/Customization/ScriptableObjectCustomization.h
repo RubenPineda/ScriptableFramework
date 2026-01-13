@@ -4,57 +4,118 @@
 
 #include "CoreMinimal.h"
 #include "IPropertyTypeCustomization.h"
+#include "Layout/Visibility.h"
+#include "Styling/SlateTypes.h"
 
 class IPropertyHandle;
 class IPropertyUtilities;
 class UScriptableObject;
-class SWidget;
+class IDetailPropertyRow;
+struct FAssetData;
 
+/**
+ * Base customization for UScriptableObject.
+ * Handles the common "Header" (Checkbox, Icon, Title, Action Buttons).
+ * Derived classes can inject custom widgets into Name, Value, or Extension slots.
+ */
 class FScriptableObjectCustomization : public IPropertyTypeCustomization
 {
 public:
-	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableObjectCustomization); }
+	virtual ~FScriptableObjectCustomization();
 
-	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> InPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
-	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> InPropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
+	/** IPropertyTypeCustomization interface */
+	virtual void CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
+	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 
-	virtual void GatherChildProperties(TSharedPtr<IPropertyHandle> ChildPropertyHandle) {}
+	/** Initializes handles and cached data. Call this if overriding CustomizeHeader completely. */
+	virtual void InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils);
+
+	// --- Overridable Extension Points ---
+
+	virtual TSharedPtr<SHorizontalBox> GetHeaderNameContent();
+	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent();
+	virtual TSharedPtr<SHorizontalBox> GetHeaderExtensionContent();
 
 protected:
-	bool bIsBlueprintClass = false;
+	// --- Internal Logic Helpers ---
 
-	TSharedPtr<IPropertyUtilities> PropertyUtilities;
-
-	TSharedPtr<SHorizontalBox> HorizontalBox;
-
-	TSharedPtr<IPropertyHandle> PropertyHandle;
-	TSharedPtr<IPropertyHandle> EnabledPropertyHandle;
-	TWeakObjectPtr<UScriptableObject> ScriptableObject = nullptr;
-
+	/** Returns the base class allowed for this property (e.g., UScriptableTask, UScriptableCondition, or UScriptableObject). */
 	UClass* GetBaseClass() const;
 
-	ECheckBoxState GetEnabledCheckBoxState() const;
-	void OnEnabledCheckBoxChanged(ECheckBoxState NewCheckedState);
-
-	void OnNodePicked(const UStruct* InStruct, const FAssetData& InAssetData);
-
-	void SetScriptableObjectType(const UStruct* InStruct);
-	void OnAssetPicked(const FAssetData& AssetData);
-
-	void OnUseSelected();
-	void OnBrowseTo();
-	void OnEdit();
-	void OnClear();
-
-private:
-	/** Checks if a property is suitable for binding. */
+	/** Determines if a child property supports binding (skips Arrays/Maps/Sets and metadata "NoBinding"). */
 	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle) const;
 
-	/** Generates the binding widget (the drop-down menu) for a specific property. */
-	TSharedPtr<SWidget> GenerateBindingWidget(UScriptableObject* InScriptableObject, TSharedPtr<IPropertyHandle> InPropertyHandle);
+	/** Returns the class of the wrapper task/condition (e.g. UScriptableTask_RunAsset). */
+	virtual UClass* GetWrapperClass() const = 0;
 
-	/** Applies the binding logic (reset handler, visual modification) to a newly created row. */
-	void BindPropertyRow(class IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj);
+	/** Helper to check if a class is a wrapper (RunAsset / EvaluateAsset). */
+	bool IsWrapperClass(const UClass* Class) const;
 
+	/** Helper to get the inner asset from a wrapper object. */
+	UObject* GetInnerAsset(UScriptableObject* Obj) const;
+
+	/** Gets the display title (handles wrapping logic). */
+	virtual FText GetDisplayTitle(UScriptableObject* Obj) const;
+
+	// --- Child Generation ---
+
+	/** Callback to generate rows for array elements (recursively applies binding logic). */
 	void GenerateArrayElement(TSharedRef<IPropertyHandle> ChildHandle, int32 ArrayIndex, IDetailChildrenBuilder& ChildrenBuilder);
+
+	/** Main function to inject the Binding UI into a property row. */
+	void BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj);
+
+	// --- UI Callbacks ---
+
+	/** Checkbox state for "bEnabled". */
+	ECheckBoxState OnGetEnabled() const;
+	void OnSetEnabled(ECheckBoxState NewState);
+
+	/** Reset to default visibility logic (Yellow arrow). */
+	bool IsResetToDefaultVisible(TSharedPtr<IPropertyHandle> Handle) const;
+	void OnResetToDefault(TSharedPtr<IPropertyHandle> Handle);
+
+	/** Button Callbacks. */
+	void OnDelete();
+	void OnClear();
+	void OnBrowse();
+	void OnEdit();
+	void OnUseSelected();
+
+	/** Checks if the Wrapper has access to all variables required by the Inner Asset. */
+	bool GetContextWarning(FText& OutTooltip) const;
+
+	/** Callback from Picker. */
+	void OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData);
+
+	/** Handles asset selection. */
+	void OnAssetPicked(const FAssetData& AssetData);
+
+	/**
+	 * Creates a new instance of the selected class and assigns it to the handle.
+	 * @param OnInstanceCreated Optional callback to configure the object BEFORE the UI refreshes.
+	 */
+	void InstantiateClass(const UClass* Class, TFunction<void()> OnInstanceCreated = nullptr);
+
+	/** Callback for the global property changed event. */
+	void OnObjectPropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
+
+	/** Safe refresh called on next tick */
+	void HandleForceRefresh();
+
+protected:
+	/** Handle to the property being customized (the Object pointer). */
+	TSharedPtr<IPropertyHandle> PropertyHandle;
+
+	/** Utilities to force UI refresh. */
+	TSharedPtr<IPropertyUtilities> PropertyUtilities;
+
+	/** Weak pointer to the actual object instance (if valid). */
+	TWeakObjectPtr<UScriptableObject> ScriptableObject;
+
+	// Cached data for UI generation
+	FText NodeTitle;
+	FText NodeDescription;
+
+	FDelegateHandle OnObjectPropertyChangedHandle;
 };
