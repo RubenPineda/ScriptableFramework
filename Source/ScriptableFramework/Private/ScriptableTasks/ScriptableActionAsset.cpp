@@ -74,7 +74,11 @@ void UScriptableTask_RunAsset::InstantiateRuntimeAction()
 	{
 		// Copy the Struct
 		RuntimeAction = Asset->Action;
-		RuntimeAction.Context = *GetContext();
+
+		if (const FInstancedPropertyBag* ParentContext = GetContext())
+		{
+			RuntimeAction.Context = *ParentContext;
+		}
 
 		// Deep Copy Tasks
 		// The 'Tasks' array currently points to the Asset's archetype objects.

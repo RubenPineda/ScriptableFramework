@@ -36,7 +36,11 @@ void UScriptableCondition_Asset::OnRegister()
 			// This performs a copy of the PropertyBag, preserving default values from the Asset.
 			Group->Requirement.Mode = Asset->Requirement.Mode;
 			Group->Requirement.bNegate = Asset->Requirement.bNegate;
-			Group->Requirement.Context = *GetContext();
+
+			if (const FInstancedPropertyBag* ParentContext = GetContext())
+			{
+				Group->Requirement.Context = *ParentContext;
+			}
 
 			// 3. Deep Copy Conditions
 			// We MUST duplicate the conditions. If we just copy the pointers, registering them 
