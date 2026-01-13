@@ -18,6 +18,10 @@ public:
 	/** The action definition. Holds the Context variables and the list of Tasks. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
 	FScriptableAction Action;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 };
 
 UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Asset", Hidden))

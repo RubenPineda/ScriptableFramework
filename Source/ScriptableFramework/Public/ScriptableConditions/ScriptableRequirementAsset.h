@@ -18,6 +18,10 @@ public:
 	/** The requirement definition. Holds the Context variables and the list of Conditions. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Action")
 	FScriptableRequirement Requirement;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 };
 
 UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Evaluate Asset", Hidden))
@@ -33,7 +37,6 @@ public:
 	// --- Lifecycle ---
 	virtual void OnRegister() override;
 	virtual void OnUnregister() override;
-	virtual void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap) override;
 
 #if WITH_EDITOR
 	virtual FText GetDescription() const override;

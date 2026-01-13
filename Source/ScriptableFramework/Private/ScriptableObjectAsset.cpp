@@ -4,9 +4,9 @@
 #include "UObject/AssetRegistryTagsContext.h"
 
 #if WITH_EDITOR
-void UScriptableObjectAsset::GetAssetRegistryTags(FAssetRegistryTagsContext Context) const
+void UScriptableObjectAsset::GetAssetRegistryTags(FAssetRegistryTagsContext RegContext) const
 {
-	Super::GetAssetRegistryTags(Context);
-	Context.AddTag(FAssetRegistryTag(GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, MenuCategory), MenuCategory, FAssetRegistryTag::TT_Alphabetical));
+	Super::GetAssetRegistryTags(RegContext);
+	RegContext.AddTag(FAssetRegistryTag(GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, MenuCategory), MenuCategory, FAssetRegistryTag::TT_Alphabetical));
 }
 #endif
