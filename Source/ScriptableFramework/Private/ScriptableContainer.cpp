@@ -3,8 +3,6 @@
 #include "ScriptableContainer.h"
 #include "ScriptableObject.h"
 
-UE_DISABLE_OPTIMIZATION
-
 UScriptableObject* FScriptableContainer::FindBindingSource(const FGuid& InID) const
 {
 	if (const TObjectPtr<UScriptableObject>* Found = BindingSourceMap.Find(InID))
@@ -54,5 +52,3 @@ void FScriptableContainer::Unregister()
 	BindingSourceMap.Empty();
 	Owner = nullptr;
 }
-
-UE_ENABLE_OPTIMIZATION

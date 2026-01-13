@@ -3,8 +3,6 @@
 #include "ScriptableObjectAsset.h"
 #include "UObject/AssetRegistryTagsContext.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #if WITH_EDITOR
 void UScriptableObjectAsset::GetAssetRegistryTags(FAssetRegistryTagsContext RegContext) const
 {
@@ -51,5 +49,3 @@ void UScriptableObjectAsset::RefreshContext()
 	}
 }
 #endif
-
-UE_ENABLE_OPTIMIZATION

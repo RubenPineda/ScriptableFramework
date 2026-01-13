@@ -3,8 +3,6 @@
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
-UE_DISABLE_OPTIMIZATION
-
 FScriptableAction::FScriptableAction()
 {
 }
@@ -158,5 +156,3 @@ void FScriptableAction::RunAction(UObject* Owner, FScriptableAction& Action)
 	Action.Register(Owner);
 	Action.Begin();
 }
-
-UE_ENABLE_OPTIMIZATION

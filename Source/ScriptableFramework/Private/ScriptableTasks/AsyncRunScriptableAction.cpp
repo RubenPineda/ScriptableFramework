@@ -3,8 +3,6 @@
 #include "ScriptableTasks/AsyncRunScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
-UE_DISABLE_OPTIMIZATION
-
 UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction& Action, bool bReset)
 {
 	UAsyncRunScriptableAction* Node = NewObject<UAsyncRunScriptableAction>(Owner);
@@ -62,5 +60,3 @@ void UAsyncRunScriptableAction::SetReadyToDestroy()
 
 	Super::SetReadyToDestroy();
 }
-
-UE_ENABLE_OPTIMIZATION

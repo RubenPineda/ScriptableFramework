@@ -29,8 +29,6 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/SecureHash.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
 
 // ------------------------------------------------------------------------------------------------
@@ -1196,5 +1194,3 @@ void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TS
 }
 
 #undef LOCTEXT_NAMESPACE
-
-UE_ENABLE_OPTIMIZATION

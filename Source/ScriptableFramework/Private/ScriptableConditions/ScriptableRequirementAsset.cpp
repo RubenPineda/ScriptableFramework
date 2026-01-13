@@ -4,8 +4,6 @@
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableCondition_Group.h"
 
-UE_DISABLE_OPTIMIZATION
-
 void UScriptableCondition_Asset::OnRegister()
 {
 	Super::OnRegister();
@@ -81,5 +79,3 @@ FText UScriptableCondition_Asset::GetDescription() const
 	return Asset ? FText::FromString(Asset->GetName()) : INVTEXT("None");
 }
 #endif
-
-UE_ENABLE_OPTIMIZATION

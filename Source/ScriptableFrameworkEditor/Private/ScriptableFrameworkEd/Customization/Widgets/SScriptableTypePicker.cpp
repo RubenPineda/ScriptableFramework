@@ -16,8 +16,6 @@
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableRequirementAsset.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
 TMap<FObjectKey, SScriptableTypePicker::FCategoryExpansionState> SScriptableTypePicker::CategoryExpansionStates;
@@ -843,5 +841,3 @@ void SScriptableTypePicker::RestoreExpansionState()
 }
 
 #undef LOCTEXT_NAMESPACE
-
-UE_ENABLE_OPTIMIZATION

@@ -9,8 +9,6 @@
 #include "Widgets/SBoxPanel.h"
 #include "IPropertyUtilities.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #define LOCTEXT_NAMESPACE "FScriptableTaskCustomization"
 
 UClass* FScriptableTaskCustomization::GetWrapperClass() const
@@ -189,5 +187,3 @@ FText FScriptableTaskCustomization::GetLoopTooltip() const
 }
 
 #undef LOCTEXT_NAMESPACE
-
-UE_ENABLE_OPTIMIZATION

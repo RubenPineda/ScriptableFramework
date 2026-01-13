@@ -5,8 +5,6 @@
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
 
-UE_DISABLE_OPTIMIZATION
-
 void FScriptableRequirement::Register(UObject* InOwner)
 {
 	if (bIsRegistered)
@@ -99,5 +97,3 @@ bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, FScriptableRequ
 	Action.Unregister();
 	return bResult;
 }
-
-UE_ENABLE_OPTIMIZATION

@@ -3,8 +3,6 @@
 #include "ScriptableObject.h"
 #include "Misc/SecureHash.h"
 
-UE_DISABLE_OPTIMIZATION
-
 DEFINE_LOG_CATEGORY(LogScriptableObject);
 
 UScriptableObject::UScriptableObject()
@@ -323,5 +321,3 @@ UScriptableObject* UScriptableObject::FindBindingSource(const FGuid& InID)
 	}
 	return nullptr;
 }
-
-UE_ENABLE_OPTIMIZATION

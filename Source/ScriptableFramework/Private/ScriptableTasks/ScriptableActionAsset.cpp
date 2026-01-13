@@ -5,8 +5,6 @@
 
 #include "Algo/AnyOf.h"
 
-UE_DISABLE_OPTIMIZATION
-
 void UScriptableTask_RunAsset::OnRegister()
 {
 	Super::OnRegister();
@@ -94,5 +92,3 @@ void UScriptableTask_RunAsset::TeardownRuntimeAction()
 	// Explicitly empty tasks to drop references to the instanced objects
 	RuntimeAction.Tasks.Empty();
 }
-
-UE_ENABLE_OPTIMIZATION

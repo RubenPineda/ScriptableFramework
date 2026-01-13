@@ -2,8 +2,6 @@
 
 #include "ScriptableTasks/ScriptableTask.h"
 
-UE_DISABLE_OPTIMIZATION
-
 DEFINE_LOG_CATEGORY(LogScriptableTask);
 
 void UScriptableTask::OnUnregister()
@@ -102,5 +100,3 @@ void UScriptableTask::FinishTask()
 {
 	ReceiveFinishTask();
 }
-
-UE_ENABLE_OPTIMIZATION

@@ -18,8 +18,6 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Images/SImage.h"
 
-UE_DISABLE_OPTIMIZATION
-
 #define LOCTEXT_NAMESPACE "FScriptableContainerCustomization"
 
 void FScriptableContainerCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -228,4 +226,3 @@ TSharedPtr<IPropertyHandle> FScriptableContainerCustomization::AddElement(const 
 }
 
 #undef LOCTEXT_NAMESPACE
-UE_ENABLE_OPTIMIZATION

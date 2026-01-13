@@ -10,8 +10,6 @@
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
 
-UE_DISABLE_OPTIMIZATION
-
 namespace ScriptableObjectTraversal
 {
 	/** Checks if the Parent class allows data binding between its children (Siblings). */
@@ -422,5 +420,3 @@ namespace ScriptableFrameworkEditor
 		}
 	}
 }
-
-UE_ENABLE_OPTIMIZATION
