@@ -26,12 +26,24 @@ class SCRIPTABLEFRAMEWORK_API UScriptableCondition_Asset final : public UScripta
 	GENERATED_BODY()
 
 public:
-	/** The asset containing the Requirement definition (Context + Conditions) to evaluate. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = ScriptableCondition)
-	class UScriptableRequirementAsset* Asset;
+	/** The asset containing the Requirement definition to evaluate. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Config")
+	TObjectPtr<UScriptableRequirementAsset> Asset;
+
+	// --- Lifecycle ---
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+	virtual void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap) override;
+
+#if WITH_EDITOR
+	virtual FText GetDescription() const override;
+#endif
 
 protected:
+	virtual bool Evaluate_Implementation() const override;
+
+private:
 	/** The actual instance created from the asset template. */
 	UPROPERTY(Transient)
-	UScriptableCondition* Condition;
+	TObjectPtr<UScriptableCondition> Condition;
 };

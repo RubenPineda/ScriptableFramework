@@ -104,7 +104,7 @@ public:
 	FGuid GetBindingID() const { return BindingID; }
 
 	/** Injects the shared data from the owning container. */
-	void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap);
+	virtual void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap);
 
 	/** Propagates the runtime data to a child object. */
 	void PropagateRuntimeData(UScriptableObject* Child) const;
