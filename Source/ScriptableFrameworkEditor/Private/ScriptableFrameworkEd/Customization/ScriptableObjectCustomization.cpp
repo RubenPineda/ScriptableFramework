@@ -925,13 +925,15 @@ void FScriptableObjectCustomization::OnAssetPicked(const FAssetData& AssetData)
 		UClass* WrapperClass = GetWrapperClass();
 		if (WrapperClass)
 		{
-			InstantiateClass(WrapperClass);
-			ScriptableFrameworkEditor::SetWrapperAssetProperty(PropertyHandle, AssetData.GetAsset());
+			InstantiateClass(WrapperClass, [&]()
+			{
+				ScriptableFrameworkEditor::SetWrapperAssetProperty(PropertyHandle, AssetData.GetAsset());
+			});
 		}
 	}
 }
 
-void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass)
+void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass, TFunction<void()> OnInstanceCreated)
 {
 	if (NewClass->IsChildOf(GetBaseClass()))
 	{
@@ -943,6 +945,11 @@ void FScriptableObjectCustomization::InstantiateClass(const UClass* NewClass)
 			const_cast<UClass*>(NewClass),
 			EPropertyValueSetFlags::InteractiveChange
 		);
+
+		if (OnInstanceCreated)
+		{
+			OnInstanceCreated();
+		}
 
 		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
 

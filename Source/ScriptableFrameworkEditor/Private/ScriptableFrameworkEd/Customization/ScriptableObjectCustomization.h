@@ -86,8 +86,11 @@ protected:
 	/** Handles asset selection. */
 	void OnAssetPicked(const FAssetData& AssetData);
 
-	/** Creates a new instance of the selected class and assigns it to the handle. */
-	void InstantiateClass(const UClass* Class);
+	/**
+	 * Creates a new instance of the selected class and assigns it to the handle.
+	 * @param OnInstanceCreated Optional callback to configure the object BEFORE the UI refreshes.
+	 */
+	void InstantiateClass(const UClass* Class, TFunction<void()> OnInstanceCreated = nullptr);
 
 protected:
 	/** Handle to the property being customized (the Object pointer). */
