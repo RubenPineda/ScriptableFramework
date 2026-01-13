@@ -41,6 +41,11 @@ It feels like editing standard properties but behaves like a logic flow.
 
 - **Unreal Engine 5.5+**
 
+### Installation
+1.  Clone or download this repository.
+2.  Copy the `ScriptableFramework` folder into your project's `Plugins/` directory (create the folder if it doesn't exist).
+3.  Regenerate project files and compile.
+
 ---
 
 ## 🚀 Core Concepts
