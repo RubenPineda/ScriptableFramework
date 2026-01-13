@@ -363,36 +363,19 @@ void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
 	}
 }
 
-bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
+bool SScriptableTypePicker::MatchesCategoryPath(const TArray<FString>& CategoryPath)
 {
-	if (!Struct || !RootNode.IsValid())
-	{
-		return false;
-	}
-
 	if (FilterPaths.IsEmpty())
 	{
 		return true;
 	}
 
-	const FText CategoryName = GetNodeCategory(Struct);
-
-	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
-
-	if (CategoryName.IsEmpty())
+	if (CategoryPath.IsEmpty())
 	{
 		return false;
 	}
 
-	// Split into subcategories and trim
-	TArray<FString> CategoryPath;
-	CategoryName.ToString().ParseIntoArray(CategoryPath, TEXT("|"));
-	for (FString& SubCategory : CategoryPath)
-	{
-		SubCategory.TrimStartAndEndInline();
-	}
-
-	// Always show 'System' category
+	// Always show 'System' category (Special case)
 	if (CategoryPath[0].Equals(ScriptableFrameworkEditor::MD_SystemCategory.ToString(), ESearchCase::IgnoreCase))
 	{
 		return true;
@@ -415,6 +398,59 @@ bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
 
 		return true;
 	});
+}
+
+bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
+{
+	if (!Struct || !RootNode.IsValid())
+	{
+		return false;
+	}
+
+	const FText CategoryName = GetNodeCategory(Struct);
+
+	if (CategoryName.IsEmpty())
+	{
+		return false;
+	}
+
+	// Split into subcategories and trim
+	TArray<FString> CategoryPath;
+	CategoryName.ToString().ParseIntoArray(CategoryPath, TEXT("|"));
+	for (FString& SubCategory : CategoryPath)
+	{
+		SubCategory.TrimStartAndEndInline();
+	}
+
+	return MatchesCategoryPath(CategoryPath);
+}
+
+bool SScriptableTypePicker::MatchesFilter(const FAssetData& AssetData)
+{
+	if (!RootNode.IsValid())
+	{
+		return false;
+	}
+
+	// Read category from Tag
+	static const FName CategoryTagName(TEXT("MenuCategory"));
+	FString CategoryStr;
+	AssetData.GetTagValue<FString>(CategoryTagName, CategoryStr);
+
+	if (CategoryStr.IsEmpty())
+	{
+		return false;
+	}
+
+	// Split into subcategories and trim
+	TArray<FString> CategoryPath;
+	CategoryStr.ParseIntoArray(CategoryPath, TEXT("|"));
+	for (FString& SubCategory : CategoryPath)
+	{
+		SubCategory.TrimStartAndEndInline();
+	}
+
+	return MatchesCategoryPath(CategoryPath);
 }
 
 void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass)
@@ -501,15 +537,15 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 		Filter.ClassPaths.Add(AssetClassToSearch->GetClassPathName());
 		Filter.bRecursivePaths = true;
 
-		// Filter by path if you want to limit the search scope (e.g. only inside /Game).
-		// Filter.PackagePaths.Add("/Game"); 
-
 		AssetRegistryModule.Get().GetAssets(Filter, AssetDataList);
 
 		// Add found assets to the tree.
 		for (const FAssetData& Asset : AssetDataList)
 		{
-			AddNode(Asset);
+			if (MatchesFilter(Asset))
+			{
+				AddNode(Asset);
+			}
 		}
 	}
 

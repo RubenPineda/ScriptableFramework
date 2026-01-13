@@ -122,7 +122,11 @@ private:
 	FText GetNodeCategory(const UStruct* Struct);
 	void AddNode(const UStruct* Struct);
 	void AddNode(const FAssetData& AssetData);
+
+	bool MatchesCategoryPath(const TArray<FString>& CategoryPath);
+	bool MatchesFilter(const FAssetData& AssetData);
 	bool MatchesFilter(const UStruct* Struct);
+
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
 
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
