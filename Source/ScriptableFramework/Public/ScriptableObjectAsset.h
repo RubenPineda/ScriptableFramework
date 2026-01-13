@@ -33,9 +33,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config")
 	TArray<FScriptableParameterDef> Context;
 
-protected:
 	virtual FInstancedPropertyBag* GetContext() PURE_VIRTUAL(UScriptableObjectAsset::GetContext(), return nullptr;)
 
+protected:
 #if WITH_EDITOR
 	virtual FName GetContainerName() const PURE_VIRTUAL(UScriptableObjectAsset::GetContainerName(), return NAME_None;)
 #endif

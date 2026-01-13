@@ -633,6 +633,31 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 	FName ClassCategory; FName PropCategory;
 	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
 
+	// Missmatch warning
+	if (ScriptableObj && IsWrapperClass(ScriptableObj->GetClass()))
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(0, 0, 4, 0)
+			[
+				SNew(SImage)
+					.Image(FAppStyle::Get().GetBrush("Icons.Warning"))
+					.ColorAndOpacity(FLinearColor::Yellow)
+					.Visibility_Lambda([this]()
+				{
+					FText Dummy;
+					return GetContextWarning(Dummy) ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+					.ToolTipText_Lambda([this]()
+				{
+					FText Tooltip;
+					GetContextWarning(Tooltip);
+					return Tooltip;
+				})
+			];
+	}
+
 	// Picker
 	ExtensionBox->AddSlot()
 		.AutoWidth().VAlign(VAlign_Center)
@@ -934,6 +959,67 @@ void FScriptableObjectCustomization::OnUseSelected()
 			return;
 		}
 	}
+}
+
+bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
+{
+	UScriptableObject* Wrapper = ScriptableObject.Get();
+	if (!Wrapper) return false;
+
+	// Get the Inner Asset
+	UScriptableObjectAsset* InnerAsset = Cast<UScriptableObjectAsset>(GetInnerAsset(Wrapper));
+	if (!InnerAsset) return false;
+
+	// If the asset doesn't require anything, everything is OK.
+	const FInstancedPropertyBag* RequiredContext = InnerAsset->GetContext();
+	if (!RequiredContext || RequiredContext->GetNumPropertiesInBag() == 0) return false;
+
+	// Get Available Contexts (Outer Scope)
+	TArray<FBindableStructDesc> AvailableContexts;
+	ScriptableFrameworkEditor::GetAccessibleStructs(Wrapper, PropertyHandle, AvailableContexts);
+
+	TArray<FString> MissingParams;
+
+	// Iterate Requirements
+	const UPropertyBag* BagStruct = RequiredContext->GetPropertyBagStruct();
+	for (TFieldIterator<FProperty> It(BagStruct); It; ++It)
+	{
+		const FProperty* ReqProp = *It;
+		const FName ReqName = ReqProp->GetFName();
+		bool bFound = false;
+
+		// Search in all available bags (Global Context, Local Variables, etc.)
+		for (const FBindableStructDesc& ContextDesc : AvailableContexts)
+		{
+			if (const UStruct* Struct = ContextDesc.Struct.Get())
+			{
+				if (const FProperty* SourceProp = Struct->FindPropertyByName(ReqName))
+				{
+					// Found a variable with the same name.
+					// Now check for type compatibility.
+					if (ScriptableFrameworkEditor::ArePropertiesCompatible(SourceProp, ReqProp))
+					{
+						bFound = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!bFound)
+		{
+			MissingParams.Add(ReqName.ToString());
+		}
+	}
+
+	if (MissingParams.Num() > 0)
+	{
+		FString MissingStr = FString::Join(MissingParams, TEXT(", "));
+		OutTooltip = FText::Format(LOCTEXT("ContextWarning", "Missing Context Parameters.\nThe asset expects these variables, but they are not found in the current context:\n- {0}"), FText::FromString(MissingStr));
+		return true;
+	}
+
+	return false;
 }
 
 void FScriptableObjectCustomization::OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData)

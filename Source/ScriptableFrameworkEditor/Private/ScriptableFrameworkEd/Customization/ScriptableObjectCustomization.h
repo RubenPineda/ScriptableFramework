@@ -82,6 +82,9 @@ protected:
 	void OnEdit();
 	void OnUseSelected();
 
+	/** Checks if the Wrapper has access to all variables required by the Inner Asset. */
+	bool GetContextWarning(FText& OutTooltip) const;
+
 	/** Callback from Picker. */
 	void OnTypePicked(const UStruct* InStruct, const FAssetData& AssetData);
 
