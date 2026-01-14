@@ -25,10 +25,6 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Group", meta = (ShowOnlyInnerProperties, NoBinding))
 	FScriptableRequirement Requirement;
 
-#if WITH_EDITOR
-	virtual FText GetDescription() const override;
-#endif
-
 	// Lifecycle Forwarding
 	virtual void OnRegister() override;
 	virtual void OnUnregister() override;

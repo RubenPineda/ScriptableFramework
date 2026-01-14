@@ -45,7 +45,7 @@ public:
 	virtual void OnUnregister() override;
 
 #if WITH_EDITOR
-	virtual FText GetDescription() const override;
+	virtual FText GetDisplayTitle() const override;
 #endif
 
 protected:

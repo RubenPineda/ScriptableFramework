@@ -578,7 +578,16 @@ void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandl
 	if (ScriptableObj)
 	{
 		NodeDescription = ScriptableObj->GetClass()->GetToolTipText();
-		NodeTitle = GetDisplayTitle(ScriptableObj);
+		NodeTitle = GetDisplayTitle();
+
+		if (IsWrapperClass(ScriptableObj->GetClass()))
+		{
+			NodeTitle = ScriptableObj->GetDisplayTitle();
+		}
+		else
+		{
+			ScriptableObj->GetClass()->GetDisplayNameText();
+		}
 	}
 	else
 	{
@@ -609,7 +618,7 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent(
 		.FillWidth(1.0f).VAlign(VAlign_Center)
 		[
 			SNew(STextBlock)
-				.Text(NodeTitle)
+				.Text(this, &FScriptableObjectCustomization::GetDisplayTitle)
 				.Font(IDetailLayoutBuilder::GetDetailFontBold())
 				.ToolTipText(NodeDescription)
 				.ColorAndOpacity(ScriptableObject.IsValid() ? FSlateColor::UseForeground() : FSlateColor::UseSubduedForeground())
@@ -818,23 +827,26 @@ UObject* FScriptableObjectCustomization::GetInnerAsset(UScriptableObject* Obj) c
 	return nullptr;
 }
 
-FText FScriptableObjectCustomization::GetDisplayTitle(UScriptableObject* Obj) const
-{
-	if (!Obj) return FText::GetEmpty();
-
-	if (IsWrapperClass(Obj->GetClass()))
-	{
-		if (UObject* Inner = GetInnerAsset(Obj))
-		{
-			return FText::FromString(Inner->GetName());
-		}
-	}
-	return Obj->GetClass()->GetDisplayNameText();
-}
-
 // ------------------------------------------------------------------------------------------------
 // Logic Implementations (Member Functions)
 // ------------------------------------------------------------------------------------------------
+
+FText FScriptableObjectCustomization::GetDisplayTitle() const
+{
+	if (UScriptableObject* Obj = ScriptableObject.Get())
+	{
+		// Attempt to retrieve a dynamic description (e.g., "Health > 50") from the object instance.
+		// This allows the header to update in real-time as properties change.
+		FText DynamicDesc = Obj->GetDisplayTitle();
+		if (!DynamicDesc.IsEmpty())
+		{
+			return DynamicDesc;
+		}
+	}
+
+	// Fallback: Use the static title calculated at initialization
+	return NodeTitle;
+}
 
 ECheckBoxState FScriptableObjectCustomization::OnGetEnabled() const
 {

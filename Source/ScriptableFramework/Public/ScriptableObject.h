@@ -31,6 +31,12 @@ public:
 
 #if WITH_EDITOR
 	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
+
+	/**
+	 * Returns a user-friendly title of this condition.
+	 * Used by the Editor to display the condition in lists (e.g. "Health > 0").
+	 */
+	virtual FText GetDisplayTitle() const;
 #endif
 
 	// -------------------------------------------------------------------

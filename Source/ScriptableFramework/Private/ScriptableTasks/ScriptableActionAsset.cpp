@@ -92,3 +92,10 @@ void UScriptableTask_RunAsset::TeardownRuntimeAction()
 	// Explicitly empty tasks to drop references to the instanced objects
 	RuntimeAction.Tasks.Empty();
 }
+
+#if WITH_EDITOR
+FText UScriptableTask_RunAsset::GetDisplayTitle() const
+{
+	return Asset ? FText::FromString(Asset->GetName()) : INVTEXT("None");
+}
+#endif

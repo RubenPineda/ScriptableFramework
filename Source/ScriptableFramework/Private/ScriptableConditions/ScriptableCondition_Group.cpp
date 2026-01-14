@@ -4,17 +4,6 @@
 
 #define LOCTEXT_NAMESPACE "ScriptableCondition_Group"
 
-#if WITH_EDITOR
-FText UScriptableCondition_Group::GetDescription() const
-{
-	if (!GroupName.IsEmpty())
-	{
-		return FText::FromString(GroupName);
-	}
-	return LOCTEXT("GroupDesc", "Nested Group");
-}
-#endif
-
 void UScriptableCondition_Group::OnRegister()
 {
 	Super::OnRegister();

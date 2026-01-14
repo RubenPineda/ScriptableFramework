@@ -15,7 +15,6 @@ public:
 protected:
 	virtual UClass* GetWrapperClass() const override;
 	virtual TSharedPtr<SHorizontalBox> GetHeaderValueContent() override;
-	virtual FText GetDisplayTitle(class UScriptableObject* Obj) const override;
 
 private:
 	// --- Negate Logic ---

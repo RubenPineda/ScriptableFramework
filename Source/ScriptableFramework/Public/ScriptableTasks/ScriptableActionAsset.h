@@ -55,6 +55,10 @@ public:
 	virtual void BeginTask() override;
 	virtual void FinishTask() override;
 
+#if WITH_EDITOR
+	virtual FText GetDisplayTitle() const override;
+#endif
+
 private:
 	/** Creates a runtime copy of the Action defined in the Asset. */
 	void InstantiateRuntimeAction();

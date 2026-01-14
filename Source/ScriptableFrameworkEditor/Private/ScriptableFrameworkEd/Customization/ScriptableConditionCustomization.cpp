@@ -47,21 +47,6 @@ TSharedPtr<SHorizontalBox> FScriptableConditionCustomization::GetHeaderValueCont
 	return Box;
 }
 
-FText FScriptableConditionCustomization::GetDisplayTitle(UScriptableObject* Obj) const
-{
-	if (IsWrapperClass(Obj->GetClass()))
-	{
-		return FScriptableObjectCustomization::GetDisplayTitle(Obj);
-	}
-
-	if (UScriptableCondition* Condition = Cast<UScriptableCondition>(Obj))
-	{
-		return Condition->GetDescription();
-	}
-
-	return FScriptableObjectCustomization::GetDisplayTitle(Obj);
-}
-
 // -------------------------------------------------------------------
 // Negate Logic
 // -------------------------------------------------------------------

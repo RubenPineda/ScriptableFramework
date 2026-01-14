@@ -21,14 +21,6 @@ public:
 	/** Conditions should typically be instant checks, not ticking objects. */
 	virtual bool CanEverTick() const final override { return false; }
 
-#if WITH_EDITOR
-	/**
-	 * Returns a user-friendly description of this condition.
-	 * Used by the Editor to display the condition in lists (e.g. "Health > 0").
-	 */
-	virtual FText GetDescription() const;
-#endif
-
 	/**
 	 * Main entry point for evaluation.
 	 * Handles Binding Resolution and Negation logic.

@@ -54,9 +54,6 @@ protected:
 	/** Helper to get the inner asset from a wrapper object. */
 	UObject* GetInnerAsset(UScriptableObject* Obj) const;
 
-	/** Gets the display title (handles wrapping logic). */
-	virtual FText GetDisplayTitle(UScriptableObject* Obj) const;
-
 	// --- Child Generation ---
 
 	/** Callback to generate rows for array elements (recursively applies binding logic). */
@@ -66,6 +63,9 @@ protected:
 	void BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj);
 
 	// --- UI Callbacks ---
+
+	/** Callback to get the dynamic title text */
+	FText GetDisplayTitle() const;
 
 	/** Checkbox state for "bEnabled". */
 	ECheckBoxState OnGetEnabled() const;

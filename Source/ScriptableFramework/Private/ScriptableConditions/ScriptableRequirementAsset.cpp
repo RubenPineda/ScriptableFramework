@@ -74,7 +74,7 @@ bool UScriptableCondition_Asset::Evaluate_Implementation() const
 }
 
 #if WITH_EDITOR
-FText UScriptableCondition_Asset::GetDescription() const
+FText UScriptableCondition_Asset::GetDisplayTitle() const
 {
 	return Asset ? FText::FromString(Asset->GetName()) : INVTEXT("None");
 }

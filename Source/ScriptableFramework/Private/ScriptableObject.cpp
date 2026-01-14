@@ -68,6 +68,11 @@ void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& 
 		}
 	}
 }
+
+FText UScriptableObject::GetDisplayTitle() const
+{
+	return GetClass()->GetDisplayNameText();
+}
 #endif
 
 UWorld* UScriptableObject::GetWorld_Uncached() const
