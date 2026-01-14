@@ -19,32 +19,14 @@ FText UScriptableCondition_CompareNumbers::GetDisplayTitle() const
 	// Helper lambda to determine if we show the literal value or the binding name
 	auto GetValueText = [this](FName PropName, double CurrentValue) -> FText
 	{
-		// Build the path to the local property (e.g., "A")
-		FPropertyBindingPath TargetPath;
-		TargetPath.SetStructID(GetBindingID());
-		TargetPath.AddPathSegment(PropName);
-
-		// Check if there is a binding for this property
-		if (const FPropertyBindingPath* SourcePath = GetPropertyBindings().GetPropertyBinding(TargetPath))
+		FString BindingName;
+		if (GetBindingDisplayText(PropName, BindingName))
 		{
-			//  Clean up the path to show only the leaf variable name 
-			FString FullPath = SourcePath->ToString();
-
-			int32 LastDotIndex;
-			if (FullPath.FindLastChar('.', LastDotIndex))
-			{
-				// Return the substring after the last dot
-				return FText::FromString(FullPath.RightChop(LastDotIndex + 1));
-			}
-
-			// If no dots found (top-level variable), return the full name
-			return FText::FromString(FullPath);
+			return FText::FromString(BindingName);
 		}
 
 		FNumberFormattingOptions Format;
 		Format.SetMaximumFractionalDigits(2);
-
-		// If not bound, return the formatted literal value
 		return FText::AsNumber(CurrentValue, &Format);
 	};
 

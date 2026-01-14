@@ -37,6 +37,15 @@ public:
 	 * Used by the Editor to display the condition in lists (e.g. "Health > 0").
 	 */
 	virtual FText GetDisplayTitle() const;
+
+	/** 
+	 * Helper to get the display string of a binding for a specific property.
+	 * @param PropertyName The name of the property on this object to check.
+	 * @param OutText The resulting string if a binding exists (e.g., "Health" or "Context.Target.Health").
+	 * @param bChopPrefix If true, removes the path prefix and keeps only the leaf variable name (e.g., "Health").
+	 * @return True if the property is bound, false otherwise.
+	 */
+	bool GetBindingDisplayText(FName PropertyName, FString& OutText, bool bChopPrefix = true) const;
 #endif
 
 	// -------------------------------------------------------------------

@@ -73,6 +73,42 @@ FText UScriptableObject::GetDisplayTitle() const
 {
 	return GetClass()->GetDisplayNameText();
 }
+
+bool UScriptableObject::GetBindingDisplayText(FName PropertyName, FString& OutText, bool bChopPrefix) const
+{
+	FPropertyBindingPath TargetPath;
+	// Set the ID of this object instance so the binding system can find the correct entry
+	TargetPath.SetStructID(GetBindingID());
+	TargetPath.AddPathSegment(PropertyName);
+
+	// Check if there is a binding for this property
+	if (const FPropertyBindingPath* SourcePath = GetPropertyBindings().GetPropertyBinding(TargetPath))
+	{
+		FString FullPath = SourcePath->ToString();
+
+		if (bChopPrefix)
+		{
+			int32 LastDotIndex;
+			if (FullPath.FindLastChar('.', LastDotIndex))
+			{
+				// Return only the substring after the last dot
+				OutText = FullPath.RightChop(LastDotIndex + 1);
+			}
+			else
+			{
+				OutText = FullPath;
+			}
+		}
+		else
+		{
+			OutText = FullPath;
+		}
+
+		return true;
+	}
+
+	return false;
+}
 #endif
 
 UWorld* UScriptableObject::GetWorld_Uncached() const
