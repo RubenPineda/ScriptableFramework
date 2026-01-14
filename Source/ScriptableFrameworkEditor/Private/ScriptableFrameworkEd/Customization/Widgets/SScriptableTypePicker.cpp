@@ -372,7 +372,7 @@ bool SScriptableTypePicker::MatchesCategoryPath(const TArray<FString>& CategoryP
 
 	if (CategoryPath.IsEmpty())
 	{
-		return false;
+		return true;
 	}
 
 	// Always show 'System' category (Special case)
@@ -411,7 +411,7 @@ bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
 
 	if (CategoryName.IsEmpty())
 	{
-		return false;
+		return true;
 	}
 
 	// Split into subcategories and trim
@@ -439,7 +439,7 @@ bool SScriptableTypePicker::MatchesFilter(const FAssetData& AssetData)
 
 	if (CategoryStr.IsEmpty())
 	{
-		return false;
+		return true;
 	}
 
 	// Split into subcategories and trim
