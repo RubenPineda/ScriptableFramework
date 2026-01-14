@@ -173,16 +173,46 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 		}
 		else
 		{
-			// Float <-> Double Conversion
-			if (SourceProp->IsA<FFloatProperty>() && TargetProp->IsA<FDoubleProperty>())
+			// Numeric <-> Numeric Conversion
+			if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
 			{
-				const float SrcVal = CastField<FFloatProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
-				CastField<FDoubleProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (double)SrcVal);
+				const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp);
+				const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp);
+
+				if (SrcNum->IsFloatingPoint())
+				{
+					const double Val = SrcNum->GetFloatingPointPropertyValue(SourceAddr);
+					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, Val);
+					else TgtNum->SetIntPropertyValue(TargetAddr, (int64)Val);
+				}
+				else
+				{
+					const int64 Val = SrcNum->GetSignedIntPropertyValue(SourceAddr);
+					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, (double)Val);
+					else TgtNum->SetIntPropertyValue(TargetAddr, Val);
+				}
 			}
-			else if (SourceProp->IsA<FDoubleProperty>() && TargetProp->IsA<FFloatProperty>())
+			// Bool -> Numeric (True=1, False=0)
+			else if (const FBoolProperty* SrcBool = CastField<FBoolProperty>(SourceProp))
 			{
-				const double SrcVal = CastField<FDoubleProperty>(SourceProp)->GetFloatingPointPropertyValue(SourceAddr);
-				CastField<FFloatProperty>(TargetProp)->SetFloatingPointPropertyValue(TargetAddr, (float)SrcVal);
+				if (const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp))
+				{
+					const bool bVal = SrcBool->GetPropertyValue(SourceAddr);
+					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, bVal ? 1.0 : 0.0);
+					else TgtNum->SetIntPropertyValue(TargetAddr, int64(bVal ? 1 : 0));
+				}
+			}
+			// Numeric -> Bool (0=False, !=0 True)
+			else if (const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp))
+			{
+				if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
+				{
+					bool bResult = false;
+					if (SrcNum->IsFloatingPoint()) bResult = !FMath::IsNearlyZero(SrcNum->GetFloatingPointPropertyValue(SourceAddr));
+					else bResult = (SrcNum->GetSignedIntPropertyValue(SourceAddr) != 0);
+
+					TgtBool->SetPropertyValue(TargetAddr, bResult);
+				}
 			}
 		}
 	}

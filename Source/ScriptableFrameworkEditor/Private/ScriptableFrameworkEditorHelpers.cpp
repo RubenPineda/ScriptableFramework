@@ -136,12 +136,23 @@ namespace ScriptableFrameworkEditor
 			}
 		}
 
-		// 3. Numeric Promotions
-		const bool bSourceIsReal = SourceProp->IsA<FFloatProperty>() || SourceProp->IsA<FDoubleProperty>();
-		const bool bTargetIsReal = TargetProp->IsA<FFloatProperty>() || TargetProp->IsA<FDoubleProperty>();
-		if (bSourceIsReal && bTargetIsReal) return true;
-		if (SourceProp->IsA<FIntProperty>() && bTargetIsReal) return true;
-		if (SourceProp->IsA<FBoolProperty>() && TargetProp->IsA<FNumericProperty>()) return true;
+		// 3. Numeric & Bool Conversions (Bidirectional)
+		const bool bSourceNumeric = SourceProp->IsA<FNumericProperty>();
+		const bool bTargetNumeric = TargetProp->IsA<FNumericProperty>();
+		const bool bSourceBool = SourceProp->IsA<FBoolProperty>();
+		const bool bTargetBool = TargetProp->IsA<FBoolProperty>();
+
+		// Numeric <-> Numeric (Int to Float, Float to Int, Byte to Double, etc.)
+		if (bSourceNumeric && bTargetNumeric)
+		{
+			return true;
+		}
+
+		// Bool <-> Numeric (0/1 Logic)
+		if ((bSourceBool && bTargetNumeric) || (bSourceNumeric && bTargetBool))
+		{
+			return true;
+		}
 
 		return false;
 	}
