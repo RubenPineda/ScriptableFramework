@@ -47,3 +47,34 @@ public:
 protected:
 	virtual bool Evaluate_Implementation() const override;
 };
+
+/** Checks the distance between two Actors. */
+UCLASS(DisplayName = "Distance Check", meta = (ConditionCategory = "System|Spatial"))
+class SCRIPTABLEFRAMEWORK_API UScriptableCondition_Distance : public UScriptableCondition
+{
+	GENERATED_BODY()
+
+public:
+	/** The origin actor. */
+	UPROPERTY(EditAnywhere, Category = "Config")
+	TObjectPtr<AActor> Origin = nullptr;
+
+	/** The target actor. */
+	UPROPERTY(EditAnywhere, Category = "Config")
+	TObjectPtr<AActor> Target = nullptr;
+
+	/** The comparison operator (e.g., <, >, ==). */
+	UPROPERTY(EditAnywhere, Category = "Config")
+	EScriptableComparisonOp Operation = EScriptableComparisonOp::Less;
+
+	/** The distance threshold to compare against. */
+	UPROPERTY(EditAnywhere, Category = "Config")
+	float Distance = 500.0f;
+
+#if WITH_EDITOR
+	virtual FText GetDisplayTitle() const override;
+#endif
+
+protected:
+	virtual bool Evaluate_Implementation() const override;
+};

@@ -109,3 +109,19 @@ bool UScriptableCondition_Probability::Evaluate_Implementation() const
 {
 	return FMath::FRand() < Chance;
 }
+
+#if WITH_EDITOR
+FText UScriptableCondition_IsValid::GetDisplayTitle() const
+{
+	FString Name = TEXT("...");
+	GetBindingDisplayText(GET_MEMBER_NAME_CHECKED(UScriptableCondition_IsValid, TargetObject), Name);
+
+	const FText ValidText = IsNegated() ? INVTEXT("Is Not Valid") : INVTEXT("Is Valid");
+	return FText::Format(INVTEXT("{0} ({1})"), ValidText, FText::FromString(Name));
+}
+#endif
+
+bool UScriptableCondition_IsValid::Evaluate_Implementation() const
+{
+	return IsValid(TargetObject);
+}

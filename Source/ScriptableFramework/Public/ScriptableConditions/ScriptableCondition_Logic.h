@@ -84,3 +84,22 @@ public:
 protected:
 	virtual bool Evaluate_Implementation() const override;
 };
+
+/** Checks if a UObject is valid (not null and not pending kill). */
+UCLASS(DisplayName = "Is Valid", meta = (ConditionCategory = "System|Object"))
+class SCRIPTABLEFRAMEWORK_API UScriptableCondition_IsValid : public UScriptableCondition
+{
+	GENERATED_BODY()
+
+public:
+	/** The object to validate. */
+	UPROPERTY(EditAnywhere, Category = "Config")
+	TObjectPtr<UObject> TargetObject = nullptr;
+
+#if WITH_EDITOR
+	virtual FText GetDisplayTitle() const override;
+#endif
+
+protected:
+	virtual bool Evaluate_Implementation() const override;
+};
