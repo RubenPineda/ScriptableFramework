@@ -51,7 +51,6 @@ public:
 	 */
 	void ResolveBindings(class UScriptableObject* TargetObject);
 
-private:
 	UPROPERTY()
 	TArray<FScriptablePropertyBinding> Bindings;
 

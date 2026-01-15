@@ -29,6 +29,10 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/SecureHash.h"
 
+#include "HAL/PlatformApplicationMisc.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+
 #define LOCTEXT_NAMESPACE "FScriptableObjectCustomization"
 
 // ------------------------------------------------------------------------------------------------
@@ -550,19 +554,46 @@ void FScriptableObjectCustomization::CustomizeHeader(TSharedRef<IPropertyHandle>
 		));
 	}
 
+	// Border to capture mouse clicks on the row (used for right click menu).
 	HeaderRow
 		.NameContent()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Fill)
 		[
-			GetHeaderNameContent().ToSharedRef()
+			SNew(SBorder)
+				.BorderImage(FStyleDefaults::GetNoBrush())
+				.Padding(0)
+				.OnMouseButtonUp(this, &FScriptableObjectCustomization::OnRowMouseUp)
+				[
+					GetHeaderNameContent().ToSharedRef()
+				]
 		]
 		.ValueContent()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Fill)
 		[
-			GetHeaderValueContent().ToSharedRef()
+			SNew(SBorder)
+				.BorderImage(FStyleDefaults::GetNoBrush())
+				.Padding(0)
+				.OnMouseButtonUp(this, &FScriptableObjectCustomization::OnRowMouseUp)
+				[
+					GetHeaderValueContent().ToSharedRef()
+				]
 		]
 		.ExtensionContent()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Fill)
 		[
-			GetHeaderExtensionContent().ToSharedRef()
-		];
+			SNew(SBorder)
+				.BorderImage(FStyleDefaults::GetNoBrush())
+				.Padding(0)
+				.OnMouseButtonUp(this, &FScriptableObjectCustomization::OnRowMouseUp)
+				[
+					GetHeaderExtensionContent().ToSharedRef()
+				]
+		]
+		.CopyAction(FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnCopyNode)))
+		.PasteAction(FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnPasteNode)));
 }
 
 void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandle> InPropertyHandle, IPropertyTypeCustomizationUtils& CustomizationUtils)
@@ -666,25 +697,28 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 	}
 
 	// Picker
-	ExtensionBox->AddSlot()
-		.AutoWidth().VAlign(VAlign_Center)
-		[
-			SNew(SScriptableTypePicker)
-				.HasDownArrow(false)
-				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-				.ToolTipText(LOCTEXT("ChangeType", "Change Object Type"))
-				.BaseClass(GetBaseClass())
-				.ClassCategoryMeta(ClassCategory)
-				.FilterCategoryMeta(PropCategory)
-				.Filter(PropertyHandle->GetMetaData(PropCategory))
-				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
-				.Content()
-				[
-					SNew(SImage)
-						.ColorAndOpacity(FSlateColor::UseForeground())
-						.Image(FAppStyle::Get().GetBrush(ScriptableObj ? "Icons.Refresh" : "Icons.PlusCircle"))
-				]
-		];
+	if (!ScriptableObj)
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(SScriptableTypePicker)
+					.HasDownArrow(false)
+					.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+					.ToolTipText(LOCTEXT("ChangeType", "Change Object Type"))
+					.BaseClass(GetBaseClass())
+					.ClassCategoryMeta(ClassCategory)
+					.FilterCategoryMeta(PropCategory)
+					.Filter(PropertyHandle->GetMetaData(PropCategory))
+					.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
+					.Content()
+					[
+						SNew(SImage)
+							.ColorAndOpacity(FSlateColor::UseForeground())
+							.Image(FAppStyle::Get().GetBrush("Icons.PlusCircle"))
+					]
+			];
+	}
 
 	// Use Selected
 	ExtensionBox->AddSlot()
@@ -693,16 +727,9 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 			PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
 		];
 
+	// Browse / Edit
 	if (ScriptableObj)
 	{
-		// Clear
-		ExtensionBox->AddSlot()
-			.AutoWidth().VAlign(VAlign_Center)
-			[
-				PropertyCustomizationHelpers::MakeClearButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnClear))
-			];
-
-		// Browse / Edit
 		const bool bIsBlueprint = ScriptableObj->GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint);
 		const bool bIsWrapper = IsWrapperClass(ScriptableObj->GetClass());
 
@@ -724,15 +751,25 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 		}
 	}
 
-	// Delete (if in Array)
-	if (PropertyHandle->GetIndexInArray() != INDEX_NONE)
-	{
-		ExtensionBox->AddSlot()
-			.AutoWidth().Padding(2, 0).VAlign(VAlign_Center)
-			[
-				PropertyCustomizationHelpers::MakeDeleteButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnDelete), LOCTEXT("Delete", "Remove from list"))
-			];
-	}
+	// Options
+	ExtensionBox->AddSlot()
+		.AutoWidth()
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(4.f, 0.f, 0.f, 0.f))
+		[
+			SNew(SComboButton)
+				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+				.OnGetMenuContent(this, &FScriptableObjectCustomization::GenerateOptionsMenu)
+				.ToolTipText(LOCTEXT("OptionsTooltip", "Options")) 
+				.HasDownArrow(false)
+				.ContentPadding(FMargin(4.f, 2.f))
+				.ButtonContent()
+				[
+					SNew(SImage)
+						.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+						.ColorAndOpacity(FSlateColor::UseForeground())
+				]
+		];
 
 	return ExtensionBox;
 }
@@ -882,6 +919,338 @@ void FScriptableObjectCustomization::OnResetToDefault(TSharedPtr<IPropertyHandle
 	{
 		// Re-instantiate the same class (reset to defaults)
 		InstantiateClass(Obj->GetClass());
+	}
+}
+
+FReply FScriptableObjectCustomization::OnRowMouseUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	if (MouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		// Open the existing context menu at the mouse cursor position
+		FWidgetPath WidgetPath = MouseEvent.GetEventPath() != nullptr ? *MouseEvent.GetEventPath() : FWidgetPath();
+
+		FSlateApplication::Get().PushMenu(
+			FSlateApplication::Get().GetInteractiveTopLevelWindows()[0],
+			WidgetPath,
+			GenerateOptionsMenu(),
+			MouseEvent.GetScreenSpacePosition(),
+			FPopupTransitionEffect(FPopupTransitionEffect::ContextMenu)
+		);
+
+		return FReply::Handled();
+	}
+
+	return FReply::Unhandled();
+}
+
+TSharedRef<SWidget> FScriptableObjectCustomization::GenerateOptionsMenu()
+{
+	FMenuBuilder MenuBuilder(/*ShouldCloseWindowAfterMenuSelection*/true, /*CommandList*/nullptr);
+
+	UScriptableObject* ScriptableObj = ScriptableObject.Get();
+
+	if (ScriptableObj)
+	{
+		MenuBuilder.BeginSection(FName("Type"), LOCTEXT("Type", "Type"));
+
+		// Picker
+		MenuBuilder.AddSubMenu(
+			LOCTEXT("ReplaceWith", "Replace With"),
+			LOCTEXT("ReplaceTooltip", "Replace current object with a new instance of another type"),
+			FNewMenuDelegate::CreateSP(this, &FScriptableObjectCustomization::GeneratePickerMenu));
+
+		MenuBuilder.EndSection();
+	}
+
+	MenuBuilder.BeginSection(FName("Edit"), LOCTEXT("Edit", "Edit"));
+
+	// Copy
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("CopyItem", "Copy"),
+		LOCTEXT("CopyItemTooltip", "Copy this item"),
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "GenericCommands.Copy"),
+		FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnCopyNode))
+		);
+
+	// Paste
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("PasteItem", "Paste"),
+		LOCTEXT("PasteItemTooltip", "Paste into this item"),
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "GenericCommands.Paste"),
+		FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnPasteNode))
+		);
+
+	// Duplicate
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("DuplicateItem", "Duplicate"),
+		LOCTEXT("DuplicateItemTooltip", "Duplicate this item"),
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "GenericCommands.Duplicate"),
+		FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnDuplicateNode))
+	);
+
+	// Delete
+	if (PropertyHandle->GetIndexInArray() != INDEX_NONE)
+	{
+		MenuBuilder.AddMenuEntry(
+			LOCTEXT("Delete", "Remove"),
+			LOCTEXT("DeleteTooltip", "Remove this item from the list"),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "GenericCommands.Delete"),
+			FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnDelete))
+		);
+	}
+
+	// Clear
+	if (ScriptableObj)
+	{
+		MenuBuilder.AddMenuEntry(
+			LOCTEXT("Clear", "Clear"),
+			LOCTEXT("ClearTooltip", "Reset this property to None"),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.X"),
+			FUIAction(FExecuteAction::CreateSP(this, &FScriptableObjectCustomization::OnClear))
+		);
+	}
+
+	MenuBuilder.EndSection();
+
+	return MenuBuilder.MakeWidget();
+}
+
+void FScriptableObjectCustomization::GeneratePickerMenu(class FMenuBuilder& InMenuBuilder)
+{
+	FName ClassCategory; FName PropCategory;
+	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
+
+	TSharedRef<SWidget> Widget = SNew(SBox)
+		.Padding(2)
+		[
+			SNew(SScriptableTypeSelector)
+				.BaseClass(GetBaseClass())
+				.ClassCategoryMeta(ClassCategory)
+				.FilterCategoryMeta(PropCategory)
+				.OnNodeTypePicked(SScriptableTypePicker::FOnNodeTypePicked::CreateSP(this, &FScriptableObjectCustomization::OnTypePicked))
+		];
+
+	InMenuBuilder.AddWidget(Widget, FText::GetEmpty(), true);
+}
+
+void FScriptableObjectCustomization::OnCopyNode()
+{
+	UObject* Obj = nullptr;
+	PropertyHandle->GetValue(Obj);
+
+	if (Obj)
+	{
+		// Manually build the data string: (PropA=ValueA, PropB=ValueB)
+		FString DataString;
+		FStringOutputDevice Ar;
+		Ar.Log(TEXT("(")); // Start
+
+		const UObject* CDO = Obj->GetClass()->GetDefaultObject();
+		bool bFirst = true;
+
+		// Iterate over all class properties (including parents)
+		for (TFieldIterator<FProperty> It(Obj->GetClass()); It; ++It)
+		{
+			FProperty* Prop = *It;
+
+			// Ignore properties that shouldn't be copied (Transient, EditorOnly, etc.)
+			if (Prop->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_Deprecated))
+			{
+				continue;
+			}
+
+			// Get pointers to current and default values (for delta export)
+			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Obj);
+			const void* DefaultValuePtr = Prop->ContainerPtrToValuePtr<void>(CDO);
+
+			FString PropValue;
+			// Convert property value to text
+			if (Prop->ExportText_Direct(PropValue, ValuePtr, DefaultValuePtr, Obj, PPF_Copy | PPF_SimpleObjectText))
+			{
+				if (!PropValue.IsEmpty())
+				{
+					if (!bFirst) Ar.Log(TEXT(","));
+					// Format: PropName=Value
+					Ar.Logf(TEXT("%s=%s"), *Prop->GetName(), *PropValue);
+					bFirst = false;
+				}
+			}
+		}
+		Ar.Log(TEXT(")")); // End
+		DataString = Ar;
+
+		// Package with Class path
+		// Final format: ScriptableObject Class=/Path/To.Class Data=(...)
+		FString CopyStr = FString::Printf(TEXT("ScriptableObject Class=%s Data=%s"), *Obj->GetClass()->GetPathName(), *DataString);
+		FPlatformApplicationMisc::ClipboardCopy(*CopyStr);
+	}
+}
+
+void FScriptableObjectCustomization::OnPasteNode()
+{
+	FString PastedText;
+	FPlatformApplicationMisc::ClipboardPaste(PastedText);
+
+	if (PastedText.IsEmpty() || !PastedText.StartsWith("ScriptableObject")) return;
+
+	// Extract Class
+	FString ClassPath;
+	FParse::Value(*PastedText, TEXT("Class="), ClassPath);
+
+	// Resolve Class
+	UClass* ResolvedClass = LoadObject<UClass>(nullptr, *ClassPath);
+	if (!ResolvedClass) return;
+
+	FString DataString;
+	const FString DataKey = TEXT("Data=");
+	int32 DataIndex = PastedText.Find(DataKey);
+	if (DataIndex != INDEX_NONE)
+	{
+		DataString = PastedText.Mid(DataIndex + DataKey.Len()).TrimStartAndEnd();
+	}
+
+	// Type validation
+	UClass* BaseClass = GetBaseClass();
+	if (BaseClass && !ResolvedClass->IsChildOf(BaseClass))
+	{
+		FNotificationInfo Info(FText::Format(LOCTEXT("PasteTypeMismatch", "Cannot paste '{0}' here. Expected '{1}'."), ResolvedClass->GetDisplayNameText(), BaseClass->GetDisplayNameText()));
+		Info.ExpireDuration = 3.0f;
+		Info.Image = FAppStyle::GetBrush("Icons.Error");
+		FSlateNotificationManager::Get().AddNotification(Info);
+		return;
+	}
+
+	// Instantiate New Object
+	TArray<UObject*> OuterObjects;
+	PropertyHandle->GetOuterObjects(OuterObjects);
+	if (OuterObjects.IsEmpty()) return;
+
+	UObject* NewInstance = NewObject<UObject>(OuterObjects[0], ResolvedClass, NAME_None, RF_Transactional | RF_Public);
+
+	// Manual Import
+	if (!DataString.IsEmpty() && NewInstance)
+	{
+		// Iterate over new object properties
+		for (TFieldIterator<FProperty> It(ResolvedClass); It; ++It)
+		{
+			FProperty* Prop = *It;
+			if (Prop->HasAnyPropertyFlags(CPF_EditorOnly | CPF_Deprecated)) continue;
+
+			FString ValStr;
+			FString SearchToken = Prop->GetName() + TEXT("=");
+			int32 TokenIdx = DataString.Find(SearchToken);
+
+			if (TokenIdx != INDEX_NONE)
+			{
+				// The value starts right after "PropName="
+				int32 ValueStartIdx = TokenIdx + SearchToken.Len();
+				int32 Cursor = ValueStartIdx;
+				int32 ParenCount = 0;
+				bool bInsideQuote = false;
+				int32 DataLen = DataString.Len();
+
+				// Scan forward to find the end of this value
+				while (Cursor < DataLen)
+				{
+					TCHAR Char = DataString[Cursor];
+
+					// Toggle quote state (ignoring escaped quotes)
+					if (Char == '"' && (Cursor == 0 || DataString[Cursor - 1] != '\\'))
+					{
+						bInsideQuote = !bInsideQuote;
+					}
+
+					if (!bInsideQuote)
+					{
+						if (Char == '(')
+						{
+							ParenCount++;
+						}
+						else if (Char == ')')
+						{
+							// If ParenCount is already 0 and we hit ')', it means we reached 
+							// the end of the entire DataString container (e.g., "...LastProp=Val)")
+							if (ParenCount == 0)
+							{
+								break;
+							}
+							ParenCount--;
+						}
+						else if (Char == ',' && ParenCount == 0)
+						{
+							// We found a comma at the root level, meaning this property value ended
+							break;
+						}
+					}
+
+					Cursor++;
+				}
+
+				// Extract the exact substring for this property
+				ValStr = DataString.Mid(ValueStartIdx, Cursor - ValueStartIdx);
+			}
+
+			if (!ValStr.IsEmpty())
+			{
+				void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NewInstance);
+
+				// Apply text to memory value
+				Prop->ImportText_Direct(*ValStr, ValuePtr, NewInstance, PPF_Copy | PPF_SimpleObjectText);
+			}
+		}
+
+		// The bindings were pasted with the OLD object's StructID. 
+		// We must update the TargetPath of all bindings to match the NEW object's ID.
+		if (UScriptableObject* ScriptableObj = Cast<UScriptableObject>(NewInstance))
+		{
+			const FGuid NewGuid = ScriptableObj->GetBindingID();
+			FScriptablePropertyBindings& Bindings = ScriptableObj->GetPropertyBindings();
+
+			// Iterate over all bindings and patch the TargetPath to point to this new instance
+			for (FScriptablePropertyBinding& Binding : Bindings.Bindings)
+			{
+				Binding.TargetPath.SetStructID(NewGuid);
+			}
+		}
+
+		// Access raw data (memory pointers)
+		TArray<void*> RawData;
+		PropertyHandle->AccessRawData(RawData);
+
+		// Notify change (vital for Undo/Redo)
+		FScopedTransaction Transaction(LOCTEXT("PasteNode", "Paste Scriptable Object"));
+		PropertyHandle->NotifyPreChange();
+
+		// Direct Injection
+		// Assume RawData has the same num as selected objects (usually 1)
+		for (void* DataPtr : RawData)
+		{
+			if (DataPtr)
+			{
+				// FObjectProperty stores a UObject*, so cast void* to UObject**
+				UObject** ObjectPtr = static_cast<UObject**>(DataPtr);
+				*ObjectPtr = NewInstance;
+			}
+		}
+
+		PropertyHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+
+		if (PropertyUtilities)
+		{
+			PropertyUtilities->ForceRefresh();
+		}
+	}
+}
+
+void FScriptableObjectCustomization::OnDuplicateNode() const
+{
+	const int32 Index = PropertyHandle->GetArrayIndex();
+	if (const TSharedPtr<IPropertyHandle> ParentHandle = PropertyHandle->GetParentHandle())
+	{
+		if (const TSharedPtr<IPropertyHandleArray> ArrayHandle = ParentHandle->AsArray())
+		{
+			ArrayHandle->DuplicateItem(Index);
+		}
 	}
 }
 

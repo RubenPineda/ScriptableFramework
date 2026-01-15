@@ -75,7 +75,15 @@ protected:
 	bool IsResetToDefaultVisible(TSharedPtr<IPropertyHandle> Handle) const;
 	void OnResetToDefault(TSharedPtr<IPropertyHandle> Handle);
 
+	/** Handler for right-clicking on the row to open the context menu */
+	FReply OnRowMouseUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent);
+
 	/** Button Callbacks. */
+	TSharedRef<SWidget> GenerateOptionsMenu();
+	void GeneratePickerMenu(class FMenuBuilder& InMenuBuilder);
+	void OnCopyNode();
+	void OnPasteNode();
+	void OnDuplicateNode() const;
 	void OnDelete();
 	void OnClear();
 	void OnBrowse();

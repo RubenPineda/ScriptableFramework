@@ -30,7 +30,8 @@ public class ScriptableFrameworkEditor : ModuleRules
                 "InputCore",
                 "Projects",
                 "BlueprintGraph",
-                "KismetWidgets"
+                "KismetWidgets",
+                "ApplicationCore"
             }
             );
     }
