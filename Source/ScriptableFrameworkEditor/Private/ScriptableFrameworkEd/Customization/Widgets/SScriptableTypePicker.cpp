@@ -1,4 +1,4 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #include "SScriptableTypePicker.h"
 
@@ -18,30 +18,17 @@
 
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
-TMap<FObjectKey, SScriptableTypePicker::FCategoryExpansionState> SScriptableTypePicker::CategoryExpansionStates;
+// --------------------------------------------------------------------------------------
+// SScriptableTypeSelector Implementation
+// --------------------------------------------------------------------------------------
 
-SScriptableTypePicker::SScriptableTypePicker()
+TMap<FObjectKey, SScriptableTypeSelector::FCategoryExpansionState> SScriptableTypeSelector::CategoryExpansionStates;
+
+void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 {
-}
-
-SScriptableTypePicker::~SScriptableTypePicker()
-{
-	
-}
-
-void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& InArgs)
-{
-	check(InArgs._ComboBoxStyle);
-
-	ItemStyle = InArgs._ItemStyle;
-	MenuRowPadding = InArgs._ComboBoxStyle->MenuRowPadding;
-
-	TAttribute<EVisibility> SearchVisibility = InArgs._SearchVisibility;
-	const EVisibility CurrentSearchVisibility = SearchVisibility.Get();
-
-	// Work out which values we should use based on whether we were given an override, or should use the style's version
-	const FComboButtonStyle& OurComboButtonStyle = InArgs._ComboBoxStyle->ComboButtonStyle;
-	const FButtonStyle* const OurButtonStyle = InArgs._ButtonStyle ? InArgs._ButtonStyle : &OurComboButtonStyle.ButtonStyle;
+	// Set default style if none provided (copied from ComboBox.Row default)
+	ItemStyle = InArgs._ItemStyle ? InArgs._ItemStyle : &FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("ComboBox.Row");
+	MenuRowPadding = FMargin(2.0f);
 
 	OnNodeTypePicked = InArgs._OnNodeTypePicked;
 	CategoryKey = FObjectKey(InArgs._BaseScriptStruct);
@@ -72,11 +59,11 @@ void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& I
 	NodeTypeTree = SNew(STreeView<TSharedPtr<FScriptableTypeItem>>)
 		.SelectionMode(ESelectionMode::Single)
 		.TreeItemsSource(&FilteredRootNode->Children)
-		.OnGenerateRow(this, &SScriptableTypePicker::GenerateNodeTypeRow)
-		.OnGetChildren(this, &SScriptableTypePicker::GetNodeTypeChildren)
-		.OnSelectionChanged(this, &SScriptableTypePicker::OnNodeTypeSelected)
-		.OnExpansionChanged(this, &SScriptableTypePicker::OnNodeTypeExpansionChanged);
-	
+		.OnGenerateRow(this, &SScriptableTypeSelector::GenerateNodeTypeRow)
+		.OnGetChildren(this, &SScriptableTypeSelector::GetNodeTypeChildren)
+		.OnSelectionChanged(this, &SScriptableTypeSelector::OnNodeTypeSelected)
+		.OnExpansionChanged(this, &SScriptableTypeSelector::OnNodeTypeExpansionChanged);
+
 	// Restore category expansion state from previous use.
 	RestoreExpansionState();
 
@@ -91,105 +78,79 @@ void SScriptableTypePicker::Construct(const SScriptableTypePicker::FArguments& I
 			NodeTypeTree->SetItemExpansion(Item, true);
 		}
 		bIsRestoringExpansion = false;
-		
+
 		NodeTypeTree->SetItemSelection(Path.Last(), true);
 		NodeTypeTree->RequestScrollIntoView(Path.Last());
 	}
 
-	TSharedRef<SWidget> ComboBoxMenuContent =
-		SNew(SBox)
-		.MinDesiredWidth(InArgs._MinListWidth)
-		.MaxDesiredHeight(InArgs._MaxListHeight)
+	ChildSlot
 		[
-			SNew(SVerticalBox)
-
-			+ SVerticalBox::Slot()
-			.HAlign(HAlign_Fill)
-			.VAlign(VAlign_Top)
-			.Padding(4, 2, 4, 2)
-			.AutoHeight()
-			[
-				SNew(SHorizontalBox)
-
-				+ SHorizontalBox::Slot()
-				.HAlign(HAlign_Left)
-				.VAlign(VAlign_Center)
-				.AutoWidth()
+			SNew(SBox)
+				.MinDesiredWidth(InArgs._MinListWidth)
+				.MaxDesiredHeight(InArgs._MaxListHeight)
 				[
-					SNew(SButton)
-					.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
-					.ToolTipText_Lambda([]() -> FText
-					{
-						return LOCTEXT("CollapseAllCategories", "Collapse All");
-					})
-					.OnClicked(this, &SScriptableTypePicker::OnCollapseAllButtonClicked)
-					[
-						SNew(SImage)
-						.Image(FAppStyle::GetBrush("SpinBox.Arrows"))
-						.ColorAndOpacity(FSlateColor::UseForeground())
-					]
-				]
+					SNew(SVerticalBox)
 
-				+ SHorizontalBox::Slot()
-				.HAlign(HAlign_Fill)
-				.VAlign(VAlign_Top)
-				.AutoWidth()
-				[
-					SAssignNew(SearchBox, SSearchBox)
-						.OnTextChanged(this, &SScriptableTypePicker::OnSearchBoxTextChanged)
-						.Visibility(SearchVisibility)
-				]
-			]
+						+ SVerticalBox::Slot()
+						.HAlign(HAlign_Fill)
+						.VAlign(VAlign_Top)
+						.Padding(4, 2, 4, 2)
+						.AutoHeight()
+						[
+							SNew(SHorizontalBox)
 
-			+ SVerticalBox::Slot()
-			[
-				NodeTypeTree.ToSharedRef()
-			]
+								+ SHorizontalBox::Slot()
+								.HAlign(HAlign_Left)
+								.VAlign(VAlign_Center)
+								.AutoWidth()
+								[
+									SNew(SButton)
+										.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
+										.ToolTipText_Lambda([]() -> FText
+									{
+										return LOCTEXT("CollapseAllCategories", "Collapse All");
+									})
+										.OnClicked(this, &SScriptableTypeSelector::OnCollapseAllButtonClicked)
+										[
+											SNew(SImage)
+												.Image(FAppStyle::GetBrush("SpinBox.Arrows"))
+												.ColorAndOpacity(FSlateColor::UseForeground())
+										]
+								]
+
+							+ SHorizontalBox::Slot()
+								.HAlign(HAlign_Fill)
+								.VAlign(VAlign_Top)
+								.AutoWidth()
+								[
+									SAssignNew(SearchBox, SSearchBox)
+										.OnTextChanged(this, &SScriptableTypeSelector::OnSearchBoxTextChanged)
+										.Visibility(InArgs._SearchVisibility)
+								]
+						]
+
+					+ SVerticalBox::Slot()
+						[
+							NodeTypeTree.ToSharedRef()
+						]
+				]
 		];
-
-	// Set up content
-	TSharedPtr<SWidget> ButtonContent = InArgs._Content.Widget;
-	if (InArgs._Content.Widget == SNullWidget::NullWidget)
-	{
-		SAssignNew(ButtonContent, STextBlock)
-			.Text(NSLOCTEXT("SScriptableTypePicker", "ContentWarning", "No Content Provided"))
-			.ColorAndOpacity(FLinearColor::Red);
-	}
-
-	SComboButton::Construct(SComboButton::FArguments()
-		.ComboButtonStyle(&OurComboButtonStyle)
-		.ButtonStyle(OurButtonStyle)
-		.Method(InArgs._Method)
-		.ButtonContent()
-		[
-			ButtonContent.ToSharedRef()
-		]
-		.MenuContent()
-		[
-			ComboBoxMenuContent
-		]
-		.HasDownArrow(InArgs._HasDownArrow)
-		.ContentPadding(InArgs._ContentPadding)
-		.ForegroundColor(InArgs._ForegroundColor)
-		.IsFocusable(true)
-	);
-
-	if (CurrentSearchVisibility == EVisibility::Visible)
-	{
-		SetMenuContentWidgetToFocus(SearchBox);
-	}
-	else
-	{
-		SetMenuContentWidgetToFocus(NodeTypeTree);
-	}
 }
 
-TSharedPtr<SWidget> SScriptableTypePicker::GetWidgetToFocusOnOpen()
+TSharedPtr<SWidget> SScriptableTypeSelector::GetWidgetToFocusOnOpen()
 {
 	return SearchBox;
 }
 
-void SScriptableTypePicker::SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items)
+void SScriptableTypeSelector::ClearSelection()
+{
+	if (NodeTypeTree.IsValid())
+	{
+		NodeTypeTree->ClearSelection();
+	}
+}
+
+void SScriptableTypeSelector::SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items)
 {
 	Items.Sort([](const TSharedPtr<FScriptableTypeItem>& A, const TSharedPtr<FScriptableTypeItem>& B)
 	{
@@ -226,7 +187,7 @@ void SScriptableTypePicker::SortNodeTypesFunctionItemsRecursive(TArray<TSharedPt
 	}
 }
 
-TSharedPtr<SScriptableTypePicker::FScriptableTypeItem> SScriptableTypePicker::FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath)
+TSharedPtr<SScriptableTypeSelector::FScriptableTypeItem> SScriptableTypeSelector::FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath)
 {
 	check(CategoryPath.Num() > 0);
 
@@ -253,7 +214,7 @@ TSharedPtr<SScriptableTypePicker::FScriptableTypeItem> SScriptableTypePicker::Fi
 	return NewItem;
 }
 
-FText SScriptableTypePicker::GetNodeCategory(const UStruct* Struct)
+FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct)
 {
 	if (const UClass* Class = Cast<const UClass>(Struct))
 	{
@@ -265,7 +226,7 @@ FText SScriptableTypePicker::GetNodeCategory(const UStruct* Struct)
 	return Struct->GetMetaDataText(ClassCategoryMeta);
 }
 
-void SScriptableTypePicker::AddNode(const UStruct* Struct)
+void SScriptableTypeSelector::AddNode(const UStruct* Struct)
 {
 	if (!Struct || !RootNode.IsValid())
 	{
@@ -303,7 +264,7 @@ void SScriptableTypePicker::AddNode(const UStruct* Struct)
 	Item->IconColor = FLinearColor::Gray;
 }
 
-void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
+void SScriptableTypeSelector::AddNode(const FAssetData& AssetData)
 {
 	if (!RootNode.IsValid())
 	{
@@ -363,7 +324,7 @@ void SScriptableTypePicker::AddNode(const FAssetData& AssetData)
 	}
 }
 
-bool SScriptableTypePicker::MatchesCategoryPath(const TArray<FString>& CategoryPath)
+bool SScriptableTypeSelector::MatchesCategoryPath(const TArray<FString>& CategoryPath)
 {
 	if (FilterPaths.IsEmpty())
 	{
@@ -400,7 +361,7 @@ bool SScriptableTypePicker::MatchesCategoryPath(const TArray<FString>& CategoryP
 	});
 }
 
-bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
+bool SScriptableTypeSelector::MatchesFilter(const UStruct* Struct)
 {
 	if (!Struct || !RootNode.IsValid())
 	{
@@ -425,7 +386,7 @@ bool SScriptableTypePicker::MatchesFilter(const UStruct* Struct)
 	return MatchesCategoryPath(CategoryPath);
 }
 
-bool SScriptableTypePicker::MatchesFilter(const FAssetData& AssetData)
+bool SScriptableTypeSelector::MatchesFilter(const FAssetData& AssetData)
 {
 	if (!RootNode.IsValid())
 	{
@@ -453,7 +414,7 @@ bool SScriptableTypePicker::MatchesFilter(const FAssetData& AssetData)
 	return MatchesCategoryPath(CategoryPath);
 }
 
-void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass)
+void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass)
 {
 	// Get all usable types from the class cache.
 	FScriptableFrameworkEditorModule& EditorModule = FModuleManager::GetModuleChecked<FScriptableFrameworkEditorModule>(TEXT("ScriptableFrameworkEditor"));
@@ -554,7 +515,7 @@ void SScriptableTypePicker::CacheTypes(const UScriptStruct* BaseScriptStruct, co
 	FilteredRootNode = RootNode;
 }
 
-TSharedRef<ITableRow> SScriptableTypePicker::GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
+TSharedRef<ITableRow> SScriptableTypeSelector::GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
 	FText DisplayName;
 	if (Item->IsCategory())
@@ -569,7 +530,7 @@ TSharedRef<ITableRow> SScriptableTypePicker::GenerateNodeTypeRow(TSharedPtr<FScr
 	{
 		DisplayName = Item->Struct ? Item->Struct->GetDisplayNameText() : LOCTEXT("None", "None");
 	}
-	
+
 	FText Tooltip = Item->Struct ? Item->Struct->GetMetaDataText("Tooltip") : FText::GetEmpty();
 	if (Tooltip.IsEmpty())
 	{
@@ -608,34 +569,34 @@ TSharedRef<ITableRow> SScriptableTypePicker::GenerateNodeTypeRow(TSharedPtr<FScr
 		.Padding(MenuRowPadding);
 	Row->SetContent(
 		SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot()
-			.HAlign(HAlign_Left)
-			.VAlign(VAlign_Center)
-			.Padding(0, 2.0f, 4.0f, 2.0f)
-			.AutoWidth()
-			[
-				SNew(SImage)
+		+ SHorizontalBox::Slot()
+		.HAlign(HAlign_Left)
+		.VAlign(VAlign_Center)
+		.Padding(0, 2.0f, 4.0f, 2.0f)
+		.AutoWidth()
+		[
+			SNew(SImage)
 				.Visibility(Icon ? EVisibility::Visible : EVisibility::Collapsed)
 				.ColorAndOpacity(IconColor)
 				.DesiredSizeOverride(FVector2D(16.0f, 16.0f))
 				.Image(Icon)
-			]
-			+ SHorizontalBox::Slot()
-			.HAlign(HAlign_Fill)
-			.VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
+		]
+	+ SHorizontalBox::Slot()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Center)
+		[
+			SNew(STextBlock)
 				.Font(Item->IsCategory() ? FAppStyle::Get().GetFontStyle("BoldFont") : FAppStyle::Get().GetFontStyle("NormalText"))
 				.Text(DisplayName)
 				.ToolTipText(Tooltip)
 				.HighlightText_Lambda([this]() { return SearchBox.IsValid() ? SearchBox->GetText() : FText::GetEmpty(); })
-			]
+		]
 		);
-	
+
 	return Row;
 }
 
-void SScriptableTypePicker::GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const
+void SScriptableTypeSelector::GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const
 {
 	if (Item.IsValid())
 	{
@@ -643,7 +604,7 @@ void SScriptableTypePicker::GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> 
 	}
 }
 
-void SScriptableTypePicker::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type Type)
+void SScriptableTypeSelector::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type Type)
 {
 	// Skip selection set via code, or if Selected Item is invalid
 	if (Type == ESelectInfo::Direct || !SelectedItem.IsValid())
@@ -657,7 +618,7 @@ void SScriptableTypePicker::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> S
 	}
 }
 
-void SScriptableTypePicker::OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTypeItem> ExpandedItem, bool bInExpanded)
+void SScriptableTypeSelector::OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTypeItem> ExpandedItem, bool bInExpanded)
 {
 	// Do not save expansion state we're restoring expansion state, or when showing filtered results. 
 	if (bIsRestoringExpansion || FilteredRootNode != RootNode)
@@ -680,19 +641,19 @@ void SScriptableTypePicker::OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTyp
 	}
 }
 
-void SScriptableTypePicker::OnSearchBoxTextChanged(const FText& NewText)
+void SScriptableTypeSelector::OnSearchBoxTextChanged(const FText& NewText)
 {
 	if (!NodeTypeTree.IsValid())
 	{
 		return;
 	}
-	
+
 	FilteredRootNode.Reset();
 
 	TArray<FString> FilterStrings;
 	NewText.ToString().ParseIntoArrayWS(FilterStrings);
 	FilterStrings.RemoveAll([](const FString& String) { return String.IsEmpty(); });
-	
+
 	if (FilterStrings.IsEmpty())
 	{
 		// Show all when there's no filter string.
@@ -711,7 +672,7 @@ void SScriptableTypePicker::OnSearchBoxTextChanged(const FText& NewText)
 	NodeTypeTree->RequestTreeRefresh();
 }
 
-int32 SScriptableTypePicker::FilterNodeTypesChildren(const TArray<FString>& FilterStrings, const bool bParentMatches, const TArray<TSharedPtr<FScriptableTypeItem>>& SourceArray, TArray<TSharedPtr<FScriptableTypeItem>>& OutDestArray)
+int32 SScriptableTypeSelector::FilterNodeTypesChildren(const TArray<FString>& FilterStrings, const bool bParentMatches, const TArray<TSharedPtr<FScriptableTypeItem>>& SourceArray, TArray<TSharedPtr<FScriptableTypeItem>>& OutDestArray)
 {
 	int32 NumFound = 0;
 
@@ -749,7 +710,7 @@ int32 SScriptableTypePicker::FilterNodeTypesChildren(const TArray<FString>& Filt
 		{
 			TSharedPtr<FScriptableTypeItem>& NewItem = OutDestArray.Add_GetRef(MakeShared<FScriptableTypeItem>());
 			NewItem->CategoryPath = SourceItem->CategoryPath;
-			NewItem->Struct = SourceItem->Struct; 
+			NewItem->Struct = SourceItem->Struct;
 			NewItem->Children = FilteredChildren;
 
 			NumFound += NumChildren;
@@ -759,7 +720,7 @@ int32 SScriptableTypePicker::FilterNodeTypesChildren(const TArray<FString>& Filt
 	return NumFound;
 }
 
-TArray<TSharedPtr<SScriptableTypePicker::FScriptableTypeItem>> SScriptableTypePicker::GetPathToItemStruct(const UStruct* Struct) const
+TArray<TSharedPtr<SScriptableTypeSelector::FScriptableTypeItem>> SScriptableTypeSelector::GetPathToItemStruct(const UStruct* Struct) const
 {
 	TArray<TSharedPtr<FScriptableTypeItem>> Path;
 
@@ -777,11 +738,11 @@ TArray<TSharedPtr<SScriptableTypePicker::FScriptableTypeItem>> SScriptableTypePi
 			{
 				const FString Trimmed = SubCategory.TrimStartAndEnd();
 
-				TSharedPtr<FScriptableTypeItem>* FoundItem = 
+				TSharedPtr<FScriptableTypeItem>* FoundItem =
 					CurrentParent->Children.FindByPredicate([&Trimmed](const TSharedPtr<FScriptableTypeItem>& Item)
-					{
-						return Item->GetCategoryName() == Trimmed;
-					});
+				{
+					return Item->GetCategoryName() == Trimmed;
+				});
 
 				if (FoundItem != nullptr)
 				{
@@ -792,11 +753,11 @@ TArray<TSharedPtr<SScriptableTypePicker::FScriptableTypeItem>> SScriptableTypePi
 		}
 	}
 
-	const TSharedPtr<FScriptableTypeItem>* FoundItem = 
+	const TSharedPtr<FScriptableTypeItem>* FoundItem =
 		CurrentParent->Children.FindByPredicate([Struct](const TSharedPtr<FScriptableTypeItem>& Item)
-		{
-			return Item->Struct == Struct;
-		});
+	{
+		return Item->Struct == Struct;
+	});
 
 	if (FoundItem != nullptr)
 	{
@@ -806,13 +767,13 @@ TArray<TSharedPtr<SScriptableTypePicker::FScriptableTypeItem>> SScriptableTypePi
 	return Path;
 }
 
-FReply SScriptableTypePicker::OnCollapseAllButtonClicked()
+FReply SScriptableTypeSelector::OnCollapseAllButtonClicked()
 {
 	CollapseAll();
 	return FReply::Handled();;
 }
 
-void SScriptableTypePicker::ExpandAll(const TArray<TSharedPtr<FScriptableTypeItem>>& Items)
+void SScriptableTypeSelector::ExpandAll(const TArray<TSharedPtr<FScriptableTypeItem>>& Items)
 {
 	for (const TSharedPtr<FScriptableTypeItem>& Item : Items)
 	{
@@ -821,7 +782,7 @@ void SScriptableTypePicker::ExpandAll(const TArray<TSharedPtr<FScriptableTypeIte
 	}
 }
 
-void SScriptableTypePicker::CollapseAll()
+void SScriptableTypeSelector::CollapseAll()
 {
 	FCategoryExpansionState& ExpansionState = CategoryExpansionStates.FindOrAdd(CategoryKey);
 
@@ -834,7 +795,7 @@ void SScriptableTypePicker::CollapseAll()
 	RestoreExpansionState();
 }
 
-void SScriptableTypePicker::RestoreExpansionState()
+void SScriptableTypeSelector::RestoreExpansionState()
 {
 	FCategoryExpansionState& ExpansionState = CategoryExpansionStates.FindOrAdd(CategoryKey);
 
@@ -848,11 +809,11 @@ void SScriptableTypePicker::RestoreExpansionState()
 
 		for (const FString& SubCategory : CategoryPath)
 		{
-			TSharedPtr<FScriptableTypeItem>* FoundItem = 
+			TSharedPtr<FScriptableTypeItem>* FoundItem =
 				CurrentParent->Children.FindByPredicate([&SubCategory](const TSharedPtr<FScriptableTypeItem>& Item)
-				{
-					return Item->GetCategoryName() == SubCategory;
-				});
+			{
+				return Item->GetCategoryName() == SubCategory;
+			});
 
 			if (FoundItem != nullptr)
 			{
@@ -873,6 +834,76 @@ void SScriptableTypePicker::RestoreExpansionState()
 		}
 
 		bIsRestoringExpansion = false;
+	}
+}
+
+
+// --------------------------------------------------------------------------------------
+// SScriptableTypePicker Implementation (Facade)
+// --------------------------------------------------------------------------------------
+
+SScriptableTypePicker::SScriptableTypePicker()
+{
+}
+
+SScriptableTypePicker::~SScriptableTypePicker()
+{
+
+}
+
+void SScriptableTypePicker::Construct(const FArguments& InArgs)
+{
+	check(InArgs._ComboBoxStyle);
+
+	// Setup Button Content
+	TSharedPtr<SWidget> ButtonContent = InArgs._Content.Widget;
+	if (InArgs._Content.Widget == SNullWidget::NullWidget)
+	{
+		SAssignNew(ButtonContent, STextBlock)
+			.Text(NSLOCTEXT("SScriptableTypePicker", "ContentWarning", "No Content Provided"))
+			.ColorAndOpacity(FLinearColor::Red);
+	}
+
+	// Create inner selector
+	TypeSelector = SNew(SScriptableTypeSelector)
+		.ItemStyle(InArgs._ItemStyle)
+		.MinListWidth(InArgs._MinListWidth)
+		.MaxListHeight(InArgs._MaxListHeight)
+		.SearchVisibility(InArgs._SearchVisibility)
+		.CurrentStruct(InArgs._CurrentStruct)
+		.BaseScriptStruct(InArgs._BaseScriptStruct)
+		.BaseClass(InArgs._BaseClass)
+		.ClassCategoryMeta(InArgs._ClassCategoryMeta)
+		.FilterCategoryMeta(InArgs._FilterCategoryMeta)
+		.Filter(InArgs._Filter)
+		.OnNodeTypePicked(InArgs._OnNodeTypePicked);
+
+	// Determine button styles
+	const FComboButtonStyle& OurComboButtonStyle = InArgs._ComboBoxStyle->ComboButtonStyle;
+	const FButtonStyle* const OurButtonStyle = InArgs._ButtonStyle ? InArgs._ButtonStyle : &OurComboButtonStyle.ButtonStyle;
+
+	SComboButton::Construct(SComboButton::FArguments()
+													.ComboButtonStyle(&OurComboButtonStyle)
+													.ButtonStyle(OurButtonStyle)
+													.Method(InArgs._Method)
+													.ButtonContent()
+													[
+														ButtonContent.ToSharedRef()
+													]
+													.MenuContent()
+													[
+														TypeSelector.ToSharedRef()
+													]
+													.HasDownArrow(InArgs._HasDownArrow)
+													.ContentPadding(InArgs._ContentPadding)
+													.ForegroundColor(InArgs._ForegroundColor)
+													.IsFocusable(true)
+	);
+
+	// Forward focus based on search visibility
+	if (InArgs._SearchVisibility.Get() == EVisibility::Visible)
+	{
+		SetMenuContentWidgetToFocus(TypeSelector->GetWidgetToFocusOnOpen());
 	}
 }
 
