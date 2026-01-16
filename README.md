@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://kirzo.dev/content/images/plugins/ScriptableFramework_banner.jpg" alt="ScriptableFramework Banner" width="512">
+</p>
+
 # Scriptable Framework for Unreal Engine
 
 **Scriptable Framework** is a data-driven logic system for Unreal Engine. It empowers designers and programmers to embed modular logic sequences (**Actions**) and validation rules (**Requirements**) directly into Actors, Data Assets, or any `UObject`, without the overhead of creating unique Blueprint graphs for every specific interaction.
