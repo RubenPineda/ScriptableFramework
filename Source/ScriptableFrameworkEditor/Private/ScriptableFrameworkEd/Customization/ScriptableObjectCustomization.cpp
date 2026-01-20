@@ -4,6 +4,7 @@
 #include "ScriptableObject.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingPath.h"
+#include "PropertyBindingDataView.h"
 
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableRequirementAsset.h"
@@ -63,7 +64,7 @@ namespace ScriptableBindingUI
 		TWeakObjectPtr<UScriptableObject> WeakScriptableObject;
 		FPropertyBindingPath TargetPath;
 		TSharedPtr<const IPropertyHandle> PropertyHandle;
-		TArray<FBindableStructDesc> AccessibleStructs;
+		TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 
 		FText Text;
 		FText TooltipText;
@@ -71,7 +72,7 @@ namespace ScriptableBindingUI
 		const FSlateBrush* Image = nullptr;
 		bool bIsDataCached = false;
 
-		FCachedBindingData(UScriptableObject* InObject, const FPropertyBindingPath& InTargetPath, const TSharedPtr<const IPropertyHandle>& InHandle, const TArray<FBindableStructDesc>& InStructs)
+		FCachedBindingData(UScriptableObject* InObject, const FPropertyBindingPath& InTargetPath, const TSharedPtr<const IPropertyHandle>& InHandle, const TArray<FPropertyBindingBindableStructDescriptor>& InStructs)
 			: WeakScriptableObject(InObject)
 			, TargetPath(InTargetPath)
 			, PropertyHandle(InHandle)
@@ -107,7 +108,7 @@ namespace ScriptableBindingUI
 				const FPropertyBindingPath* SourcePath = Bindings.GetPropertyBinding(TargetPath);
 				if (SourcePath)
 				{
-					const FBindableStructDesc* SourceDesc = AccessibleStructs.FindByPredicate([&](const FBindableStructDesc& Desc) { return Desc.ID == SourcePath->GetStructID(); });
+					const FPropertyBindingBindableStructDescriptor* SourceDesc = AccessibleStructs.FindByPredicate([&](const FPropertyBindingBindableStructDescriptor& Desc) { return Desc.ID == SourcePath->GetStructID(); });
 
 					bool bIsPathValid = false;
 					bool bIsTypeCompatible = false;
@@ -195,7 +196,7 @@ namespace ScriptableBindingUI
 			FScopedTransaction Transaction(LOCTEXT("AddBinding", "Add Property Binding"));
 			ScriptableObject->Modify();
 
-			const FBindableStructDesc& SelectedContext = AccessibleStructs[ContextIndex];
+			const FPropertyBindingBindableStructDescriptor& SelectedContext = AccessibleStructs[ContextIndex];
 
 			TArray<FBindingChainElement> PropertyChain = InBindingChain;
 			PropertyChain.RemoveAt(0);
@@ -243,7 +244,7 @@ namespace ScriptableBindingUI
 		}
 
 		TArray<FBindingContextStruct> Contexts;
-		for (const FBindableStructDesc& Desc : CachedData->AccessibleStructs)
+		for (const FPropertyBindingBindableStructDescriptor& Desc : CachedData->AccessibleStructs)
 		{
 			if (Desc.IsValid())
 			{
@@ -459,7 +460,7 @@ namespace ScriptableBindingUI
 class FScriptableArrayBuilder : public FDetailArrayBuilder
 {
 public:
-	FScriptableArrayBuilder(TSharedRef<IPropertyHandle> InBaseProperty, UScriptableObject* InObject, const TArray<FBindableStructDesc>& InStructs)
+	FScriptableArrayBuilder(TSharedRef<IPropertyHandle> InBaseProperty, UScriptableObject* InObject, const TArray<FPropertyBindingBindableStructDescriptor>& InStructs)
 		: FDetailArrayBuilder(InBaseProperty, true, true, true)
 		, ScriptableObject(InObject)
 		, AccessibleStructs(InStructs)
@@ -529,7 +530,7 @@ public:
 
 private:
 	TWeakObjectPtr<UScriptableObject> ScriptableObject;
-	TArray<FBindableStructDesc> AccessibleStructs;
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -779,7 +780,7 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
 	// Pre-fetch contexts once for optimization
-	TArray<FBindableStructDesc> AccessibleStructs;
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 	UScriptableObject* Obj = ScriptableObject.Get();
 	if (Obj)
 	{
@@ -1354,7 +1355,7 @@ bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
 	if (!RequiredContext || RequiredContext->GetNumPropertiesInBag() == 0) return false;
 
 	// Get Available Contexts (Outer Scope)
-	TArray<FBindableStructDesc> AvailableContexts;
+	TArray<FPropertyBindingBindableStructDescriptor> AvailableContexts;
 	ScriptableFrameworkEditor::GetAccessibleStructs(Wrapper, PropertyHandle, AvailableContexts);
 
 	TArray<FString> MissingParams;
@@ -1368,7 +1369,7 @@ bool FScriptableObjectCustomization::GetContextWarning(FText& OutTooltip) const
 		bool bFound = false;
 
 		// Search in all available bags (Global Context, Local Variables, etc.)
-		for (const FBindableStructDesc& ContextDesc : AvailableContexts)
+		for (const FPropertyBindingBindableStructDescriptor& ContextDesc : AvailableContexts)
 		{
 			if (const UStruct* Struct = ContextDesc.Struct.Get())
 			{
@@ -1531,7 +1532,7 @@ void FScriptableObjectCustomization::GenerateArrayElement(TSharedRef<IPropertyHa
 void FScriptableObjectCustomization::BindPropertyRow(IDetailPropertyRow& Row, TSharedRef<IPropertyHandle> Handle, UScriptableObject* Obj)
 {
 	// 1. Fetch available variables (Need Action Handle for this to find Context)
-	TArray<FBindableStructDesc> AccessibleStructs;
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 	ScriptableFrameworkEditor::GetAccessibleStructs(Obj, Handle, AccessibleStructs);
 
 	// 2. Paths

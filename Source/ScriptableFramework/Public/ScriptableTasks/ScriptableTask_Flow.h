@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "Engine/TimerHandle.h"
 #include "ScriptableTask_Flow.generated.h"
 
 /**

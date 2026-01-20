@@ -6,6 +6,8 @@
 #include "PropertyBindingPath.h"
 #include "ScriptablePropertyBindings.generated.h"
 
+struct FPropertyBindingDataView;
+
 /** Defines a single binding: Copy from SourcePath -> TargetPath */
 USTRUCT()
 struct SCRIPTABLEFRAMEWORK_API FScriptablePropertyBinding

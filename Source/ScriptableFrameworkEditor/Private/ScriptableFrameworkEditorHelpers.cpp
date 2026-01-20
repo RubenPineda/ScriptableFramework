@@ -9,6 +9,7 @@
 #include "ScriptableConditions/ScriptableRequirement.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
+#include "PropertyBindingBindableStructDescriptor.h"
 
 namespace ScriptableObjectTraversal
 {
@@ -247,7 +248,7 @@ namespace ScriptableFrameworkEditor
 		}
 	}
 
-	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FBindableStructDesc>& OutStructDescs)
+	void GetAccessibleStructs(const UScriptableObject* TargetObject, const TSharedPtr<IPropertyHandle>& Handle, TArray<FPropertyBindingBindableStructDescriptor>& OutStructDescs)
 	{
 		if (!TargetObject) return;
 		const UScriptableObject* RootObject = TargetObject->GetRoot();
@@ -270,7 +271,7 @@ namespace ScriptableFrameworkEditor
 				// Only consider this context if it actually has properties defined.
 				if (Container->HasContext() && Container->Context.GetNumPropertiesInBag() > 0)
 				{
-					FBindableStructDesc& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 					ContextDesc.Name = FName(TEXT("Context")); // Always named "Context" as it's the only one visible
 					ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
 					ContextDesc.ID = FGuid();
@@ -319,7 +320,7 @@ namespace ScriptableFrameworkEditor
 		{
 			if (Obj->GetBindingID().IsValid())
 			{
-				FBindableStructDesc& Desc = OutStructDescs.AddDefaulted_GetRef();
+				FPropertyBindingBindableStructDescriptor& Desc = OutStructDescs.AddDefaulted_GetRef();
 				FString DisplayName = Obj->GetName();
 				Desc.Name = FName(*DisplayName);
 				Desc.Struct = Obj->GetClass();

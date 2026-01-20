@@ -1,6 +1,7 @@
 ﻿// Copyright 2025 kirzo
 
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "PropertyBindingDataView.h"
 #include "ScriptableObject.h"
 
 #if WITH_EDITOR
