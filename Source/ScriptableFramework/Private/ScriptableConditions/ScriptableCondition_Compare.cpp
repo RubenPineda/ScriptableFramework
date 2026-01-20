@@ -1,6 +1,7 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableConditions/ScriptableCondition_Compare.h"
+#include "GameFramework/Actor.h"
 
 #if WITH_EDITOR
 FText UScriptableCondition_CompareNumbers::GetDisplayTitle() const

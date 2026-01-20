@@ -84,9 +84,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
 	FORCEINLINE_DEBUGGABLE UObject* GetOwner() const { return OwnerPrivate; }
 
-	UFUNCTION(BlueprintCallable, Category = ScriptableObject)
-	FORCEINLINE_DEBUGGABLE AActor* GetOwnerActor() const { return GetOwner<AActor>(); }
-
 	/** Templated version of GetOwner(), will return nullptr if cast fails */
 	template<class T>
 	T* GetOwner() const { return Cast<T>(GetOwner()); }
@@ -181,24 +178,3 @@ private:
 	UWorld* GetWorld_Uncached() const;
 	void OnWorldBeginTearDown(UWorld* InWorld);
 };
-
-/** Helper function for executing task tick functions */
-template<typename ExecuteTickLambda>
-void FScriptableObjectTickFunction::ExecuteTickHelper(UScriptableObject* Target, bool bTickInEditor, float DeltaTime, ELevelTick TickType, const ExecuteTickLambda& ExecuteTickFunc)
-{
-	if (IsValid(Target))
-	{
-		FScopeCycleCounterUObject TaskScope(Target);
-
-		if (Target->IsRegistered() && Target->IsReadyToTick())
-		{
-			AActor* MyOwner = Target->GetOwner<AActor>();
-			if (TickType != LEVELTICK_ViewportsOnly || bTickInEditor ||
-					(MyOwner && MyOwner->ShouldTickIfViewportsOnly()))
-			{
-				const float TimeDilation = (MyOwner ? MyOwner->CustomTimeDilation : 1.f);
-				ExecuteTickFunc(DeltaTime * TimeDilation);
-			}
-		}
-	}
-}

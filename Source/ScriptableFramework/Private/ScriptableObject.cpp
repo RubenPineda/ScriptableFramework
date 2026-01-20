@@ -1,9 +1,31 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableObject.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "Misc/SecureHash.h"
 
 DEFINE_LOG_CATEGORY(LogScriptableObject);
+
+template<typename ExecuteTickLambda>
+void FScriptableObjectTickFunction::ExecuteTickHelper(UScriptableObject* Target, bool bTickInEditor, float DeltaTime, ELevelTick TickType, const ExecuteTickLambda& ExecuteTickFunc)
+{
+	if (IsValid(Target))
+	{
+		FScopeCycleCounterUObject TaskScope(Target);
+
+		if (Target->IsRegistered() && Target->IsReadyToTick())
+		{
+			AActor* MyOwner = Target->GetOwner<AActor>();
+			if (TickType != LEVELTICK_ViewportsOnly || bTickInEditor ||
+				(MyOwner && MyOwner->ShouldTickIfViewportsOnly()))
+			{
+				const float TimeDilation = (MyOwner ? MyOwner->CustomTimeDilation : 1.f);
+				ExecuteTickFunc(DeltaTime * TimeDilation);
+			}
+		}
+	}
+}
 
 UScriptableObject::UScriptableObject()
 {

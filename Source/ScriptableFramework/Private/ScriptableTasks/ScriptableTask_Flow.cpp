@@ -1,6 +1,8 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableTasks/ScriptableTask_Flow.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 void UScriptableTask_Wait::BeginTask()
 {
