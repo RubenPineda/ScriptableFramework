@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.1",
-	"FriendlyName": "ScriptableFramework",
+	"FriendlyName": "Scriptable Framework",
 	"Description": "Data-driven logic system for Unreal Engine. It empowers designers and programmers to embed modular logic sequences (Actions) and validation rules (Requirements) directly into Actors, Data Assets, or any UObject, without the overhead of creating unique Blueprint graphs for every specific interaction.",
 	"Category": "Scripting",
 	"CreatedBy": "kirzo",
@@ -22,16 +22,6 @@
 			"LoadingPhase": "Default"
 		},
 		{
-			"Name": "ScriptableFrameworkGAS",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		},
-		{
-			"Name": "ScriptableFrameworkAI",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		},
-		{
 			"Name": "ScriptableFrameworkEditor",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
@@ -44,18 +34,6 @@
 		},
 		{
 			"Name": "PropertyBindingUtils",
-			"Enabled": true
-		},
-		{
-			"Name": "GameplayAbilities",
-			"Enabled": true
-		},
-		{
-			"Name": "StateTree",
-			"Enabled": true
-		},
-		{
-			"Name": "GameplayStateTree",
 			"Enabled": true
 		},
 		{

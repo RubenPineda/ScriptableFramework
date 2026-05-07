@@ -1,0 +1,39 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.1",
+	"FriendlyName": "Scriptable Framework - AI Integration",
+	"Description": "Adds StateTree-related tasks (Run StateTree on target, etc.) to the Scriptable Framework. Requires the StateTree and GameplayStateTree plugins.",
+	"Category": "Scripting",
+	"CreatedBy": "kirzo",
+	"CreatedByURL": "https://kirzo.dev",
+	"DocsURL": "https://github.com/kirzo/ScriptableFramework",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EnabledByDefault": false,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ScriptableFrameworkAI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ScriptableFramework",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
+			"Enabled": true
+		}
+	]
+}
