@@ -69,6 +69,15 @@ void UScriptableObject::PostEditImport()
 #if WITH_EDITOR
 void UScriptableObject::BakeAutoBindings()
 {
+	// Abort if we are cloning or duplicating this object at runtime.
+	// Running this in a GameWorld would wipe valid bindings because
+	// the runtime clone cannot resolve the accessible structs.
+	UWorld* World = GetWorld();
+	if (World && World->IsGameWorld())
+	{
+		return;
+	}
+
 	// We allow Archetypes because objects edited inside a Blueprint Editor ARE Archetypes.
 	// We only skip the pure C++ Class Default Object (CDO) to save useless processing.
 	if (HasAnyFlags(RF_ClassDefaultObject) && !GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint))
@@ -243,22 +252,42 @@ bool UScriptableObject::GetBindingDisplayText(FName PropertyName, FString& OutTe
 
 UWorld* UScriptableObject::GetWorld_Uncached() const
 {
-	UWorld* MyWorld = nullptr;
-
+	// 1. Attempt to get the world from the explicit Owner (if registered)
 	UObject* MyOwner = GetOwner();
-	// If we don't have a world yet, it may be because we haven't gotten registered yet, but we can try to look at our owner
 	if (MyOwner && !MyOwner->HasAnyFlags(RF_ClassDefaultObject))
 	{
-		MyWorld = MyOwner->GetWorld();
+		if (UWorld* OwnerWorld = MyOwner->GetWorld())
+		{
+			return OwnerWorld;
+		}
 	}
 
-	if (MyWorld == nullptr)
+	// 2. Fallback: Climb up the Outer hierarchy
+	UObject* CurrentOuter = GetOuter();
+	while (CurrentOuter)
 	{
-		// As a fallback check the outer of this object for a world.
-		MyWorld = Cast<UWorld>(GetOuter());
+		if (CurrentOuter->HasAnyFlags(RF_ClassDefaultObject))
+		{
+			return nullptr;
+		}
+
+		// If by any chance the Outer is the World itself
+		if (UWorld* AsWorld = Cast<UWorld>(CurrentOuter))
+		{
+			return AsWorld;
+		}
+
+		// Ask the current Outer for its world.
+		if (UWorld* OuterWorld = CurrentOuter->GetWorld())
+		{
+			return OuterWorld;
+		}
+
+		// Keep climbing up the hierarchy
+		CurrentOuter = CurrentOuter->GetOuter();
 	}
 
-	return MyWorld;
+	return nullptr;
 }
 
 void UScriptableObject::OnWorldBeginTearDown(UWorld* InWorld)

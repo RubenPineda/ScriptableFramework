@@ -22,6 +22,10 @@ FScriptableAction FScriptableAction::Clone(UObject* NewOuter) const
 	ClonedAction.OnActionBegin.Clear();
 	ClonedAction.OnActionFinish.Clear();
 
+	// Reconstruct context. Otherwise, the clone might
+	// share memory pointers with the original template.
+	ClonedAction.ConstructContext();
+
 	// 3. Deep copy the Tasks array to avoid mutating the Data Asset
 	ClonedAction.Tasks.Empty(Tasks.Num());
 
