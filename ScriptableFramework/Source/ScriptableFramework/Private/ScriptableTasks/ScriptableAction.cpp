@@ -2,6 +2,7 @@
 
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableActionRunner.h"
 
 FScriptableAction::FScriptableAction()
 {
@@ -53,6 +54,14 @@ void FScriptableAction::Run(UObject* InOwner)
 
 	Register(InOwner);
 	Begin();
+}
+
+void FScriptableAction::Run(FScriptableAction&& Action, UObject* Owner)
+{
+	if (!Owner) return;
+
+	UScriptableActionRunner* Runner = NewObject<UScriptableActionRunner>(Owner);
+	Runner->Launch(MoveTemp(Action), Owner);
 }
 
 void FScriptableAction::Register(UObject* InOwner)
