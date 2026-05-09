@@ -251,7 +251,7 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 		};
 
 	// =======================================================================================
-	// LAMBDA 2: Reflection Helper to collect previous siblings purely from memory arrays
+	// LAMBDA 2: Reflection helper to collect previous siblings purely from memory arrays
 	// =======================================================================================
 	auto CollectSiblingsHeadless = [](const UObject* Node, TArray<const UScriptableObject*>& OutSiblings)
 		{
@@ -259,16 +259,71 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 			const UObject* Owner = Node->GetOuter();
 			if (!Owner) return;
 
+			// Inner helper: given the memory of a FScriptableContainer (Action / Requirement / ...),
+			// find the array holding Node and append its previous entries to OutSiblings.
+			// Returns true if Node was found inside this container.
+			auto CollectFromContainerMemory = [Node, &OutSiblings](const UStruct* ContainerStruct, const void* ContainerMemory) -> bool
+				{
+					for (TFieldIterator<FProperty> InnerIt(ContainerStruct); InnerIt; ++InnerIt)
+					{
+						const FArrayProperty* InnerArrayProp = CastField<FArrayProperty>(*InnerIt);
+						if (!InnerArrayProp) continue;
+
+						const FObjectProperty* InnerObjProp = CastField<FObjectProperty>(InnerArrayProp->Inner);
+						if (!InnerObjProp) continue;
+
+						FScriptArrayHelper InnerHelper(InnerArrayProp, InnerArrayProp->ContainerPtrToValuePtr<void>(ContainerMemory));
+
+						int32 TargetIndex = INDEX_NONE;
+						for (int32 i = 0; i < InnerHelper.Num(); ++i)
+						{
+							if (InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i)) == Node)
+							{
+								TargetIndex = i;
+								break;
+							}
+						}
+
+						if (TargetIndex != INDEX_NONE)
+						{
+							for (int32 i = 0; i < TargetIndex; ++i)
+							{
+								if (const UScriptableObject* PrevSibling = Cast<UScriptableObject>(InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i))))
+								{
+									OutSiblings.Add(PrevSibling);
+								}
+							}
+							return true;
+						}
+					}
+					return false;
+				};
+
+			const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
+
 			for (TFieldIterator<FProperty> It(Owner->GetClass()); It; ++It)
 			{
-				if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*It))
+				// Case A: Single FScriptableContainer struct member on the Owner
+				// (e.g. AActor with FScriptableAction OnShootAction; or UScriptableActionAsset::Action).
+				if (const FStructProperty* StructProp = CastField<FStructProperty>(*It))
 				{
-					// Array of Objects (TArray<UScriptableObject*>)
+					if (StructProp->Struct->IsChildOf(BaseContainerStruct))
+					{
+						const void* ContainerMemory = StructProp->ContainerPtrToValuePtr<void>(Owner);
+						if (CollectFromContainerMemory(StructProp->Struct, ContainerMemory))
+						{
+							return;
+						}
+					}
+				}
+				else if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*It))
+				{
+					// Case B: TArray<UObject*> directly on the Owner.
 					if (const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner))
 					{
 						FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
-						int32 TargetIndex = INDEX_NONE;
 
+						int32 TargetIndex = INDEX_NONE;
 						for (int32 i = 0; i < Helper.Num(); ++i)
 						{
 							if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Node)
@@ -287,49 +342,21 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 									OutSiblings.Add(PrevSibling);
 								}
 							}
-							return; // Found the array holding our node, we can stop searching
+							return;
 						}
 					}
-					// Array of Containers (TArray<FScriptableContainer>)
+					// Case C: TArray<FScriptableContainer> on the Owner.
 					else if (const FStructProperty* InnerStructProp = CastField<FStructProperty>(ArrayProp->Inner))
 					{
-						if (InnerStructProp->Struct->IsChildOf(FScriptableContainer::StaticStruct()))
+						if (InnerStructProp->Struct->IsChildOf(BaseContainerStruct))
 						{
 							FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
 							for (int32 Index = 0; Index < Helper.Num(); ++Index)
 							{
 								const void* ContainerMemory = Helper.GetRawPtr(Index);
-								for (TFieldIterator<FProperty> InnerIt(InnerStructProp->Struct); InnerIt; ++InnerIt)
+								if (CollectFromContainerMemory(InnerStructProp->Struct, ContainerMemory))
 								{
-									if (const FArrayProperty* InnerArrayProp = CastField<FArrayProperty>(*InnerIt))
-									{
-										if (const FObjectProperty* InnerObjProp = CastField<FObjectProperty>(InnerArrayProp->Inner))
-										{
-											FScriptArrayHelper InnerHelper(InnerArrayProp, InnerArrayProp->ContainerPtrToValuePtr<void>(ContainerMemory));
-											int32 TargetIndex = INDEX_NONE;
-
-											for (int32 i = 0; i < InnerHelper.Num(); ++i)
-											{
-												if (InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i)) == Node)
-												{
-													TargetIndex = i;
-													break;
-												}
-											}
-
-											if (TargetIndex != INDEX_NONE)
-											{
-												for (int32 i = 0; i < TargetIndex; ++i)
-												{
-													if (const UScriptableObject* PrevSibling = Cast<UScriptableObject>(InnerObjProp->GetObjectPropertyValue(InnerHelper.GetRawPtr(i))))
-													{
-														OutSiblings.Add(PrevSibling);
-													}
-												}
-												return;
-											}
-										}
-									}
+									return;
 								}
 							}
 						}

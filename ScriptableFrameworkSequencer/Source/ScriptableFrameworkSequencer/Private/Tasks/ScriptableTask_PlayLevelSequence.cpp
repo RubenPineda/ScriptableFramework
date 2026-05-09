@@ -50,7 +50,7 @@ FText UScriptableTask_PlayLevelSequence::GetDisplayTitle() const
 		PlayerName = TEXT("None");
 	}
 
-	const FText Suffix = bWaitUntilFinished ? INVTEXT(" (wait)") : FText::GetEmpty();
+	const FText Suffix = bWaitUntilFinished ? INVTEXT(" and wait") : FText::GetEmpty();
 	return FText::Format(INVTEXT("Play {0}{1}"), FText::FromString(PlayerName), Suffix);
 }
 #endif

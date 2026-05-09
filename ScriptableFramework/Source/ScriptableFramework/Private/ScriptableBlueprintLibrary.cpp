@@ -142,3 +142,8 @@ DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetRequirementContextParameter)
 {
 	AssignContextParameterToContainer(Stack, FScriptableRequirement::StaticStruct(), TEXT("SetRequirementContextParameter"));
 }
+
+bool UScriptableBlueprintLibrary::EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement)
+{
+	return FScriptableRequirement::EvaluateRequirement(Owner, Requirement);
+}

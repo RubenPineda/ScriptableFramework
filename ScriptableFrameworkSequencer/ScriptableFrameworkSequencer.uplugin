@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.1",
+	"VersionName": "1.0",
 	"FriendlyName": "Scriptable Framework - Sequencer Integration",
 	"Description": "Adds Sequencer tasks (play level sequence, wait for finish, set playback position, etc.) to the Scriptable Framework. Requires the LevelSequence plugin.",
 	"Category": "Scripting",

@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.1",
+	"VersionName": "1.0",
 	"FriendlyName": "Scriptable Framework - AI Integration",
 	"Description": "Adds StateTree-related tasks (Run StateTree on target, etc.) to the Scriptable Framework. Requires the StateTree and GameplayStateTree plugins.",
 	"Category": "Scripting",

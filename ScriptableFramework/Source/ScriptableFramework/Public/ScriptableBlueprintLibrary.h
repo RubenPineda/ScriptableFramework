@@ -15,6 +15,16 @@ class SCRIPTABLEFRAMEWORK_API UScriptableBlueprintLibrary : public UBlueprintFun
 
 public:
 	/**
+	 * Evaluates a Scriptable Requirement.
+	 * Registers the requirement against the given owner, evaluates it, and unregisters it before returning.
+	 * @param Owner Object responsible for evaluation context (typically 'self').
+	 * @param Requirement The requirement to evaluate.
+	 * @return True if the requirement passes (respecting Mode and bNegate).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Requirement", meta = (DefaultToSelf = "Owner", Keywords = "evaluate check requirement condition"))
+	static bool EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement);
+
+	/**
 	 * Sets a context parameter value by name.
 	 * @param Action         The scriptable action to modify.
 	 * @param ParameterName  The name of the parameter (must match ContextDefinitions).

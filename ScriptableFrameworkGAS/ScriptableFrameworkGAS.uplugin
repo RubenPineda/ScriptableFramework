@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.1",
+	"VersionName": "1.0",
 	"FriendlyName": "Scriptable Framework - GAS Integration",
 	"Description": "Adds Gameplay Ability System tasks and conditions (grant ability, send gameplay event, manage tags, etc.) to the Scriptable Framework. Requires the GameplayAbilities plugin.",
 	"Category": "Scripting",
