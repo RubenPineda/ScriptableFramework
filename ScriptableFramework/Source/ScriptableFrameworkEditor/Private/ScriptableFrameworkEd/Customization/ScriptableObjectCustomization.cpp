@@ -16,7 +16,7 @@
 #include "Widgets/SScriptableTypePicker.h"
 #include "PropertyCustomizationHelpers.h"
 
-#include "Utils/KzObjectEditorUtils.h"
+#include "Utils/KzEditorUtils.h"
 #include "StructUtils/PropertyBag.h"
 
 #include "DetailLayoutBuilder.h"

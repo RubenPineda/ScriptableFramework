@@ -2,6 +2,7 @@
 
 #include "ScriptableObjectAsset.h"
 #include "UObject/AssetRegistryTagsContext.h"
+#include "Core/KzBagOps.h"
 
 #if WITH_EDITOR
 void UScriptableObjectAsset::GetAssetRegistryTags(FAssetRegistryTagsContext RegContext) const
@@ -41,10 +42,7 @@ void UScriptableObjectAsset::RefreshContext()
 		ContextRef->Reset();
 		for (const FKzParamDef& Param : Context)
 		{
-			if (Param.IsValid())
-			{
-				ContextRef->AddContainerProperty(Param.Name, Param.ContainerType, Param.ValueType, Param.ValueTypeObject);
-			}
+			KzBagOps::AddProperty(*ContextRef, Param);
 		}
 	}
 }
