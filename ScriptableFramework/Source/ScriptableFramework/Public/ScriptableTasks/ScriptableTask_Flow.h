@@ -24,7 +24,7 @@ public:
 	float Duration = 1.0f;
 
 	/** Random deviation added to the duration (Duration +/- RandomDeviation). */
-	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (ClampMin = 0, EditCondition = "Duration > 0"))
 	float RandomDeviation = 0.0f;
 
 protected:

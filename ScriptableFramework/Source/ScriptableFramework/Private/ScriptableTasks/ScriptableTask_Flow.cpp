@@ -16,7 +16,7 @@ void UScriptableTask_Wait::BeginTask()
 
 	float FinalDuration = Duration;
 
-	if (RandomDeviation > UE_KINDA_SMALL_NUMBER)
+	if (FinalDuration > UE_KINDA_SMALL_NUMBER && RandomDeviation > UE_KINDA_SMALL_NUMBER)
 	{
 		FinalDuration += FMath::RandRange(-RandomDeviation, RandomDeviation);
 	}
@@ -26,7 +26,7 @@ void UScriptableTask_Wait::BeginTask()
 
 	if (FinalDuration <= UE_KINDA_SMALL_NUMBER)
 	{
-		Finish();
+		World->GetTimerManager().SetTimerForNextTick(this, &UScriptableTask_Wait::OnWaitFinished);
 	}
 	else
 	{
@@ -51,6 +51,11 @@ FText UScriptableTask_Wait::GetDisplayTitle() const
 	else
 	{
 		DurationText = FText::AsNumber(Duration);
+	}
+
+	if (BindingName.IsEmpty() && Duration <= UE_KINDA_SMALL_NUMBER)
+	{
+		return FText::Format(INVTEXT("Wait until next tick"), DurationText, FText::AsNumber(RandomDeviation));
 	}
 
 	if (RandomDeviation > 0.0)
