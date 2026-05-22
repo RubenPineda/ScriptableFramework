@@ -10,6 +10,7 @@
 
 class UScriptableNode;
 class UScriptableGraphInstance;
+class UEdGraph;
 
 /**
  * An asset that defines a reusable scriptable graph: a network of UScriptableNode.
@@ -60,6 +61,12 @@ protected:
 	virtual FName GetContainerName() const override { return NAME_None; }
 #endif
 	//~ End of UScriptableObjectAsset interface
+
+#if WITH_EDITORONLY_DATA
+/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */
+	UPROPERTY()
+	TObjectPtr<UEdGraph> EdGraph;
+#endif
 
 private:
 	/** Backing bag holding the declared context shape. Values are not stored at asset level. */

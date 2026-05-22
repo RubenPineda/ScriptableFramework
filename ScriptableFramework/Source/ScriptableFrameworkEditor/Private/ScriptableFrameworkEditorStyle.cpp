@@ -4,6 +4,7 @@
 
 FLinearColor FScriptableFrameworkEditorStyle::ScriptableTaskColor = FLinearColor(0.0f, 0.66f, 1.0f);
 FLinearColor FScriptableFrameworkEditorStyle::ScriptableConditionColor = FLinearColor(0.57f, 0.0f, 0.09f);
+FLinearColor FScriptableFrameworkEditorStyle::ScriptableGraphColor = FLinearColor(0.2f, 0.75f, 0.7f);
 
 FLinearColor FScriptableFrameworkEditorStyle::InactiveColor = FLinearColor(0.2f, 0.2f, 0.2f, 0.5f);
 FLinearColor FScriptableFrameworkEditorStyle::NegateColor = FLinearColor(0.8f, 0.1f, 0.1f);

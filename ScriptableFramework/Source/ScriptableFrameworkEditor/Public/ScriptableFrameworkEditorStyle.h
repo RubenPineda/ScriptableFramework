@@ -12,6 +12,7 @@ public:
 
 	static FLinearColor ScriptableTaskColor;
 	static FLinearColor ScriptableConditionColor;
+	static FLinearColor ScriptableGraphColor;
 
 	static FLinearColor InactiveColor;
 	static FLinearColor NegateColor;

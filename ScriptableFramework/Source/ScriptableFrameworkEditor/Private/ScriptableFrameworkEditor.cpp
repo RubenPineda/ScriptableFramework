@@ -23,6 +23,9 @@
 #include "ScriptableConditions/ScriptableCondition_Group.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
 
+#include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
+
 #define LOCTEXT_NAMESPACE "FScriptableFrameworkEditorModule"
 
 void FScriptableFrameworkEditorModule::OnStartupModule()
@@ -34,6 +37,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 
 	RegisterAssetTypeAction<UScriptableActionAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor.ToFColor(true));
 	RegisterAssetTypeAction<UScriptableRequirementAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::ScriptableConditionColor.ToFColor(true));
+	RegisterAssetTypeAction<UScriptableGraph, FScriptableGraphEditor>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Graph"), FScriptableFrameworkEditorStyle::ScriptableGraphColor.ToFColor(true));
 
 	RegisterPropertyLayout<UScriptableTask, FScriptableTaskCustomization>();
 	RegisterPropertyLayout<UScriptableCondition, FScriptableConditionCustomization>();
