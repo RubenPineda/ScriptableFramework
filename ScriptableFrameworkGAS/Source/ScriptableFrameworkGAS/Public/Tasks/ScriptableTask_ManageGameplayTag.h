@@ -36,6 +36,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Tag Operation")
 	bool bRevertOnReset = false;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void BeginTask() override;
 	virtual void ResetTask() override;

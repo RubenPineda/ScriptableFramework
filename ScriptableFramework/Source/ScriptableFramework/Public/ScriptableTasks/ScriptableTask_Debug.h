@@ -45,6 +45,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (EditCondition = "bPrintToScreen", EditConditionHides))
 	FColor TextColor = FColor::Cyan;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void BeginTask() override;
 

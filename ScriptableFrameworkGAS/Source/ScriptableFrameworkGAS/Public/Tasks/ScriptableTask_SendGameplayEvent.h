@@ -42,6 +42,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Event Data")
 	TObjectPtr<UObject> OptionalObject2;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void BeginTask() override;
 

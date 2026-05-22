@@ -22,6 +22,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Ability")
 	FGameplayTag AbilityTag;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void BeginTask() override;
 

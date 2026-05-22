@@ -24,6 +24,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (ShowOnlyInnerProperties))
 	FMovieSceneSequencePlaybackParams PlaybackParams;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void BeginTask() override;
 

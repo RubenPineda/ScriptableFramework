@@ -29,6 +29,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "StateTree")
 	bool bForceRestart = true;
 
+	virtual bool IsStoppable() const { return false; }
+
 protected:
 	virtual void PreResolveBindings() override;
 	virtual void BeginTask() override;
