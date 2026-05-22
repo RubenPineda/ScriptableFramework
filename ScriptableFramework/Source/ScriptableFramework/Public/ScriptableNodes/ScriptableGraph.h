@@ -9,6 +9,7 @@
 #include "ScriptableGraph.generated.h"
 
 class UScriptableNode;
+class UScriptableGraphInstance;
 
 /**
  * An asset that defines a reusable scriptable graph: a network of UScriptableNode.
@@ -23,6 +24,13 @@ class SCRIPTABLEFRAMEWORK_API UScriptableGraph final : public UScriptableObjectA
 
 public:
 	UScriptableGraph();
+
+	/**
+	 * Fire-and-forget execution of this graph using values from the supplied context.
+	 * Constructs a runtime instance under the hood and lets it run until completion or owner death.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner"))
+	static UScriptableGraphInstance* Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext);
 
 	/** All nodes living in this graph. Instanced so editor-created nodes are owned by the asset. */
 	UPROPERTY(EditAnywhere, Instanced, Category = "Graph")

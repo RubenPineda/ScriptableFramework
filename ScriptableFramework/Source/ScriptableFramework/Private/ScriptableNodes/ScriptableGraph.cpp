@@ -1,12 +1,24 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableGraphInstance.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "Core/KzBagOps.h"
 
 UScriptableGraph::UScriptableGraph()
 {
+}
+
+UScriptableGraphInstance* UScriptableGraph::Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext)
+{
+	if (!Graph || !Owner) return nullptr;
+
+	UScriptableGraphInstance* Instance = NewObject<UScriptableGraphInstance>(Owner);
+	if (!Instance) return nullptr;
+
+	Instance->Launch(Graph, Owner, InContext);
+	return Instance;
 }
 
 void UScriptableGraph::PostInitProperties()

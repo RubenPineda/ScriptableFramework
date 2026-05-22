@@ -67,6 +67,12 @@ public:
 	/** Fired when the node has no active pins left. The runner subscribes to detect node completion. */
 	FScriptableNodeInactiveNative OnNodeInactiveNative;
 
+	/**
+	 * Releases any in-flight resources without propagating downstream. Called by the graph runner
+	 * when the graph is hard-cancelled. Subclasses override to e.g. cancel internal tasks silently.
+	 */
+	virtual void Teardown() {}
+
 protected:
 	/**
 	 * Implements the reaction to an active input being consumed. Default: no-op.
