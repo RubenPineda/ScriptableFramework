@@ -1,13 +1,37 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableContainer.h"
+#include "ScriptableContext.h"
 #include "ScriptableObject.h"
+#include "ScriptablePropertyUtilities.h"
 #include "Core/KzBagOps.h"
+#include "UObject/UnrealType.h"
 
 void FScriptableContainer::ConstructContext()
 {
 	ResetContext();
 	KzBagOps::AddProperties(Context, ContextDefinitions);
+}
+
+void FScriptableContainer::AddContext(const FScriptableContext& InContext)
+{
+	const UPropertyBag* BagStruct = InContext.GetBag().GetPropertyBagStruct();
+	if (!BagStruct)
+	{
+		return;
+	}
+
+	for (const FPropertyBagPropertyDesc& Desc : BagStruct->GetPropertyDescs())
+	{
+		ContextDefinitions.Add(FKzParamDef(Desc.Name, Desc.ContainerTypes.GetFirstContainerType(), Desc.ValueType, Desc.ValueTypeObject));
+	}
+
+	ConstructContext();
+}
+
+void FScriptableContainer::SetContext(const FScriptableContext& InContext)
+{
+	Context.MigrateToNewBagInstance(InContext.GetBag());
 }
 
 UScriptableObject* FScriptableContainer::FindBindingSource(const FGuid& InID) const

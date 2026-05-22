@@ -8,6 +8,7 @@
 
 class UScriptableObject;
 class UScriptableTask;
+struct FScriptableContext;
 
 DECLARE_MULTICAST_DELEGATE(FScriptableActionNativeDelegate);
 
@@ -89,6 +90,12 @@ public:
 	 * action as a member and call the instance Run() instead.
 	 */
 	static void Run(FScriptableAction&& Action, UObject* Owner);
+
+	/** Executes the action using values from an external context. The external context's values replace the internal bag values for this execution. */
+	void Run(UObject* Owner, const FScriptableContext& Context);
+
+	/** Fire-and-forget overload with external context. */
+	static void Run(FScriptableAction&& Action, UObject* Owner, const FScriptableContext& Context);
 
 	/**
 	 * Reverts the action's effects and cleans up memory.

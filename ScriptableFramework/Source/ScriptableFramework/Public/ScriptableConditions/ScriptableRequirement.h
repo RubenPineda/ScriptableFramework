@@ -8,6 +8,7 @@
 
 class UScriptableCondition;
 class UScriptableObject;
+struct FScriptableContext;
 
 /** Logical operation for the requirement group. */
 UENUM(BlueprintType)
@@ -54,4 +55,7 @@ public:
 public:
 	/** Static entry point to evaluate a requirement. */
 	static bool EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement);
+
+	/** Static evaluation entry point using an external context. */
+	static bool EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement, const FScriptableContext& Context);
 };

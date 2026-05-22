@@ -2,6 +2,7 @@
 
 #include "ScriptableConditions/ScriptableRequirement.h"
 #include "ScriptableConditions/ScriptableCondition.h"
+#include "ScriptableContext.h"
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
 
@@ -99,4 +100,15 @@ bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, const FScriptab
 	MutableReq.Unregister();
 
 	return bResult;
+}
+
+bool FScriptableRequirement::EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement, const FScriptableContext& InContext)
+{
+	if (!Owner) return false;
+
+	FScriptableRequirement& MutableReq = const_cast<FScriptableRequirement&>(Requirement);
+
+	MutableReq.SetContext(InContext);
+
+	return EvaluateRequirement(Owner, Requirement);
 }

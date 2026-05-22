@@ -3,44 +3,51 @@
 #include "ScriptableBlueprintLibrary.h"
 #include "ScriptablePropertyUtilities.h"
 #include "StructUtils/PropertyBag.h"
+#include "Core/KzBagOps.h"
 
-// Helper function to process context parameter assignment for any scriptable container.
-static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct* ExpectedStructType, const FString& FunctionName)
+// Steps the wildcard value off the BP stack and assigns it into a bag property by name.
+// If bAddIfMissing is true and the property does not exist yet, it is defined from the value's
+// type (mirrors FScriptableContext::SetProperty<T>). Always finishes the stack frame.
+static void AssignStackValueToBag(FFrame& Stack, FInstancedPropertyBag& Bag, FName ParameterName, bool bAddIfMissing, const FString& FunctionName)
 {
-	// 1. Retrieve the strongly typed container struct.
-	Stack.StepCompiledIn<FStructProperty>(nullptr);
-	FStructProperty* ContainerProp = CastField<FStructProperty>(Stack.MostRecentProperty);
-	void* ContainerPtr = Stack.MostRecentPropertyAddress;
-
-	// 2. Retrieve the parameter name.
-	P_GET_PROPERTY(FNameProperty, ParameterName);
-
-	if (!ContainerProp || !ContainerPtr)
-	{
-		// Step to clear the stack if we abort early
-		Stack.StepCompiledIn<FProperty>(nullptr);
-		P_FINISH;
-		return;
-	}
-
-	if (!ContainerProp->Struct->IsChildOf(ExpectedStructType))
-	{
-		Stack.StepCompiledIn<FProperty>(nullptr);
-		P_FINISH;
-		return;
-	}
-
-	// Safely cast to the base container since both actions and requirements inherit from it.
-	FScriptableContainer* Container = static_cast<FScriptableContainer*>(ContainerPtr);
-
-	// Construct the dynamic property bag on the actual instance memory if it's empty.
-	if (!Container->Context.IsValid())
-	{
-		Container->ConstructContext();
-	}
-
-	const UScriptStruct* BagStruct = Container->Context.GetPropertyBagStruct();
+	const UScriptStruct* BagStruct = Bag.GetPropertyBagStruct();
 	const FProperty* BagProp = BagStruct ? BagStruct->FindPropertyByName(ParameterName) : nullptr;
+
+	// The bag has no such property yet (e.g. a context freshly created in Blueprint has a null bag).
+	// If allowed, define the property from the incoming value's type, which also initializes the bag.
+	if (!BagProp && bAddIfMissing)
+	{
+		Stack.MostRecentPropertyAddress = nullptr;
+		Stack.MostRecentProperty = nullptr;
+		Stack.StepCompiledIn<FProperty>(nullptr);
+
+		FProperty* ValueProp = Stack.MostRecentProperty;
+		void* ValuePtr = Stack.MostRecentPropertyAddress;
+
+		P_FINISH;
+
+		if (!ValueProp || !ValuePtr)
+		{
+#if WITH_EDITOR
+			FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Could not define parameter '%s' from the supplied value. Define it explicitly with AddScriptableContextProperty first."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
+#endif
+			return;
+		}
+
+		// Define the property from the value's type, then copy the value into the freshly created slot.
+		Bag.AddProperty(ParameterName, ValueProp);
+
+		const UScriptStruct* NewBagStruct = Bag.GetPropertyBagStruct();
+		const FProperty* NewBagProp = NewBagStruct ? NewBagStruct->FindPropertyByName(ParameterName) : nullptr;
+		uint8* StructMemory = Bag.GetMutableValue().GetMemory();
+
+		if (NewBagProp && StructMemory)
+		{
+			uint8* DestPtr = NewBagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
+			NewBagProp->CopyCompleteValue(DestPtr, ValuePtr);
+		}
+		return;
+	}
 
 	if (!BagProp)
 	{
@@ -48,12 +55,12 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 		Stack.StepCompiledIn<FProperty>(nullptr);
 		P_FINISH;
 #if WITH_EDITOR
-		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Parameter '%s' not found in ContextDefinitions."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
+		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Parameter '%s' not found in the context."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
 #endif
 		return;
 	}
 
-	// 3. Evaluate Value into a local buffer based on the expected BagProp size.
+	// Evaluate Value into a local buffer based on the expected BagProp size.
 	// This PREVENTS the "Attempted to reference 'self' as an addressable property" crash
 	// by giving R-Values (like 'self' or Math functions) a valid memory space to write into.
 	void* LocalValue = FMemory_Alloca(BagProp->GetSize());
@@ -69,7 +76,7 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 
 	P_FINISH;
 
-	FStructView MutableStruct = Container->Context.GetMutableValue();
+	FStructView MutableStruct = Bag.GetMutableValue();
 	uint8* StructMemory = MutableStruct.GetMemory();
 
 	if (StructMemory)
@@ -131,7 +138,67 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 	BagProp->DestroyValue(LocalValue);
 }
 
+// Resolves the scriptable container from the BP stack and assigns the wildcard value into its context.
+static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct* ExpectedStructType, const FString& FunctionName)
+{
+	// 1. Retrieve the strongly typed container struct.
+	Stack.StepCompiledIn<FStructProperty>(nullptr);
+	FStructProperty* ContainerProp = CastField<FStructProperty>(Stack.MostRecentProperty);
+	void* ContainerPtr = Stack.MostRecentPropertyAddress;
+
+	// 2. Retrieve the parameter name.
+	P_GET_PROPERTY(FNameProperty, ParameterName);
+
+	if (!ContainerProp || !ContainerPtr || !ContainerProp->Struct->IsChildOf(ExpectedStructType))
+	{
+		// Step to clear the stack if we abort early
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
+		return;
+	}
+
+	// Safely cast to the base container since both actions and requirements inherit from it.
+	FScriptableContainer* Container = static_cast<FScriptableContainer*>(ContainerPtr);
+
+	// Construct the dynamic property bag on the actual instance memory if it's empty.
+	if (!Container->Context.IsValid())
+	{
+		Container->ConstructContext();
+	}
+
+	// Containers define their shape via ContextDefinitions, so the property must already exist.
+	AssignStackValueToBag(Stack, Container->Context, ParameterName, /*bAddIfMissing=*/false, FunctionName);
+}
+
+// Resolves the scriptable context from the BP stack and assigns the wildcard value into its bag.
+static void AssignContextParameterToContext(FFrame& Stack, const FString& FunctionName)
+{
+	// 1. Retrieve the context struct.
+	Stack.StepCompiledIn<FStructProperty>(nullptr);
+	FStructProperty* ContextProp = CastField<FStructProperty>(Stack.MostRecentProperty);
+	void* ContextPtr = Stack.MostRecentPropertyAddress;
+
+	// 2. Retrieve the parameter name.
+	P_GET_PROPERTY(FNameProperty, ParameterName);
+
+	if (!ContextProp || !ContextPtr || !ContextProp->Struct->IsChildOf(FScriptableContext::StaticStruct()))
+	{
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
+		return;
+	}
+
+	FScriptableContext* Context = static_cast<FScriptableContext*>(ContextPtr);
+
+	// A context carries its own shape, so define the property on the fly if it isn't there yet.
+	AssignStackValueToBag(Stack, Context->GetBag(), ParameterName, true, FunctionName);
+}
+
 // --- Thunk Implementations ---
+DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetScriptableContextProperty)
+{
+	AssignContextParameterToContext(Stack, TEXT("SetScriptableContextProperty"));
+}
 
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetActionContextParameter)
 {
@@ -143,7 +210,27 @@ DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetRequirementContextParameter)
 	AssignContextParameterToContainer(Stack, FScriptableRequirement::StaticStruct(), TEXT("SetRequirementContextParameter"));
 }
 
+void UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
+{
+	KzBagOps::AddProperty(Context.GetBag(), FKzParamDef(ParameterName, Type));
+}
+
+void UScriptableBlueprintLibrary::SetActionContext(UPARAM(Ref) FScriptableAction& Action, const FScriptableContext& Context)
+{
+	Action.SetContext(Context);
+}
+
+void UScriptableBlueprintLibrary::SetRequirementContext(UPARAM(Ref) FScriptableRequirement& Requirement, const FScriptableContext& Context)
+{
+	Requirement.SetContext(Context);
+}
+
 bool UScriptableBlueprintLibrary::EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement)
 {
 	return FScriptableRequirement::EvaluateRequirement(Owner, Requirement);
+}
+
+bool UScriptableBlueprintLibrary::EvaluateRequirementWithContext(UObject* Owner, const FScriptableRequirement& Requirement, const FScriptableContext& Context)
+{
+	return FScriptableRequirement::EvaluateRequirement(Owner, Requirement, Context);
 }

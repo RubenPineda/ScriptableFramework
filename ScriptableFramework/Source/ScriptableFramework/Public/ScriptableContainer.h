@@ -9,6 +9,7 @@
 #include "ScriptableContainer.generated.h"
 
 class UScriptableObject;
+struct FScriptableContext;
 
 /** Base struct for any container that provides a Context. */
 USTRUCT(BlueprintType)
@@ -71,6 +72,12 @@ public:
 		auto Result = KzPropertyBag::Get<T>(Context, Name);
 		return Result.HasValue() ? Result.GetValue() : T();
 	}
+
+	/** Copies the shape definitions from the given context into this container, then reconstructs the internal bag. */
+	void AddContext(const FScriptableContext& InContext);
+
+	/** Copies the values from the given context into this container. */
+	void SetContext(const FScriptableContext& InContext);
 
 	/** Finds a registered object by its persistent ID (used by Property Bindings). */
 	UScriptableObject* FindBindingSource(const FGuid& InID) const;

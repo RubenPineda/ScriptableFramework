@@ -3,6 +3,7 @@
 #include "ScriptableTasks/ScriptableAction.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableActionRunner.h"
+#include "ScriptableContext.h"
 
 FScriptableAction::FScriptableAction()
 {
@@ -62,6 +63,22 @@ void FScriptableAction::Run(FScriptableAction&& Action, UObject* Owner)
 
 	UScriptableActionRunner* Runner = NewObject<UScriptableActionRunner>(Owner);
 	Runner->Launch(MoveTemp(Action), Owner);
+}
+
+void FScriptableAction::Run(UObject* InOwner, const FScriptableContext& InContext)
+{
+	if (!InOwner) return;
+
+	SetContext(InContext);
+	Run(InOwner);
+}
+
+void FScriptableAction::Run(FScriptableAction&& Action, UObject* Owner, const FScriptableContext& InContext)
+{
+	if (!Owner) return;
+
+	Action.SetContext(InContext);
+	Run(MoveTemp(Action), Owner);
 }
 
 void FScriptableAction::Register(UObject* InOwner)
