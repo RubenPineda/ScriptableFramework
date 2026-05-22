@@ -1,4 +1,4 @@
-// Copyright 2025 kirzo
+// Copyright 2026 kirzo
 
 #pragma once
 
@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FScriptableTaskDelegate, UScriptable
 UENUM()
 enum class EScriptableTaskStatus : uint8
 {
-	None, Begun, Finished
+	None, Begun, Finished, Stopped
 };
 
 struct SCRIPTABLEFRAMEWORK_API FScriptableTaskEvents
@@ -66,13 +66,41 @@ private:
 	UPROPERTY(Transient)
 	uint8 bDoOnceFinished : 1 = false;
 
+	/** Name of the output fired by the most recent Finish call. */
+	FName LastFiredOutput = NAME_None;
+
 public:
+	/** Canonical name of the default completion output. */
+	static const FName CompletedOutputName;
+
+	/** Canonical name of the cancellation output, fired by Stop(). */
+	static const FName StoppedOutputName;
+
 	EScriptableTaskStatus GetStatus() const { return Status; }
 
-	/** Indicates that BeginTask has been called, but FinishTask has not yet */
+	/** Indicates that BeginTask has been called, but the task has not yet finished or stopped. */
 	bool HasBegun() const { return Status == EScriptableTaskStatus::Begun; }
-	/** Indicates that FinishTask has been called */
+	/** Indicates that the task has finished normally. */
 	bool HasFinished() const { return Status == EScriptableTaskStatus::Finished; }
+	/** Indicates that the task has been cancelled via Stop(). */
+	bool HasStopped() const { return Status == EScriptableTaskStatus::Stopped; }
+
+	/** Returns the name of the output fired by the most recent Finish/Stop call. */
+	FName GetLastFiredOutput() const { return LastFiredOutput; }
+
+	/**
+	 * Returns the set of named outputs this task can fire on completion.
+	 * Default: a single output named CompletedOutputName.
+	 * Tasks that expose multiple completion paths (e.g. Started, Completed) override this.
+	 * The Stopped output is implicit when IsStoppable() returns true and is NOT included here.
+	 */
+	virtual TArray<FName> GetOutputPins() const { return { CompletedOutputName }; }
+
+	/**
+	 * Returns true if this task supports cancellation via Stop().
+	 * Default: true. Override and return false for tasks where cancellation makes no sense.
+	 */
+	virtual bool IsStoppable() const { return true; }
 
 	virtual bool IsReadyToTick() const override { return HasBegun(); }
 
@@ -82,20 +110,29 @@ public:
 	void Reset();
 
 	/**
-	* Begins the execution of this task.
-	* Requires task to be registered.
-	*/
+	 * Begins the execution of this task.
+	 * Requires task to be registered.
+	 */
 	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
 	void Begin();
 
 	/**
-	* Finish the execution of this task.
-	*/
+	 * Finish the execution of this task.
+	 * Fires the CompletedOutputName output. For tasks with multiple outputs, use FinishWithOutput.
+	 */
 	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
 	void Finish();
 
+	/**
+	 * Cancels the execution of this task. Does nothing if !IsStoppable(), or if the task has not begun
+	 * or has already finished/stopped. Fires OnTaskStopped (not OnTaskFinish) and does not honor loop control.
+	 */
+	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
+	void Stop();
+
 	FScriptableTaskNativeDelegate OnTaskBeginNative;
 	FScriptableTaskNativeDelegate OnTaskFinishNative;
+	FScriptableTaskNativeDelegate OnTaskStoppedNative;
 
 	UPROPERTY(BlueprintAssignable)
 	FScriptableTaskDelegate OnTaskBegin;
@@ -103,27 +140,36 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FScriptableTaskDelegate OnTaskFinish;
 
+	UPROPERTY(BlueprintAssignable)
+	FScriptableTaskDelegate OnTaskStopped;
+
+protected:
+	/**
+	 * Finish variant that fires a specific named output instead of the default CompletedOutputName.
+	 * Use this in tasks that declare multiple outputs in GetOutputPins().
+	 */
+	void FinishWithOutput(FName OutputName);
+
 private:
 	virtual void ResetTask();
 	virtual void BeginTask();
 	virtual void FinishTask();
+	virtual void StopTask();
 
 protected:
-	/**
-	* Blueprint implementable event for when the task resets.
-	*/
+	/** Blueprint implementable event for when the task resets. */
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Reset Task"))
 	void ReceiveResetTask();
 
-	/**
-	* Blueprint implementable event for when the task begins.
-	*/
+	/** Blueprint implementable event for when the task begins. */
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Begin Task"))
 	void ReceiveBeginTask();
 
-	/**
-	* Blueprint implementable event for when the task ends.
-	*/
+	/** Blueprint implementable event for when the task ends. */
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Finish Task"))
 	void ReceiveFinishTask();
+
+	/** Blueprint implementable event for when the task is cancelled via Stop(). */
+	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Stop Task"))
+	void ReceiveStopTask();
 };

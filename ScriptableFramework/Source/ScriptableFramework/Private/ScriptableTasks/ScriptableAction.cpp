@@ -175,7 +175,15 @@ void FScriptableAction::Finish(bool bForce)
 		if (Task)
 		{
 			Task->OnTaskFinishNative.RemoveAll(this);
-			Task->Finish();
+			Task->OnTaskStoppedNative.RemoveAll(this);
+			if (bForce)
+			{
+				Task->Stop();
+			}
+			else
+			{
+				Task->Finish();
+			}
 		}
 	}
 
@@ -194,7 +202,9 @@ void FScriptableAction::BeginSubTask(UScriptableTask* Task)
 	}
 
 	Task->OnTaskFinishNative.RemoveAll(this);
+	Task->OnTaskStoppedNative.RemoveAll(this);
 	Task->OnTaskFinishNative.AddRaw(this, &FScriptableAction::OnSubTaskFinished);
+	Task->OnTaskStoppedNative.AddRaw(this, &FScriptableAction::OnSubTaskFinished);
 	Task->Begin();
 }
 
@@ -203,6 +213,7 @@ void FScriptableAction::OnSubTaskFinished(UScriptableTask* Task)
 	if (Task)
 	{
 		Task->OnTaskFinishNative.RemoveAll(this);
+		Task->OnTaskStoppedNative.RemoveAll(this);
 	}
 
 	// In Parallel mode CurrentTaskIndex acts as a counter

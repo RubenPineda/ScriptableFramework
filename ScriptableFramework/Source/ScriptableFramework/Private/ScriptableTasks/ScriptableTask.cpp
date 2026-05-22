@@ -4,22 +4,28 @@
 
 DEFINE_LOG_CATEGORY(LogScriptableTask);
 
+const FName UScriptableTask::CompletedOutputName = TEXT("Completed");
+const FName UScriptableTask::StoppedOutputName = TEXT("Stopped");
+
 void UScriptableTask::OnUnregister()
 {
 	Super::OnUnregister();
 
 	OnTaskBeginNative.Clear();
 	OnTaskFinishNative.Clear();
+	OnTaskStoppedNative.Clear();
 	OnTaskBegin.Clear();
 	OnTaskFinish.Clear();
+	OnTaskStopped.Clear();
 }
 
 void UScriptableTask::Reset()
 {
-	if (HasFinished())
+	if (HasFinished() || HasStopped())
 	{
 		Status = EScriptableTaskStatus::None;
 		CurrentLoopIndex = 0;
+		LastFiredOutput = NAME_None;
 		bDoOnceFinished = false;
 		ResetTask();
 	}
@@ -33,6 +39,7 @@ void UScriptableTask::Begin()
 	{
 		// We treat it as if it started and immediately finished successfully.
 		// This ensures the Action sequence proceeds to the next task.
+		LastFiredOutput = CompletedOutputName;
 		OnTaskFinishNative.Broadcast(this);
 		OnTaskFinish.Broadcast(this);
 		return;
@@ -41,6 +48,7 @@ void UScriptableTask::Begin()
 	check(Status != EScriptableTaskStatus::Begun);
 
 	CurrentLoopIndex = 0;
+	LastFiredOutput = NAME_None;
 
 	ResolveBindings();
 
@@ -54,7 +62,12 @@ void UScriptableTask::Begin()
 
 void UScriptableTask::Finish()
 {
-	if (HasBegun() && !HasFinished() && IsEnabled())
+	FinishWithOutput(CompletedOutputName);
+}
+
+void UScriptableTask::FinishWithOutput(FName OutputName)
+{
+	if (HasBegun() && !HasFinished() && !HasStopped() && IsEnabled())
 	{
 		if (Control.bLoop)
 		{
@@ -78,12 +91,29 @@ void UScriptableTask::Finish()
 		}
 
 		Status = EScriptableTaskStatus::Finished;
+		LastFiredOutput = OutputName;
 		RegisterTickFunctions(false);
 		FinishTask();
 
 		OnTaskFinishNative.Broadcast(this);
 		OnTaskFinish.Broadcast(this);
 	}
+}
+
+void UScriptableTask::Stop()
+{
+	if (!IsStoppable()) return;
+	if (!HasBegun() || HasFinished() || HasStopped()) return;
+	if (!IsEnabled()) return;
+
+	// Stop interrupts looping outright and does not mark bDoOnceFinished.
+	Status = EScriptableTaskStatus::Stopped;
+	LastFiredOutput = StoppedOutputName;
+	RegisterTickFunctions(false);
+	StopTask();
+
+	OnTaskStoppedNative.Broadcast(this);
+	OnTaskStopped.Broadcast(this);
 }
 
 void UScriptableTask::ResetTask()
@@ -99,4 +129,9 @@ void UScriptableTask::BeginTask()
 void UScriptableTask::FinishTask()
 {
 	ReceiveFinishTask();
+}
+
+void UScriptableTask::StopTask()
+{
+	ReceiveStopTask();
 }

@@ -39,6 +39,22 @@ void UScriptableTask_Wait::OnWaitFinished()
 	Finish();
 }
 
+void UScriptableTask_Wait::FinishTask()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(TimerHandle);
+	}
+}
+
+void UScriptableTask_Wait::StopTask()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(TimerHandle);
+	}
+}
+
 #if WITH_EDITOR
 FText UScriptableTask_Wait::GetDisplayTitle() const
 {
