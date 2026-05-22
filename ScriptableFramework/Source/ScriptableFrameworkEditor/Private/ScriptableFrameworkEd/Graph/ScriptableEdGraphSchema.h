@@ -15,4 +15,15 @@ class UScriptableEdGraphSchema : public UEdGraphSchema
 {
 	GENERATED_BODY()
 
+public:
+	//~ UEdGraphSchema interface
+	virtual const FPinConnectionResponse CanCreateConnection(const UEdGraphPin* A, const UEdGraphPin* B) const override;
+	virtual bool TryCreateConnection(UEdGraphPin* A, UEdGraphPin* B) const override;
+	virtual void BreakSinglePinLink(UEdGraphPin* SourcePin, UEdGraphPin* TargetPin) const override;
+	virtual void BreakNodeLinks(UEdGraphNode& TargetNode) const override;
+	//~ End of UEdGraphSchema interface
+
+private:
+	/** Persists a new wire into the owning UScriptableGraph::Connections list. */
+	void PersistConnection(UEdGraphPin* PinA, UEdGraphPin* PinB) const;
 };

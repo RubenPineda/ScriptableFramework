@@ -5,6 +5,8 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
+#include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
 #include "ScriptableFrameworkEditorHelpers.h"
@@ -214,7 +216,8 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		}
 	}
 
-	// Spawn ed-nodes for any runtime node not yet represented.
+	// Spawn ed-nodes for any runtime node not yet represented. The visual class chosen mirrors
+	// the one picked by ScriptableGraphEditorHelpers when nodes are created from the picker.
 	for (const TObjectPtr<UScriptableNode>& RuntimeNode : Graph->Nodes)
 	{
 		if (!RuntimeNode || AlreadyVisualized.Contains(RuntimeNode)) continue;
@@ -224,7 +227,14 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		{
 			NewEdNode = NewObject<UScriptableEdGraphNode_Entry>(Graph->EdGraph, UScriptableEdGraphNode_Entry::StaticClass(), NAME_None, RF_Transactional);
 		}
-		// Other node kinds (Task wrappers, etc.) are handled in later sub-steps.
+		else if (RuntimeNode->IsA<UScriptableNode_Task>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(Graph->EdGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
+		}
+		else
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode>(Graph->EdGraph, UScriptableEdGraphNode::StaticClass(), NAME_None, RF_Transactional);
+		}
 
 		if (NewEdNode)
 		{
@@ -233,6 +243,36 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 			NewEdNode->AllocateDefaultPins();
 			Graph->EdGraph->AddNode(NewEdNode, /*bUserAction*/ false, /*bSelectNewNode*/ false);
 		}
+	}
+
+	// Rebuild a NodeID -> ed-node lookup including the freshly spawned ones, then re-link pins
+	// according to the persisted FScriptableGraphConnection list.
+	TMap<FGuid, UScriptableEdGraphNode*> EdNodeByID;
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode))
+		{
+			if (UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode())
+			{
+				EdNodeByID.Add(RuntimeNode->GetBindingID(), SfEdNode);
+			}
+		}
+	}
+
+	for (const FScriptableGraphConnection& Conn : Graph->Connections)
+	{
+		UScriptableEdGraphNode* FromNode = EdNodeByID.FindRef(Conn.From.NodeID);
+		UScriptableEdGraphNode* ToNode = EdNodeByID.FindRef(Conn.To.NodeID);
+		if (!FromNode || !ToNode) continue;
+
+		UEdGraphPin* FromPin = FromNode->FindPin(Conn.From.PinName, EGPD_Output);
+		UEdGraphPin* ToPin = ToNode->FindPin(Conn.To.PinName, EGPD_Input);
+		if (!FromPin || !ToPin) continue;
+
+		// Defensive: avoid double-linking if reconstruction runs more than once.
+		if (FromPin->LinkedTo.Contains(ToPin)) continue;
+
+		FromPin->MakeLinkTo(ToPin);
 	}
 }
 
@@ -283,7 +323,5 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 
 	FSlateApplication::Get().DismissAllMenus();
 }
-
-#undef LOCTEXT_NAMESPACE
 
 #undef LOCTEXT_NAMESPACE
