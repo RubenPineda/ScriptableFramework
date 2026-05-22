@@ -2,7 +2,14 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
 #include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraph.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
 
+#include "GraphEditor.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyEditorModule.h"
 #include "IDetailsView.h"
@@ -48,6 +55,10 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	{
 		AssetDetailsView->SetObject(InGraph);
 	}
+
+	// Ensure the asset has a visual UEdGraph, then mirror its runtime Nodes onto it.
+	InitEdGraph();
+	ReconstructEdGraphFromAsset();
 
 	// Default three-pane layout: details left | graph center | node details right.
 	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v1")
@@ -133,13 +144,16 @@ void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>
 
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs& Args)
 {
-	// Placeholder until the visual graph is wired up in a later step.
+	UEdGraph* EdGraph = EditedGraph.IsValid() ? EditedGraph->EdGraph : nullptr;
+
+	SAssignNew(GraphEditorWidget, SGraphEditor)
+		.AdditionalCommands(GetToolkitCommands())
+		.GraphToEdit(EdGraph);
+
 	return SNew(SDockTab)
 		.Label(LOCTEXT("GraphTab", "Graph"))
 		[
-			SNew(STextBlock)
-				.Text(LOCTEXT("GraphPlaceholder", "Graph view goes here."))
-				.Justification(ETextJustify::Center)
+			GraphEditorWidget.ToSharedRef()
 		];
 }
 
@@ -159,6 +173,57 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_NodeDetails(const FSpawnTa
 		[
 			NodeDetailsView.IsValid() ? NodeDetailsView.ToSharedRef() : SNullWidget::NullWidget
 		];
+}
+
+void FScriptableGraphEditor::InitEdGraph()
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || Graph->EdGraph) return;
+
+	UScriptableEdGraph* NewEdGraph = NewObject<UScriptableEdGraph>(Graph, UScriptableEdGraph::StaticClass(), NAME_None, RF_Transactional);
+	NewEdGraph->Schema = UScriptableEdGraphSchema::StaticClass();
+	Graph->EdGraph = NewEdGraph;
+	Graph->Modify();
+}
+
+void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph) return;
+
+	// Build a set of runtime nodes that already have a visual representation.
+	TSet<UScriptableNode*> AlreadyVisualized;
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode))
+		{
+			if (UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode())
+			{
+				AlreadyVisualized.Add(RuntimeNode);
+			}
+		}
+	}
+
+	// Spawn ed-nodes for any runtime node not yet represented.
+	for (const TObjectPtr<UScriptableNode>& RuntimeNode : Graph->Nodes)
+	{
+		if (!RuntimeNode || AlreadyVisualized.Contains(RuntimeNode)) continue;
+
+		UScriptableEdGraphNode* NewEdNode = nullptr;
+		if (RuntimeNode->IsA<UScriptableNode_Entry>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Entry>(Graph->EdGraph, UScriptableEdGraphNode_Entry::StaticClass(), NAME_None, RF_Transactional);
+		}
+		// Other node kinds (Task wrappers, etc.) are handled in later sub-steps.
+
+		if (NewEdNode)
+		{
+			NewEdNode->SetRuntimeNode(RuntimeNode);
+			NewEdNode->CreateNewGuid();
+			NewEdNode->AllocateDefaultPins();
+			Graph->EdGraph->AddNode(NewEdNode, /*bUserAction*/ false, /*bSelectNewNode*/ false);
+		}
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

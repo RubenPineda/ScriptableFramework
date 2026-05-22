@@ -62,12 +62,6 @@ protected:
 #endif
 	//~ End of UScriptableObjectAsset interface
 
-#if WITH_EDITORONLY_DATA
-/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */
-	UPROPERTY()
-	TObjectPtr<UEdGraph> EdGraph;
-#endif
-
 private:
 	/** Backing bag holding the declared context shape. Values are not stored at asset level. */
 	UPROPERTY(Transient)
@@ -75,4 +69,11 @@ private:
 
 	/** Creates the Entry node if missing and registers its BindingID in EntryNodeID. */
 	void EnsureEntryNode();
+
+public:
+#if WITH_EDITORONLY_DATA
+	/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */
+	UPROPERTY()
+	TObjectPtr<UEdGraph> EdGraph;
+#endif
 };

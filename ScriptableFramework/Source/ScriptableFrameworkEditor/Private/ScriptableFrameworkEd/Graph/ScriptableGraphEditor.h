@@ -7,6 +7,7 @@
 
 class UScriptableGraph;
 class IDetailsView;
+class SGraphEditor;
 
 /** Asset editor for UScriptableGraph. */
 class FScriptableGraphEditor : public FAssetEditorToolkit
@@ -32,6 +33,12 @@ private:
 	TSharedRef<SDockTab> SpawnTab_AssetDetails(const FSpawnTabArgs& Args);
 	TSharedRef<SDockTab> SpawnTab_NodeDetails(const FSpawnTabArgs& Args);
 
+	/** Creates the asset's UEdGraph the first time it is opened (after the runtime-only era). */
+	void InitEdGraph();
+
+	/** Reconstructs visual UEdGraphNodes from the asset's runtime Nodes list, skipping any already represented. */
+	void ReconstructEdGraphFromAsset();
+
 	/** The asset currently being edited. */
 	TWeakObjectPtr<UScriptableGraph> EditedGraph;
 
@@ -40,6 +47,9 @@ private:
 
 	/** Details view bound to the currently selected node (empty until selection is implemented). */
 	TSharedPtr<IDetailsView> NodeDetailsView;
+
+	/** The graph editor widget shown in the center tab. */
+	TSharedPtr<SGraphEditor> GraphEditorWidget;
 
 	static const FName GraphTabId;
 	static const FName AssetDetailsTabId;
