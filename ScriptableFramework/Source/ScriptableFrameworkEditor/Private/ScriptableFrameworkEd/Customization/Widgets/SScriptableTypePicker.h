@@ -23,8 +23,8 @@ public:
 	DECLARE_DELEGATE_TwoParams(FOnNodeTypePicked, const UStruct*, const FAssetData&);
 
 	SLATE_BEGIN_ARGS(SScriptableTypeSelector)
-		: _MinListWidth(200.0f)
-		, _MaxListHeight(450.0f)
+		: _ListWidth(350.0f)
+		, _ListHeight(400.0f)
 		, _SearchVisibility(EVisibility::Visible)
 		, _CurrentStruct(nullptr)
 		, _BaseScriptStruct(nullptr)
@@ -34,14 +34,17 @@ public:
 		, _Filter()
 		, _ItemStyle(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("ComboBox.Row"))
 	{}
-		/** The min width of the menu */
-		SLATE_ARGUMENT(float, MinListWidth)
+		/** Fixed width of the menu */
+		SLATE_ARGUMENT(float, ListWidth)
 
-		/** The max height of the menu */
-		SLATE_ARGUMENT(float, MaxListHeight)
+		/** Fixed height of the menu */
+		SLATE_ARGUMENT(float, ListHeight)
 
 		/** Allow setting the visibility of the search box dynamically */
 		SLATE_ATTRIBUTE(EVisibility, SearchVisibility)
+
+		/** Optional title shown above the search box (e.g. "Select Node"). If empty, no header row is rendered. */
+		SLATE_ARGUMENT(FText, TitleText)
 
 		/** Currently selected struct, initially highlighted. */
 		SLATE_ARGUMENT(const UStruct*, CurrentStruct)
@@ -53,6 +56,10 @@ public:
 		SLATE_ARGUMENT(FName, ClassCategoryMeta)
 		/** Category meta */
 		SLATE_ARGUMENT(FName, FilterCategoryMeta)
+		/** Optional second base class enumerated alongside BaseClass (mixed in the same tree). */
+		SLATE_ARGUMENT(const UClass*, AdditionalBaseClass)
+		/** Category meta key used by AdditionalBaseClass. If None, falls back to ClassCategoryMeta. */
+		SLATE_ARGUMENT(FName, AdditionalClassCategoryMeta)
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */
@@ -93,15 +100,16 @@ private:
 
 	static void SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items);
 	static TSharedPtr<FScriptableTypeItem> FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath);
-	FText GetNodeCategory(const UStruct* Struct);
-	void AddNode(const UStruct* Struct);
+	FText GetNodeCategory(const UStruct* Struct, const FName& MetaKey) const;
+	void AddNode(const UStruct* Struct, const FName& MetaKey);
 	void AddNode(const FAssetData& AssetData);
 
 	bool MatchesCategoryPath(const TArray<FString>& CategoryPath);
 	bool MatchesFilter(const FAssetData& AssetData);
-	bool MatchesFilter(const UStruct* Struct);
+	bool MatchesFilter(const UStruct* Struct, const FName& MetaKey);
 
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
+	void CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey);
 
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const;
@@ -119,6 +127,8 @@ private:
 
 	FName ClassCategoryMeta;
 	FName FilterCategoryMeta;
+	const UClass* AdditionalBaseClass = nullptr;
+	FName AdditionalClassCategoryMeta;
 
 	TArray<TArray<FString>> FilterPaths;
 
@@ -160,8 +170,8 @@ public:
 		, _ContentPadding(_ComboBoxStyle->ContentPadding)
 		, _ForegroundColor(FSlateColor::UseStyle())
 		, _Method()
-		, _MinListWidth(200.0f)
-		, _MaxListHeight(450.0f)
+		, _ListWidth(350.0f)
+		, _ListHeight(400.0f)
 		, _HasDownArrow(true)
 		, _SearchVisibility()
 		, _CurrentStruct(nullptr)
@@ -169,8 +179,11 @@ public:
 		, _BaseClass(nullptr)
 		, _ClassCategoryMeta(NAME_None)
 		, _FilterCategoryMeta(NAME_None)
+		, _AdditionalBaseClass(nullptr)
+		, _AdditionalClassCategoryMeta(NAME_None)
 		, _Filter()
-	{}
+		{
+		}
 
 		/** Slot for this button's content (optional) */
 		SLATE_DEFAULT_SLOT(FArguments, Content)
@@ -187,11 +200,11 @@ public:
 
 		SLATE_ARGUMENT(TOptional<EPopupMethod>, Method)
 
-		/** The min width of the combo box menu */
-		SLATE_ARGUMENT(float, MinListWidth)
+		/** Fixed width of the combo box menu */
+		SLATE_ARGUMENT(float, ListWidth)
 
-		/** The max height of the combo box menu */
-		SLATE_ARGUMENT(float, MaxListHeight)
+		/** Fixed height of the combo box menu */
+		SLATE_ARGUMENT(float, ListHeight)
 
 		/**
 		 * When false, the down arrow is not generated and it is up to the API consumer
@@ -212,6 +225,10 @@ public:
 		SLATE_ARGUMENT(FName, ClassCategoryMeta)
 		/** Category meta */
 		SLATE_ARGUMENT(FName, FilterCategoryMeta)
+		/** Optional second base class enumerated alongside BaseClass (mixed in the same tree). */
+		SLATE_ARGUMENT(const UClass*, AdditionalBaseClass)
+		/** Category meta key used by AdditionalBaseClass. If None, falls back to ClassCategoryMeta. */
+		SLATE_ARGUMENT(FName, AdditionalClassCategoryMeta)
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */

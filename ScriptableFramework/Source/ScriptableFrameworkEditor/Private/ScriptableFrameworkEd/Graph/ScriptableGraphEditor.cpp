@@ -1,20 +1,26 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
-#include "ScriptableNodes/ScriptableGraph.h"
-#include "ScriptableNodes/ScriptableNode.h"
-#include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraph.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
+#include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
+#include "ScriptableFrameworkEditorHelpers.h"
+#include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableTasks/ScriptableTask.h"
 
 #include "GraphEditor.h"
 #include "Modules/ModuleManager.h"
 #include "PropertyEditorModule.h"
 #include "IDetailsView.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditor"
@@ -146,9 +152,13 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 {
 	UEdGraph* EdGraph = EditedGraph.IsValid() ? EditedGraph->EdGraph : nullptr;
 
+	SGraphEditor::FGraphEditorEvents InEvents;
+	InEvents.OnCreateActionMenuAtLocation = SGraphEditor::FOnCreateActionMenuAtLocation::CreateSP(this, &FScriptableGraphEditor::OnCreateNodeMenu);
+
 	SAssignNew(GraphEditorWidget, SGraphEditor)
 		.AdditionalCommands(GetToolkitCommands())
-		.GraphToEdit(EdGraph);
+		.GraphToEdit(EdGraph)
+		.GraphEvents(InEvents);
 
 	return SNew(SDockTab)
 		.Label(LOCTEXT("GraphTab", "Graph"))
@@ -225,5 +235,55 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		}
 	}
 }
+
+FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, const FVector2f& InNodePosition, const TArray<UEdGraphPin*>& InDraggedPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed InOnMenuClosed)
+{
+	// Capture spawn context by value so the deferred picker callback can use it after the menu closes.
+	const FVector2f CapturedLocation(InNodePosition);
+	TArray<UEdGraphPin*> CapturedPins = InDraggedPins;
+
+	TSharedRef<SScriptableTypeSelector> TypeSelector = SNew(SScriptableTypeSelector)
+		.TitleText(LOCTEXT("ContextMenuTitle", "Select Node"))
+		.BaseClass(UScriptableTask::StaticClass())
+		.ClassCategoryMeta(ScriptableFrameworkEditor::MD_TaskCategory)
+		.AdditionalBaseClass(UScriptableNode::StaticClass())
+		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
+		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins));
+
+	return FActionMenuContent(TypeSelector, TypeSelector->GetWidgetToFocusOnOpen());
+}
+
+void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins)
+{
+	UEdGraphPin* FromPin = (InDraggedPins.Num() > 0) ? InDraggedPins[0] : nullptr;
+
+	// Asset picks are deferred: when content-browser assets like UScriptableActionAsset
+	// are dropped, we'll wrap them in UScriptableTask_RunAsset. Not implemented yet.
+	if (InAssetData.IsValid())
+	{
+		FSlateApplication::Get().DismissAllMenus();
+		return;
+	}
+
+	const UClass* PickedClass = Cast<UClass>(InStruct);
+	if (!PickedClass)
+	{
+		FSlateApplication::Get().DismissAllMenus();
+		return;
+	}
+
+	if (PickedClass->IsChildOf(UScriptableTask::StaticClass()))
+	{
+		ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+	}
+	else if (PickedClass->IsChildOf(UScriptableNode::StaticClass()))
+	{
+		ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+	}
+
+	FSlateApplication::Get().DismissAllMenus();
+}
+
+#undef LOCTEXT_NAMESPACE
 
 #undef LOCTEXT_NAMESPACE

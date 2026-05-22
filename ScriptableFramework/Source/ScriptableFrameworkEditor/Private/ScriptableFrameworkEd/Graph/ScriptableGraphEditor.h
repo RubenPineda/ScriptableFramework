@@ -4,8 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Toolkits/AssetEditorToolkit.h"
+#include "GraphEditor.h"
 
 class UScriptableGraph;
+class UEdGraph;
+class UEdGraphPin;
 class IDetailsView;
 class SGraphEditor;
 
@@ -38,6 +41,12 @@ private:
 
 	/** Reconstructs visual UEdGraphNodes from the asset's runtime Nodes list, skipping any already represented. */
 	void ReconstructEdGraphFromAsset();
+
+	/** Builds the context menu shown when the user right-clicks on empty graph space or drags from a pin. */
+	FActionMenuContent OnCreateNodeMenu(UEdGraph* InGraph, const FVector2f& InNodePosition, const TArray<UEdGraphPin*>& InDraggedPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed InOnMenuClosed);
+
+	/** Callback invoked by the SScriptableTypeSelector when the user picks a class or asset from the popup. */
+	void OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins);
 
 	/** The asset currently being edited. */
 	TWeakObjectPtr<UScriptableGraph> EditedGraph;

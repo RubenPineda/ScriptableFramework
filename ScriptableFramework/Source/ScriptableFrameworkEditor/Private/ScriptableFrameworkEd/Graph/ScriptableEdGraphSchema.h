@@ -15,8 +15,4 @@ class UScriptableEdGraphSchema : public UEdGraphSchema
 {
 	GENERATED_BODY()
 
-public:
-	//~ UEdGraphSchema interface
-	virtual void GetGraphContextActions(FGraphContextMenuBuilder& ContextMenuBuilder) const override;
-	//~ End of UEdGraphSchema interface
 };

@@ -14,7 +14,7 @@ class UScriptableTask;
  * Declares inputs Start (always) and Stop (if the task is stoppable). Outputs are taken from the
  * task's GetOutputPins(); the base class auto-appends Stopped whenever Stop is among the inputs.
  */
-UCLASS()
+UCLASS(meta = (Hidden))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_Task : public UScriptableNode
 {
 	GENERATED_BODY()

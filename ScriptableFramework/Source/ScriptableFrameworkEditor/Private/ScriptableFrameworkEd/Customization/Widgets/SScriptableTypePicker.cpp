@@ -35,6 +35,8 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 
 	ClassCategoryMeta = InArgs._ClassCategoryMeta;
 	FilterCategoryMeta = InArgs._FilterCategoryMeta;
+	AdditionalBaseClass = InArgs._AdditionalBaseClass;
+	AdditionalClassCategoryMeta = InArgs._AdditionalClassCategoryMeta;
 
 	TArray<FString> Filters;
 	InArgs._Filter.ParseIntoArray(Filters, TEXT(","));
@@ -83,55 +85,104 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 		NodeTypeTree->RequestScrollIntoView(Path.Last());
 	}
 
+	const bool bHasTitle = !InArgs._TitleText.IsEmpty();
+
+	// Collapse-all button is shared between two layouts. Build it once.
+	TSharedRef<SButton> CollapseButton = SNew(SButton)
+		.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
+		.ToolTipText(LOCTEXT("CollapseAllCategories", "Collapse All"))
+		.OnClicked(this, &SScriptableTypeSelector::OnCollapseAllButtonClicked)
+		[
+			SNew(SImage)
+				.Image(FAppStyle::GetBrush("SpinBox.Arrows"))
+				.ColorAndOpacity(FSlateColor::UseForeground())
+		];
+
+	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+
+	if (bHasTitle)
+	{
+		// Title row: label on the left (filling), collapse button tucked on the right.
+		Body->AddSlot()
+			.HAlign(HAlign_Fill)
+			.VAlign(VAlign_Center)
+			.Padding(6, 4, 4, 4)
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.FillWidth(1.0f)
+					.VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+							.Text(InArgs._TitleText)
+							.Font(FAppStyle::Get().GetFontStyle("BoldFont"))
+					]
+					+ SHorizontalBox::Slot()
+					.AutoWidth()
+					.VAlign(VAlign_Center)
+					[
+						CollapseButton
+					]
+			];
+
+		// Search alone, full width, so it visually matches the native BP context menu.
+		Body->AddSlot()
+			.HAlign(HAlign_Fill)
+			.VAlign(VAlign_Top)
+			.Padding(4, 0, 4, 4)
+			.AutoHeight()
+			[
+				SAssignNew(SearchBox, SSearchBox)
+					.OnTextChanged(this, &SScriptableTypeSelector::OnSearchBoxTextChanged)
+					.Visibility(InArgs._SearchVisibility)
+			];
+	}
+	else
+	{
+		// Legacy layout (used by customizations): collapse + search share one compact row.
+		Body->AddSlot()
+			.HAlign(HAlign_Fill)
+			.VAlign(VAlign_Top)
+			.Padding(4, 2, 4, 2)
+			.AutoHeight()
+			[
+				SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot()
+					.HAlign(HAlign_Left)
+					.VAlign(VAlign_Center)
+					.AutoWidth()
+					[
+						CollapseButton
+					]
+					+ SHorizontalBox::Slot()
+					.HAlign(HAlign_Fill)
+					.VAlign(VAlign_Top)
+					.FillWidth(1.0f)
+					[
+						SAssignNew(SearchBox, SSearchBox)
+							.OnTextChanged(this, &SScriptableTypeSelector::OnSearchBoxTextChanged)
+							.Visibility(InArgs._SearchVisibility)
+					]
+			];
+	}
+
+	Body->AddSlot()
+		[
+			NodeTypeTree.ToSharedRef()
+		];
+
 	ChildSlot
 		[
-			SNew(SBox)
-				.MinDesiredWidth(InArgs._MinListWidth)
-				.MaxDesiredHeight(InArgs._MaxListHeight)
+			SNew(SBorder)
+				.BorderImage(FAppStyle::GetBrush("Menu.Background"))
+				.Padding(6)
 				[
-					SNew(SVerticalBox)
-
-						+ SVerticalBox::Slot()
-						.HAlign(HAlign_Fill)
-						.VAlign(VAlign_Top)
-						.Padding(4, 2, 4, 2)
-						.AutoHeight()
+					SNew(SBox)
+						.WidthOverride(InArgs._ListWidth)
+						.HeightOverride(InArgs._ListHeight)
 						[
-							SNew(SHorizontalBox)
-
-								+ SHorizontalBox::Slot()
-								.HAlign(HAlign_Left)
-								.VAlign(VAlign_Center)
-								.AutoWidth()
-								[
-									SNew(SButton)
-										.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
-										.ToolTipText_Lambda([]() -> FText
-									{
-										return LOCTEXT("CollapseAllCategories", "Collapse All");
-									})
-										.OnClicked(this, &SScriptableTypeSelector::OnCollapseAllButtonClicked)
-										[
-											SNew(SImage)
-												.Image(FAppStyle::GetBrush("SpinBox.Arrows"))
-												.ColorAndOpacity(FSlateColor::UseForeground())
-										]
-								]
-
-							+ SHorizontalBox::Slot()
-								.HAlign(HAlign_Fill)
-								.VAlign(VAlign_Top)
-								.AutoWidth()
-								[
-									SAssignNew(SearchBox, SSearchBox)
-										.OnTextChanged(this, &SScriptableTypeSelector::OnSearchBoxTextChanged)
-										.Visibility(InArgs._SearchVisibility)
-								]
-						]
-
-					+ SVerticalBox::Slot()
-						[
-							NodeTypeTree.ToSharedRef()
+							Body
 						]
 				]
 		];
@@ -214,7 +265,7 @@ TSharedPtr<SScriptableTypeSelector::FScriptableTypeItem> SScriptableTypeSelector
 	return NewItem;
 }
 
-FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct)
+FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct, const FName& MetaKey) const
 {
 	if (const UClass* Class = Cast<const UClass>(Struct))
 	{
@@ -223,17 +274,17 @@ FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct)
 			return Class->GetMetaDataText(TEXT("Category"));
 		}
 	}
-	return Struct->GetMetaDataText(ClassCategoryMeta);
+	return Struct->GetMetaDataText(MetaKey);
 }
 
-void SScriptableTypeSelector::AddNode(const UStruct* Struct)
+void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKey)
 {
 	if (!Struct || !RootNode.IsValid())
 	{
 		return;
 	}
 
-	const FText CategoryName = GetNodeCategory(Struct);
+	const FText CategoryName = GetNodeCategory(Struct, MetaKey);
 
 	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
 
@@ -361,14 +412,14 @@ bool SScriptableTypeSelector::MatchesCategoryPath(const TArray<FString>& Categor
 	});
 }
 
-bool SScriptableTypeSelector::MatchesFilter(const UStruct* Struct)
+bool SScriptableTypeSelector::MatchesFilter(const UStruct* Struct, const FName& MetaKey)
 {
 	if (!Struct || !RootNode.IsValid())
 	{
 		return false;
 	}
 
-	const FText CategoryName = GetNodeCategory(Struct);
+	const FText CategoryName = GetNodeCategory(Struct, MetaKey);
 
 	if (CategoryName.IsEmpty())
 	{
@@ -421,63 +472,39 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 	FScriptableTypeCache* TypeCache = EditorModule.GetScriptableTypeCache().Get();
 	check(TypeCache);
 
-	TArray<TSharedPtr<FScriptableTypeData>> StructNodes;
-	TArray<TSharedPtr<FScriptableTypeData>> ObjectNodes;
-
-	TypeCache->GetScripStructs(BaseScriptStruct, StructNodes);
-	TypeCache->GetClasses(BaseClass, ObjectNodes);
-
 	// Create tree of node types based on category.
 	RootNode = MakeShared<FScriptableTypeItem>();
 
-	for (const TSharedPtr<FScriptableTypeData>& Data : StructNodes)
+	// 1. Structs from BaseScriptStruct (uses ClassCategoryMeta).
+	if (BaseScriptStruct)
 	{
-		if (const UScriptStruct* ScriptStruct = Data->GetScriptStruct())
-		{
-			if (ScriptStruct == BaseScriptStruct)
-			{
-				continue;
-			}
-			if (ScriptStruct->HasMetaData(TEXT("Hidden")))
-			{
-				continue;
-			}
-			if (!MatchesFilter(ScriptStruct))
-			{
-				continue;
-			}
+		TArray<TSharedPtr<FScriptableTypeData>> StructNodes;
+		TypeCache->GetScripStructs(BaseScriptStruct, StructNodes);
 
-			AddNode(ScriptStruct);
+		for (const TSharedPtr<FScriptableTypeData>& Data : StructNodes)
+		{
+			if (const UScriptStruct* ScriptStruct = Data->GetScriptStruct())
+			{
+				if (ScriptStruct == BaseScriptStruct) continue;
+				if (ScriptStruct->HasMetaData(TEXT("Hidden"))) continue;
+				if (!MatchesFilter(ScriptStruct, ClassCategoryMeta)) continue;
+
+				AddNode(ScriptStruct, ClassCategoryMeta);
+			}
 		}
 	}
 
-	for (const TSharedPtr<FScriptableTypeData>& Data : ObjectNodes)
-	{
-		if (Data->GetClass() != nullptr)
-		{
-			const UClass* Class = Data->GetClass();
-			if (Class == BaseClass)
-			{
-				continue;
-			}
-			if (Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Hidden | CLASS_HideDropDown))
-			{
-				continue;
-			}
-			if (Class->HasMetaData(TEXT("Hidden")))
-			{
-				continue;
-			}
-			if (!MatchesFilter(Class))
-			{
-				continue;
-			}
+	// 2. Classes from BaseClass (uses ClassCategoryMeta).
+	CacheClassesFromBase(BaseClass, ClassCategoryMeta);
 
-			AddNode(Class);
-		}
+	// 3. Classes from AdditionalBaseClass (uses AdditionalClassCategoryMeta, falling back to ClassCategoryMeta).
+	if (AdditionalBaseClass)
+	{
+		const FName ExtraMetaKey = AdditionalClassCategoryMeta.IsNone() ? ClassCategoryMeta : AdditionalClassCategoryMeta;
+		CacheClassesFromBase(AdditionalBaseClass, ExtraMetaKey);
 	}
 
-	// Determine which asset class to search for based on the picker's base class.
+	// 4. Assets associated with BaseClass (Task → ActionAsset, Condition → RequirementAsset).
 	UClass* AssetClassToSearch = nullptr;
 
 	if (BaseClass && BaseClass->IsChildOf(UScriptableTask::StaticClass()))
@@ -500,7 +527,6 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 
 		AssetRegistryModule.Get().GetAssets(Filter, AssetDataList);
 
-		// Add found assets to the tree.
 		for (const FAssetData& Asset : AssetDataList)
 		{
 			if (MatchesFilter(Asset))
@@ -513,6 +539,30 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 	SortNodeTypesFunctionItemsRecursive(RootNode->Children);
 
 	FilteredRootNode = RootNode;
+}
+
+void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey)
+{
+	if (!BaseClass) return;
+
+	FScriptableFrameworkEditorModule& EditorModule = FModuleManager::GetModuleChecked<FScriptableFrameworkEditorModule>(TEXT("ScriptableFrameworkEditor"));
+	FScriptableTypeCache* TypeCache = EditorModule.GetScriptableTypeCache().Get();
+	check(TypeCache);
+
+	TArray<TSharedPtr<FScriptableTypeData>> ObjectNodes;
+	TypeCache->GetClasses(BaseClass, ObjectNodes);
+
+	for (const TSharedPtr<FScriptableTypeData>& Data : ObjectNodes)
+	{
+		const UClass* Class = Data->GetClass();
+		if (!Class) continue;
+		if (Class == BaseClass) continue;
+		if (Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Hidden | CLASS_HideDropDown)) continue;
+		if (Class->HasMetaData(TEXT("Hidden"))) continue;
+		if (!MatchesFilter(Class, MetaKey)) continue;
+
+		AddNode(Class, MetaKey);
+	}
 }
 
 TSharedRef<ITableRow> SScriptableTypeSelector::GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
@@ -867,14 +917,16 @@ void SScriptableTypePicker::Construct(const FArguments& InArgs)
 	// Create inner selector
 	TypeSelector = SNew(SScriptableTypeSelector)
 		.ItemStyle(InArgs._ItemStyle)
-		.MinListWidth(InArgs._MinListWidth)
-		.MaxListHeight(InArgs._MaxListHeight)
+		.ListWidth(InArgs._ListWidth)
+		.ListHeight(InArgs._ListHeight)
 		.SearchVisibility(InArgs._SearchVisibility)
 		.CurrentStruct(InArgs._CurrentStruct)
 		.BaseScriptStruct(InArgs._BaseScriptStruct)
 		.BaseClass(InArgs._BaseClass)
 		.ClassCategoryMeta(InArgs._ClassCategoryMeta)
 		.FilterCategoryMeta(InArgs._FilterCategoryMeta)
+		.AdditionalBaseClass(InArgs._AdditionalBaseClass)
+		.AdditionalClassCategoryMeta(InArgs._AdditionalClassCategoryMeta)
 		.Filter(InArgs._Filter)
 		.OnNodeTypePicked(InArgs._OnNodeTypePicked);
 

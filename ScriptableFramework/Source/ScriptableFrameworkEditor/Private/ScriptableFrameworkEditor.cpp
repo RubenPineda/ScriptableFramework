@@ -23,6 +23,7 @@
 #include "ScriptableConditions/ScriptableCondition_Group.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
 
+#include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
 
@@ -58,6 +59,7 @@ TSharedPtr<FScriptableTypeCache> FScriptableFrameworkEditorModule::GetScriptable
 		ScriptableTypeCache = MakeShareable(new FScriptableTypeCache());
 		ScriptableTypeCache->AddRootClass(UScriptableTask::StaticClass());
 		ScriptableTypeCache->AddRootClass(UScriptableCondition::StaticClass());
+		ScriptableTypeCache->AddRootClass(UScriptableNode::StaticClass());
 	}
 
 	return ScriptableTypeCache;

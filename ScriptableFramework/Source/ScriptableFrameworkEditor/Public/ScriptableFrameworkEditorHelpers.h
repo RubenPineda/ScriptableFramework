@@ -18,6 +18,8 @@ namespace ScriptableFrameworkEditor
 	static const FName MD_TaskCategories = TEXT("TaskCategories");
 	static const FName MD_ConditionCategory = TEXT("ConditionCategory");
 	static const FName MD_ConditionCategories = TEXT("ConditionCategories");
+	static const FName MD_NodeCategory = TEXT("NodeCategory");
+	static const FName MD_NodeCategories = TEXT("NodeCategories");
 
 	bool IsPropertyVisible(TSharedRef<IPropertyHandle> PropertyHandle);
 	bool IsPropertyExtendable(TSharedPtr<IPropertyHandle> InPropertyHandle);
