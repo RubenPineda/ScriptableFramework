@@ -21,4 +21,6 @@ public:
 	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
 	virtual FLinearColor GetNodeTitleColor() const override;
 	//~ End of UEdGraphNode interface
+
+	virtual bool ShouldShowPinLabel(FName PinName) const override { return false; }
 };

@@ -2,6 +2,7 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableConnectionDrawingPolicy.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 
@@ -195,6 +196,11 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 	Section.AddMenuEntry(FGenericCommands::Get().Duplicate);
 	Section.AddSeparator(TEXT("ScriptableNodeEditDeleteSep"));
 	Section.AddMenuEntry(FGenericCommands::Get().Delete);
+}
+
+FConnectionDrawingPolicy* UScriptableEdGraphSchema::CreateConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements, UEdGraph* InGraphObj) const
+{
+	return new FScriptableConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements);
 }
 
 #undef LOCTEXT_NAMESPACE

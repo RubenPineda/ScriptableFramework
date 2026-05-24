@@ -37,4 +37,7 @@ public:
 	virtual FLinearColor GetNodeTitleColor() const override;
 	virtual void DestroyNode() override;
 	//~ End of UEdGraphNode interface
+
+	/** Decides whether a pin's label is rendered. Default shows every label; override to hide. */
+	virtual bool ShouldShowPinLabel(FName PinName) const { return true; }
 };

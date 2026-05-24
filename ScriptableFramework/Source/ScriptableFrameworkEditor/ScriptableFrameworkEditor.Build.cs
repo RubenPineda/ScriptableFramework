@@ -31,7 +31,8 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"KismetWidgets",
 				"ApplicationCore",
 				"DataValidation",
-				"ToolMenus"
+				"ToolMenus",
+				"GraphEditor"
 			});
 	}
 }
