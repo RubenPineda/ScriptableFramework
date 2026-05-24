@@ -18,4 +18,7 @@ public:
 	static FLinearColor NegateColor;
 
 	static FLinearColor ContextColor;
+
+	static FLinearColor ScriptableEntryNodeColor;
+	static FLinearColor ScriptableSystemNodeColor;
 };

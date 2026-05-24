@@ -4,6 +4,7 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableFrameworkEditorStyle.h"
 
 FText UScriptableEdGraphNode_Task::GetNodeTitle(ENodeTitleType::Type TitleType) const
 {
@@ -19,7 +20,15 @@ FText UScriptableEdGraphNode_Task::GetNodeTitle(ENodeTitleType::Type TitleType) 
 
 FLinearColor UScriptableEdGraphNode_Task::GetNodeTitleColor() const
 {
-	return FLinearColor(0.25f, 0.45f, 0.65f);
+	if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(GetRuntimeNode()))
+	{
+		if (const UScriptableTask* Task = TaskNode->Task)
+		{
+			if (TOptional<FLinearColor> Custom = Task->GetNodeTitleColor()) return *Custom;
+		}
+	}
+
+	return FScriptableFrameworkEditorStyle::ScriptableTaskColor;
 }
 
 bool UScriptableEdGraphNode_Task::ShouldShowPinLabel(FName PinName) const

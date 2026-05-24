@@ -1,6 +1,7 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
+#include "ScriptableFrameworkEditorStyle.h"
 
 FText UScriptableEdGraphNode_Entry::GetNodeTitle(ENodeTitleType::Type TitleType) const
 {
@@ -9,5 +10,5 @@ FText UScriptableEdGraphNode_Entry::GetNodeTitle(ENodeTitleType::Type TitleType)
 
 FLinearColor UScriptableEdGraphNode_Entry::GetNodeTitleColor() const
 {
-	return FLinearColor(0.2f, 0.55f, 0.3f);
+	return FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor;
 }

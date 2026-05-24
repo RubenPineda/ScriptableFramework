@@ -172,4 +172,13 @@ protected:
 	/** Blueprint implementable event for when the task is cancelled via Stop(). */
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "Stop Task"))
 	void ReceiveStopTask();
+
+#if WITH_EDITOR
+public:
+	/**
+	 * Override to give this task class a custom node title color in the graph editor.
+	 * Return an unset TOptional (the default) to use the generic task color.
+	 */
+	virtual TOptional<FLinearColor> GetNodeTitleColor() const { return TOptional<FLinearColor>(); }
+#endif
 };
