@@ -297,10 +297,14 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 	SGraphEditor::FGraphEditorEvents InEvents;
 	InEvents.OnCreateActionMenuAtLocation = SGraphEditor::FOnCreateActionMenuAtLocation::CreateSP(this, &FScriptableGraphEditor::OnCreateNodeMenu);
 
+	FGraphAppearanceInfo AppearanceInfo;
+	AppearanceInfo.CornerText = LOCTEXT("ScriptableGraphAppearanceCornerText", "SCRIPTABLE GRAPH");
+
 	SAssignNew(GraphEditorWidget, SGraphEditor)
 		.AdditionalCommands(GetToolkitCommands())
 		.GraphToEdit(EdGraph)
-		.GraphEvents(InEvents);
+		.GraphEvents(InEvents)
+		.Appearance(AppearanceInfo);
 
 	return SNew(SDockTab)
 		.Label(LOCTEXT("GraphTab", "Graph"))

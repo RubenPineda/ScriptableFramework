@@ -12,7 +12,7 @@ FText UScriptableEdGraphNode_Task::GetNodeTitle(ENodeTitleType::Type TitleType) 
 	{
 		if (TaskNode->Task)
 		{
-			return TaskNode->Task->GetClass()->GetDisplayNameText();
+			return TaskNode->Task->GetDisplayTitle();
 		}
 	}
 	return NSLOCTEXT("ScriptableEdGraphNode_Task", "EmptyTaskTitle", "Task (empty)");
