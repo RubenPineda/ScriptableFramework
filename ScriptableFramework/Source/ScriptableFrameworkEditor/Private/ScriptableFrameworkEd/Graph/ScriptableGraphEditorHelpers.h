@@ -10,6 +10,7 @@ class UEdGraphNode;
 class UEdGraphPin;
 class UScriptableTask;
 class UScriptableNode;
+class UScriptableEdGraphNode;
 
 namespace ScriptableGraphEditorHelpers
 {
@@ -18,4 +19,7 @@ namespace ScriptableGraphEditorHelpers
 
 	/** Spawns a UScriptableNode subclass directly (Branch, Sequence, etc.) plus its visual ed-node. */
 	UEdGraphNode* SpawnNativeNode(UEdGraph* ParentGraph, TSubclassOf<UScriptableNode> NodeClass, const FVector2f& Location, UEdGraphPin* FromPin, bool bSelectNewNode);
+
+	/** Picks the right UScriptableEdGraphNode subclass for the runtime node and spawns it at Location. Does NOT add the runtime to the asset (caller's responsibility). */
+	UScriptableEdGraphNode* SpawnEdNodeForRuntime(UEdGraph* ParentGraph, UScriptableNode* RuntimeNode, const FVector2f& Location);
 }

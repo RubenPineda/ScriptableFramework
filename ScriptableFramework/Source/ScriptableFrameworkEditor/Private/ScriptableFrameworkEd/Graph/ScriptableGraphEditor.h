@@ -48,6 +48,29 @@ private:
 	/** Callback invoked by the SScriptableTypeSelector when the user picks a class or asset from the popup. */
 	void OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins);
 
+	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
+	void BindGraphCommands();
+
+	// --- Selection helpers ---
+	bool HasAnyNodesSelected() const;
+	bool HasAnyDeletableSelected() const;
+	bool HasAnyCopyableSelected() const;
+
+	// --- Command handlers ---
+	void OnDeleteSelected();
+	void OnCopySelected();
+	void OnCutSelected();
+	void OnPasteAtCursor();
+	void OnDuplicateSelected();
+	void OnSelectAllNodes();
+
+	bool CanDelete() const { return HasAnyDeletableSelected(); }
+	bool CanCopy() const { return HasAnyCopyableSelected(); }
+	bool CanCut() const { return HasAnyDeletableSelected() && HasAnyCopyableSelected(); }
+	bool CanPaste() const;
+	bool CanDuplicate() const { return HasAnyCopyableSelected(); }
+	bool CanSelectAll() const { return GraphEditorWidget.IsValid(); }
+
 	/** The asset currently being edited. */
 	TWeakObjectPtr<UScriptableGraph> EditedGraph;
 

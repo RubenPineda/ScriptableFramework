@@ -2,9 +2,11 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "EdGraph/EdGraph.h"
@@ -69,6 +71,38 @@ namespace ScriptableGraphEditorHelpers
 		ParentGraph->AddNode(EdNode, /*bUserAction*/ true, bSelectNewNode);
 
 		return EdNode;
+	}
+
+	UScriptableEdGraphNode* SpawnEdNodeForRuntime(UEdGraph* ParentGraph, UScriptableNode* RuntimeNode, const FVector2f& Location)
+	{
+		if (!ParentGraph || !RuntimeNode) return nullptr;
+
+		UScriptableEdGraphNode* NewEdNode = nullptr;
+		if (RuntimeNode->IsA<UScriptableNode_Entry>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Entry>(ParentGraph, UScriptableEdGraphNode_Entry::StaticClass(), NAME_None, RF_Transactional);
+		}
+		else if (RuntimeNode->IsA<UScriptableNode_Task>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(ParentGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
+		}
+		else
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, UScriptableEdGraphNode::StaticClass(), NAME_None, RF_Transactional);
+		}
+
+		if (NewEdNode)
+		{
+			NewEdNode->SetRuntimeNode(RuntimeNode);
+			NewEdNode->CreateNewGuid();
+			NewEdNode->NodePosX = Location.X;
+			NewEdNode->NodePosY = Location.Y;
+			NewEdNode->SnapToGrid(16);
+			NewEdNode->AllocateDefaultPins();
+			ParentGraph->AddNode(NewEdNode, /*bUserAction*/ true, /*bSelectNewNode*/ false);
+		}
+
+		return NewEdNode;
 	}
 }
 
