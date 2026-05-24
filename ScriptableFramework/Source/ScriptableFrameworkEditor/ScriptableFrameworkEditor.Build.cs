@@ -30,7 +30,8 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"BlueprintGraph",
 				"KismetWidgets",
 				"ApplicationCore",
-				"DataValidation"
+				"DataValidation",
+				"ToolMenus"
 			});
 	}
 }

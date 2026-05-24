@@ -8,6 +8,10 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "Framework/Commands/GenericCommands.h"
+#include "ToolMenu.h"
+#include "ToolMenuSection.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableEdGraphSchema"
 
@@ -170,6 +174,27 @@ void UScriptableEdGraphSchema::PersistConnection(UEdGraphPin* PinA, UEdGraphPin*
 
 	GraphAsset->Modify();
 	GraphAsset->Connections.Add(NewConn);
+}
+
+void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
+{
+	Super::GetContextMenuActions(Menu, Context);
+
+	if (!Menu || !Context || !Context->Node) return;
+
+	// Pin or canvas right-clicks land here too; only contribute the node-edit block when the user
+	// actually right-clicked on a node.
+	if (Context->Pin) return;
+
+	// The SGraphEditor attaches its FUICommandList (the one we filled in BindGraphCommands) to the
+	// menu, so referencing FGenericCommands entries resolves to our handlers without further wiring.
+	FToolMenuSection& Section = Menu->AddSection(TEXT("ScriptableNodeEdit"), LOCTEXT("NodeEditSection", "Edit"));
+	Section.AddMenuEntry(FGenericCommands::Get().Cut);
+	Section.AddMenuEntry(FGenericCommands::Get().Copy);
+	Section.AddMenuEntry(FGenericCommands::Get().Paste);
+	Section.AddMenuEntry(FGenericCommands::Get().Duplicate);
+	Section.AddSeparator(TEXT("ScriptableNodeEditDeleteSep"));
+	Section.AddMenuEntry(FGenericCommands::Get().Delete);
 }
 
 #undef LOCTEXT_NAMESPACE
