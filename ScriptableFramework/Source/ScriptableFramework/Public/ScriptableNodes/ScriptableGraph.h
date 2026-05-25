@@ -70,6 +70,9 @@ private:
 	/** Creates the Entry node if missing and registers its BindingID in EntryNodeID. */
 	void EnsureEntryNode();
 
+	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent; safe to call from PostLoad and from any property-change handler that touches Context. */
+	void RebuildContextBag();
+
 public:
 #if WITH_EDITORONLY_DATA
 	/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */

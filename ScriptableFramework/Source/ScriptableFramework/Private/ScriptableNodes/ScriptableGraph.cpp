@@ -37,6 +37,7 @@ void UScriptableGraph::PostLoad()
 
 	// Heal assets that lost their entry node (legacy data, external edits, etc.).
 	EnsureEntryNode();
+	RebuildContextBag();
 }
 
 #if WITH_EDITOR
@@ -50,11 +51,7 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 	// the declared context lives directly on the inherited Context array, so refresh whenever it is edited.
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
 	{
-		ContextBag.Reset();
-		for (const FKzParamDef& Param : Context)
-		{
-			KzBagOps::AddProperty(ContextBag, Param);
-		}
+		RebuildContextBag();
 	}
 }
 #endif
@@ -80,4 +77,13 @@ void UScriptableGraph::EnsureEntryNode()
 	// Flag the asset dirty so the auto-repair persists.
 	Modify();
 #endif
+}
+
+void UScriptableGraph::RebuildContextBag()
+{
+	ContextBag.Reset();
+	for (const FKzParamDef& Param : Context)
+	{
+		KzBagOps::AddProperty(ContextBag, Param);
+	}
 }
