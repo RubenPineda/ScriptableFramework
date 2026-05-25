@@ -73,6 +73,9 @@ private:
 	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent; safe to call from PostLoad and from any property-change handler that touches Context. */
 	void RebuildContextBag();
 
+	/** Removes entries from Connections whose endpoint node IDs no longer resolve to a node, or whose pin names no longer exist on the resolved node. Marks the package dirty if any entry was pruned so the cleanup persists on next save. Called from PostLoad. */
+	void PruneOrphanConnections();
+
 public:
 #if WITH_EDITORONLY_DATA
 	/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */
