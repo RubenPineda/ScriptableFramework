@@ -107,4 +107,7 @@ private:
 
 	UPROPERTY(Transient)
 	TSet<FName> ActiveOutputPins;
+
+	/** Defers OnNodeInactiveNative while > 0. Set during ActivateInput → ProcessInput so that subclasses can transition pins (consume an input, arm outputs) without the transient zero-pin state in between leaking out as a spurious "inactive" broadcast. Without this, latent subclasses that arm outputs after consuming their input get evicted from the runner's ActiveNodes set before their first output ever fires, and the graph completes the moment the latent operation begins. */
+	int32 InactiveNotificationsSuppressed = 0;
 };

@@ -25,7 +25,14 @@ void UScriptableNode::ActivateInput(FName InputName)
 
 	if (CanProcessInput(InputName))
 	{
+		// Treat the ProcessInput call as one atomic transition. Any pin churn inside (consuming
+		// the input, arming outputs, even firing them on sync tasks) must not be observable to
+		// the runner as a "node went inactive" event partway through; only the post-state matters.
+		++InactiveNotificationsSuppressed;
 		ProcessInput(InputName);
+		--InactiveNotificationsSuppressed;
+
+		NotifyIfInactive();
 	}
 }
 
@@ -66,6 +73,8 @@ void UScriptableNode::DeactivateAllOutputs()
 
 void UScriptableNode::NotifyIfInactive()
 {
+	if (InactiveNotificationsSuppressed > 0) return;
+
 	if (!IsNodeActive())
 	{
 		OnNodeInactiveNative.Broadcast(this);
