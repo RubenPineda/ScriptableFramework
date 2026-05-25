@@ -24,6 +24,11 @@
 
 TMap<FObjectKey, SScriptableTypeSelector::FCategoryExpansionState> SScriptableTypeSelector::CategoryExpansionStates;
 
+SScriptableTypeSelector::~SScriptableTypeSelector()
+{
+	OnPickerClosed.ExecuteIfBound();
+}
+
 void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 {
 	// Set default style if none provided (copied from ComboBox.Row default)
@@ -31,6 +36,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 	MenuRowPadding = FMargin(2.0f);
 
 	OnNodeTypePicked = InArgs._OnNodeTypePicked;
+	OnPickerClosed = InArgs._OnPickerClosed;
 	CategoryKey = FObjectKey(InArgs._BaseScriptStruct);
 
 	ClassCategoryMeta = InArgs._ClassCategoryMeta;

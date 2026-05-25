@@ -443,13 +443,19 @@ FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, c
 	const FVector2f CapturedLocation(InNodePosition);
 	TArray<UEdGraphPin*> CapturedPins = InDraggedPins;
 
+	FSimpleDelegate MenuClosedAdapter = FSimpleDelegate::CreateLambda([InOnMenuClosed]()
+		{
+			InOnMenuClosed.ExecuteIfBound();
+		});
+
 	TSharedRef<SScriptableTypeSelector> TypeSelector = SNew(SScriptableTypeSelector)
 		.TitleText(LOCTEXT("ContextMenuTitle", "Select Node"))
 		.BaseClass(UScriptableTask::StaticClass())
 		.ClassCategoryMeta(ScriptableFrameworkEditor::MD_TaskCategory)
 		.AdditionalBaseClass(UScriptableNode::StaticClass())
 		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
-		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins));
+		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins))
+		.OnPickerClosed(MenuClosedAdapter);
 
 	return FActionMenuContent(TypeSelector, TypeSelector->GetWidgetToFocusOnOpen());
 }
@@ -473,16 +479,25 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 		return;
 	}
 
+	UEdGraphNode* SpawnedNode = nullptr;
 	if (PickedClass->IsChildOf(UScriptableTask::StaticClass()))
 	{
-		ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+		SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
 	}
 	else if (PickedClass->IsChildOf(UScriptableNode::StaticClass()))
 	{
-		ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+		SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
 	}
 
+	// Dismiss the menu now that the spawn has executed. The picker's destructor will fire
+	// OnPickerClosed → InOnMenuClosed afterwards, and SGraphPanel cleans up its drag-off state.
 	FSlateApplication::Get().DismissAllMenus();
+
+	if (SpawnedNode && GraphEditorWidget.IsValid())
+	{
+		GraphEditorWidget->ClearSelectionSet();
+		GraphEditorWidget->SetNodeSelection(SpawnedNode, true);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------

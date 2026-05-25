@@ -64,12 +64,15 @@ public:
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */
 		SLATE_ARGUMENT(FOnNodeTypePicked, OnNodeTypePicked)
+		/** Optional callback fired when the picker widget is destroyed (i.e. the host menu has closed, regardless of whether a selection was made or the user pressed Escape). Use this to release any drag-off state the menu was hosting. */
+		SLATE_ARGUMENT(FSimpleDelegate, OnPickerClosed)
 
 		/** The item style to use. */
 		SLATE_STYLE_ARGUMENT(FTableRowStyle, ItemStyle)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
+	virtual ~SScriptableTypeSelector();
 
 	/** @returns widget to focus (search box) when the picker is opened. */
 	TSharedPtr<SWidget> GetWidgetToFocusOnOpen();
@@ -140,6 +143,7 @@ private:
 	bool bIsRestoringExpansion = false;
 
 	FOnNodeTypePicked OnNodeTypePicked;
+	FSimpleDelegate OnPickerClosed;
 
 	/** The item style to use. */
 	const FTableRowStyle* ItemStyle;

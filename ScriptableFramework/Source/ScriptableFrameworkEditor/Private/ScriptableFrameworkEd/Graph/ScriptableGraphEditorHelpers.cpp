@@ -4,12 +4,14 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 #include "ScopedTransaction.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditorHelpers"
@@ -41,7 +43,7 @@ namespace ScriptableGraphEditorHelpers
 		EdNode->AllocateDefaultPins();
 		ParentGraph->AddNode(EdNode, /*bUserAction*/ true, bSelectNewNode);
 
-		// TODO: when connection support lands, auto-wire FromPin to EdNode's matching input.
+		AutoWireFromPin(FromPin, EdNode);
 		return EdNode;
 	}
 
@@ -70,7 +72,35 @@ namespace ScriptableGraphEditorHelpers
 		EdNode->AllocateDefaultPins();
 		ParentGraph->AddNode(EdNode, /*bUserAction*/ true, bSelectNewNode);
 
+		AutoWireFromPin(FromPin, EdNode);
 		return EdNode;
+	}
+
+	void AutoWireFromPin(UEdGraphPin* FromPin, UEdGraphNode* TargetNode)
+	{
+		if (!FromPin || !TargetNode) return;
+
+		// Drag was from an output pin → look for the new node's first input pin.
+		// Drag was from an input pin → look for the new node's first output pin.
+		// Pin categories filtered to ScriptableExec so we don't try to bridge incompatible pin systems.
+		const EEdGraphPinDirection TargetDir = (FromPin->Direction == EGPD_Output) ? EGPD_Input : EGPD_Output;
+
+		UEdGraphPin* TargetPin = nullptr;
+		for (UEdGraphPin* Pin : TargetNode->Pins)
+		{
+			if (Pin && Pin->Direction == TargetDir && Pin->PinType.PinCategory == UScriptableEdGraphNode::ScriptableExecPinCategory)
+			{
+				TargetPin = Pin;
+				break;
+			}
+		}
+
+		if (!TargetPin) return;
+
+		const UEdGraphSchema* Schema = TargetNode->GetSchema();
+		if (!Schema) return;
+
+		Schema->TryCreateConnection(FromPin, TargetPin);
 	}
 
 	UScriptableEdGraphNode* SpawnEdNodeForRuntime(UEdGraph* ParentGraph, UScriptableNode* RuntimeNode, const FVector2f& Location)
