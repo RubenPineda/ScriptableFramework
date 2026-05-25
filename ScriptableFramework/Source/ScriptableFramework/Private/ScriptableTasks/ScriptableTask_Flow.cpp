@@ -58,6 +58,9 @@ void UScriptableTask_Wait::StopTask()
 #if WITH_EDITOR
 FText UScriptableTask_Wait::GetDisplayTitle() const
 {
+	FNumberFormattingOptions NumberOptions;
+	NumberOptions.MaximumFractionalDigits = 2;
+
 	FText DurationText;
 	FString BindingName;
 	if (GetBindingDisplayText(GET_MEMBER_NAME_CHECKED(UScriptableTask_Wait, Duration), BindingName))
@@ -66,7 +69,7 @@ FText UScriptableTask_Wait::GetDisplayTitle() const
 	}
 	else
 	{
-		DurationText = FText::AsNumber(Duration);
+		DurationText = FText::AsNumber(Duration, &NumberOptions);
 	}
 
 	if (BindingName.IsEmpty() && Duration <= UE_KINDA_SMALL_NUMBER)
