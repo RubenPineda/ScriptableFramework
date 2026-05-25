@@ -27,6 +27,7 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphPinFactory.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableFrameworkEditorModule"
 
@@ -48,6 +49,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	RegisterPropertyLayout<UScriptableCondition_Group, FScriptableConditionGroupCustomization>();
 
 	RegisterPinFactory<FScriptableGraphPinFactory>();
+	RegisterNodeFactory<FScriptableGraphNodeFactory>();
 }
 
 void FScriptableFrameworkEditorModule::OnShutdownModule()

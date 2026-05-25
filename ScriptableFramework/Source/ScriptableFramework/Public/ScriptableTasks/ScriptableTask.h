@@ -78,6 +78,9 @@ public:
 
 	EScriptableTaskStatus GetStatus() const { return Status; }
 
+	/** Read-only access to flow-control settings (Loop, DoOnce, LoopCount). */
+	const FScriptableTaskControl& GetControl() const { return Control; }
+
 	/** Indicates that BeginTask has been called, but the task has not yet finished or stopped. */
 	bool HasBegun() const { return Status == EScriptableTaskStatus::Begun; }
 	/** Indicates that the task has finished normally. */

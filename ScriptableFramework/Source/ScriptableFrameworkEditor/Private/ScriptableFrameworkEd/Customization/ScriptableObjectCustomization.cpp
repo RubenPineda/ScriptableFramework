@@ -9,6 +9,7 @@
 
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableConditions/ScriptableRequirementAsset.h"
+#include "ScriptableNodes/ScriptableNode.h"
 
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableFrameworkEditorStyle.h"
@@ -1071,12 +1072,16 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent(
 {
 	TSharedPtr<SHorizontalBox> NameBox = SNew(SHorizontalBox);
 
-	// Checkbox
+	UScriptableObject* Obj = ScriptableObject.Get();
+	const bool bIsWrappedByGraphNode = Obj && Obj->GetOuter() && Obj->GetOuter()->IsA<UScriptableNode>();
+	const EVisibility EnableCheckboxVisibility = (Obj && !bIsWrappedByGraphNode) ? EVisibility::Visible : EVisibility::Collapsed;
+
+	// CheckboxScriptableTask.h
 	NameBox->AddSlot()
 		.AutoWidth().Padding(0, 0, 4, 0).VAlign(VAlign_Center)
 		[
 			SNew(SCheckBox)
-				.Visibility(ScriptableObject.IsValid() ? EVisibility::Visible : EVisibility::Collapsed)
+				.Visibility(EnableCheckboxVisibility)
 				.IsChecked(this, &FScriptableObjectCustomization::OnGetEnabled)
 				.OnCheckStateChanged(this, &FScriptableObjectCustomization::OnSetEnabled)
 				.ToolTipText(LOCTEXT("Toggle", "Enable/Disable"))
