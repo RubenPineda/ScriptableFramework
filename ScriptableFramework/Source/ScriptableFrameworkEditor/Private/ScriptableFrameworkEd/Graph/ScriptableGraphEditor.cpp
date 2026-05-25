@@ -208,6 +208,14 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 		AssetDetailsView->SetObject(InGraph);
 	}
 
+	if (NodeDetailsView.IsValid())
+	{
+		NodeDetailsView->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
+			{
+				return PropertyAndParent.Property.GetMetaData(TEXT("Category")) != TEXT("Tick");
+			}));
+	}
+
 	BindGraphCommands();
 
 	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableGraphEditor::OnRuntimeNodePropertyChanged);
