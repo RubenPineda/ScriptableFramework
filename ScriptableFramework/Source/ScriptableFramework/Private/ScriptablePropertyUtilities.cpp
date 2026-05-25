@@ -2,6 +2,7 @@
 
 #include "ScriptablePropertyUtilities.h"
 #include "ScriptableObject.h"
+#include "ScriptableObjectAsset.h"
 #include "ScriptableContainer.h"
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
@@ -385,6 +386,25 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 
 				bFoundContext = true;
 				break;
+			}
+		}
+
+		// Fallback: assets that store children flat hold the Context bag as a field.
+		if (const UScriptableObjectAsset* ConstAsset = Cast<UScriptableObjectAsset>(CurrentNode))
+		{
+			UScriptableObjectAsset* Asset = const_cast<UScriptableObjectAsset*>(ConstAsset);
+			if (const FInstancedPropertyBag* AssetContext = Asset->GetContext())
+			{
+				if (AssetContext->IsValid() && AssetContext->GetNumPropertiesInBag() > 0)
+				{
+					FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					ContextDesc.Name = FName(TEXT("Context"));
+					ContextDesc.Struct = AssetContext->GetPropertyBagStruct();
+					ContextDesc.ID = FGuid();
+
+					bFoundContext = true;
+					break;
+				}
 			}
 		}
 

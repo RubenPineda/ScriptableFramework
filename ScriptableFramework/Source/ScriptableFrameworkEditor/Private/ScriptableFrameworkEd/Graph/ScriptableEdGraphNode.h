@@ -36,6 +36,7 @@ public:
 	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
 	virtual FLinearColor GetNodeTitleColor() const override;
 	virtual void DestroyNode() override;
+	virtual void ReconstructNode() override;
 	//~ End of UEdGraphNode interface
 
 	/** Decides whether a pin's label is rendered. Default shows every label; override to hide. */

@@ -184,6 +184,11 @@ void FScriptableGraphEditor::CreateEditor(const EToolkitMode::Type Mode, const T
 	}
 }
 
+FScriptableGraphEditor::~FScriptableGraphEditor()
+{
+	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
+}
+
 void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, UScriptableGraph* InGraph)
 {
 	EditedGraph = InGraph;
@@ -204,6 +209,8 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	}
 
 	BindGraphCommands();
+
+	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableGraphEditor::OnRuntimeNodePropertyChanged);
 
 	// Ensure the asset has a visual UEdGraph, then mirror its runtime Nodes onto it.
 	InitEdGraph();
@@ -827,6 +834,32 @@ void FScriptableGraphEditor::OnSelectAllNodes()
 	}
 }
 
+void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph || !InObject) return;
+
+	// Walk up the outer chain of the changed object until we find a UScriptableNode owned by the
+	// edited graph. This catches both direct edits on the wrapper and edits on the inner task
+	// (whose outer is the wrapper, whose outer is the graph asset).
+	for (UObject* Cursor = InObject; Cursor; Cursor = Cursor->GetOuter())
+	{
+		UScriptableNode* Node = Cast<UScriptableNode>(Cursor);
+		if (!Node || Node->GetOuter() != Graph) continue;
+
+		for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+		{
+			UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+			if (SfEd && SfEd->GetRuntimeNode() == Node)
+			{
+				SfEd->ReconstructNode();
+				return;
+			}
+		}
+		return;
+	}
+}
+
 void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection)
 {
 	if (!NodeDetailsView.IsValid()) return;
@@ -852,14 +885,6 @@ void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionS
 	if (!RuntimeNode)
 	{
 		NodeDetailsView->SetObject(nullptr);
-		return;
-	}
-
-	// Unwrap Task nodes: show the inner task directly so its existing customizations (header
-	// warnings, context resolution, etc.) apply naturally and the wrapper's own fields stay hidden.
-	if (UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(RuntimeNode))
-	{
-		NodeDetailsView->SetObject(TaskNode->Task);
 		return;
 	}
 

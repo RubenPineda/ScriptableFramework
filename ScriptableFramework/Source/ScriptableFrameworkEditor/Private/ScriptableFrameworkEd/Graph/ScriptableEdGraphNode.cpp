@@ -64,3 +64,38 @@ void UScriptableEdGraphNode::DestroyNode()
 	GraphAsset->Modify();
 	GraphAsset->Nodes.Remove(RuntimeNodeToRemove);
 }
+
+void UScriptableEdGraphNode::ReconstructNode()
+{
+	TArray<UEdGraphPin*> OldPins = MoveTemp(Pins);
+	Pins.Reset();
+
+	AllocateDefaultPins();
+
+	for (UEdGraphPin* OldPin : OldPins)
+	{
+		if (!OldPin) continue;
+
+		if (UEdGraphPin* NewPin = FindPin(OldPin->PinName, OldPin->Direction))
+		{
+			for (UEdGraphPin* Linked : OldPin->LinkedTo)
+			{
+				if (Linked) NewPin->MakeLinkTo(Linked);
+			}
+		}
+
+		// Sever the old pin from its peers before we destroy it, otherwise the other ends keep a
+		// dangling pointer in their LinkedTo lists.
+		OldPin->BreakAllPinLinks(/*bNotifyNodes*/ false);
+	}
+
+	for (UEdGraphPin* OldPin : OldPins)
+	{
+		if (OldPin) DestroyPin(OldPin);
+	}
+
+	if (UEdGraph* OwningGraph = GetGraph())
+	{
+		OwningGraph->NotifyGraphChanged();
+	}
+}

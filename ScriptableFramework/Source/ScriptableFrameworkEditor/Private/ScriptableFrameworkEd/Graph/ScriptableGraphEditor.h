@@ -19,6 +19,8 @@ public:
 	/** Entry point matched by TKzAssetTypeActions: opens the toolkit on the supplied assets. */
 	static void CreateEditor(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, const TArray<UObject*>& InObjects);
 
+	virtual ~FScriptableGraphEditor();
+
 	/** Initializes the editor and opens the toolkit window for the given graph asset. */
 	void Initialize(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, UScriptableGraph* InGraph);
 
@@ -50,6 +52,9 @@ private:
 
 	/** Routes the graph selection into the node details panel; Task nodes are unwrapped so the inner task's properties show. Empty or multi-selection clears the panel. */
 	void OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection);
+
+	/** Reconstructs the ed-node wrapping the runtime node that owns the changed property, so dynamic node titles (and any future pin-changing customizations) stay in sync with the details panel edits. */
+	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
 	void BindGraphCommands();
@@ -85,6 +90,9 @@ private:
 
 	/** The graph editor widget shown in the center tab. */
 	TSharedPtr<SGraphEditor> GraphEditorWidget;
+
+	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
+	FDelegateHandle OnObjectPropertyChangedHandle;
 
 	static const FName GraphTabId;
 	static const FName AssetDetailsTabId;
