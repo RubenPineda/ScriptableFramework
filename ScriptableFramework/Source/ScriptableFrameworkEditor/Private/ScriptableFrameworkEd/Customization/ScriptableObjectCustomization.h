@@ -47,6 +47,9 @@ protected:
 	/** Returns the base class allowed for this property (e.g., UScriptableTask, UScriptableCondition, or UScriptableObject). */
 	UClass* GetBaseClass() const;
 
+	/** Returns true when the customized scriptable object is parented to a UScriptableNode (i.e. it lives inside a graph). Used to suppress UI affordances whose semantics only fit the flat-list paradigm. */
+	bool IsWrappedByGraphNode() const;
+
 	/** Returns the class of the wrapper task/condition (e.g. UScriptableTask_RunAsset). */
 	virtual UClass* GetWrapperClass() const = 0;
 

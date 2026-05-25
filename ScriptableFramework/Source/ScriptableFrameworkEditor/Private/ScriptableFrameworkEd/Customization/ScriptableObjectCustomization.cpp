@@ -1072,9 +1072,7 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderNameContent(
 {
 	TSharedPtr<SHorizontalBox> NameBox = SNew(SHorizontalBox);
 
-	UScriptableObject* Obj = ScriptableObject.Get();
-	const bool bIsWrappedByGraphNode = Obj && Obj->GetOuter() && Obj->GetOuter()->IsA<UScriptableNode>();
-	const EVisibility EnableCheckboxVisibility = (Obj && !bIsWrappedByGraphNode) ? EVisibility::Visible : EVisibility::Collapsed;
+	const EVisibility EnableCheckboxVisibility = (ScriptableObject.IsValid() && !IsWrappedByGraphNode()) ? EVisibility::Visible : EVisibility::Collapsed;
 
 	// CheckboxScriptableTask.h
 	NameBox->AddSlot()
@@ -1164,11 +1162,14 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 	}
 
 	// Use Selected
-	ExtensionBox->AddSlot()
-		.AutoWidth().VAlign(VAlign_Center)
-		[
-			PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
-		];
+	if (!IsWrappedByGraphNode())
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth().VAlign(VAlign_Center)
+			[
+				PropertyCustomizationHelpers::MakeUseSelectedButton(FSimpleDelegate::CreateSP(this, &FScriptableObjectCustomization::OnUseSelected))
+			];
+	}
 
 	// Browse / Edit
 	if (ScriptableObj)
@@ -1195,24 +1196,27 @@ TSharedPtr<SHorizontalBox> FScriptableObjectCustomization::GetHeaderExtensionCon
 	}
 
 	// Options
-	ExtensionBox->AddSlot()
-		.AutoWidth()
-		.VAlign(VAlign_Center)
-		.Padding(FMargin(4.f, 0.f, 0.f, 0.f))
-		[
-			SNew(SComboButton)
-				.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-				.OnGetMenuContent(this, &FScriptableObjectCustomization::GenerateOptionsMenu)
-				.ToolTipText(LOCTEXT("OptionsTooltip", "Options")) 
-				.HasDownArrow(false)
-				.ContentPadding(FMargin(4.f, 2.f))
-				.ButtonContent()
-				[
-					SNew(SImage)
-						.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
-						.ColorAndOpacity(FSlateColor::UseForeground())
-				]
-		];
+	if (!IsWrappedByGraphNode())
+	{
+		ExtensionBox->AddSlot()
+			.AutoWidth()
+			.VAlign(VAlign_Center)
+			.Padding(FMargin(4.f, 0.f, 0.f, 0.f))
+			[
+				SNew(SComboButton)
+					.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+					.OnGetMenuContent(this, &FScriptableObjectCustomization::GenerateOptionsMenu)
+					.ToolTipText(LOCTEXT("OptionsTooltip", "Options"))
+					.HasDownArrow(false)
+					.ContentPadding(FMargin(4.f, 2.f))
+					.ButtonContent()
+					[
+						SNew(SImage)
+							.Image(FAppStyle::GetBrush("Icons.ChevronDown"))
+							.ColorAndOpacity(FSlateColor::UseForeground())
+					]
+			];
+	}
 
 	return ExtensionBox;
 }
@@ -1262,6 +1266,12 @@ UClass* FScriptableObjectCustomization::GetBaseClass() const
 		MyClass = ObjectProperty->PropertyClass;
 	}
 	return MyClass;
+}
+
+bool FScriptableObjectCustomization::IsWrappedByGraphNode() const
+{
+	UScriptableObject* Obj = ScriptableObject.Get();
+	return Obj && Obj->GetOuter() && Obj->GetOuter()->IsA<UScriptableNode>();
 }
 
 bool FScriptableObjectCustomization::IsWrapperClass(const UClass* Class) const
