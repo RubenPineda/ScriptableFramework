@@ -34,7 +34,7 @@ public:
 	static UScriptableGraphInstance* Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext);
 
 	/** All nodes living in this graph. Instanced so editor-created nodes are owned by the asset. */
-	UPROPERTY(EditAnywhere, Instanced, Category = "Graph")
+	UPROPERTY(Instanced)
 	TArray<TObjectPtr<UScriptableNode>> Nodes;
 
 	/** Flat list of all wires in the graph. */

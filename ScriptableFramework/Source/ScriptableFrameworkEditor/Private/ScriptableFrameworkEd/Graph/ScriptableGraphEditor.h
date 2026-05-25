@@ -48,6 +48,9 @@ private:
 	/** Callback invoked by the SScriptableTypeSelector when the user picks a class or asset from the popup. */
 	void OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins);
 
+	/** Routes the graph selection into the node details panel; Task nodes are unwrapped so the inner task's properties show. Empty or multi-selection clears the panel. */
+	void OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection);
+
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
 	void BindGraphCommands();
 

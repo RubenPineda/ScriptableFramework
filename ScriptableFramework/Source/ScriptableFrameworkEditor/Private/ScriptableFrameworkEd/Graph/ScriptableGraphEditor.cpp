@@ -13,6 +13,7 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
 #include "GraphEditor.h"
@@ -271,7 +272,7 @@ void FScriptableGraphEditor::RegisterTabSpawners(const TSharedRef<FTabManager>& 
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.EventGraph_16x"));
 
 	InTabManager->RegisterTabSpawner(AssetDetailsTabId, FOnSpawnTab::CreateSP(this, &FScriptableGraphEditor::SpawnTab_AssetDetails))
-		.SetDisplayName(LOCTEXT("AssetDetailsTab", "Asset Details"))
+		.SetDisplayName(LOCTEXT("AssetDetailsTab", "Graph Details"))
 		.SetGroup(Category)
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details"));
 
@@ -296,6 +297,7 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 
 	SGraphEditor::FGraphEditorEvents InEvents;
 	InEvents.OnCreateActionMenuAtLocation = SGraphEditor::FOnCreateActionMenuAtLocation::CreateSP(this, &FScriptableGraphEditor::OnCreateNodeMenu);
+	InEvents.OnSelectionChanged = SGraphEditor::FOnSelectionChanged::CreateSP(this, &FScriptableGraphEditor::OnGraphSelectionChanged);
 
 	FGraphAppearanceInfo AppearanceInfo;
 	AppearanceInfo.CornerText = LOCTEXT("ScriptableGraphAppearanceCornerText", "SCRIPTABLE GRAPH");
@@ -316,7 +318,7 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_AssetDetails(const FSpawnTabArgs& Args)
 {
 	return SNew(SDockTab)
-		.Label(LOCTEXT("AssetDetailsTab", "Asset Details"))
+		.Label(LOCTEXT("AssetDetailsTab", "Graph Details"))
 		[
 			AssetDetailsView.IsValid() ? AssetDetailsView.ToSharedRef() : SNullWidget::NullWidget
 		];
@@ -823,6 +825,45 @@ void FScriptableGraphEditor::OnSelectAllNodes()
 	{
 		GraphEditorWidget->SelectAllNodes();
 	}
+}
+
+void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection)
+{
+	if (!NodeDetailsView.IsValid()) return;
+
+	// Single-selection only: anything else (empty or multi) clears the panel. Bindings make
+	// multi-edit semantically dubious (each node has its own context references), so we don't
+	// even try to present a homogeneous array.
+	if (NewSelection.Num() != 1)
+	{
+		NodeDetailsView->SetObject(nullptr);
+		return;
+	}
+
+	UObject* Selected = *NewSelection.CreateConstIterator();
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Selected);
+	if (!SfEdNode)
+	{
+		NodeDetailsView->SetObject(nullptr);
+		return;
+	}
+
+	UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode();
+	if (!RuntimeNode)
+	{
+		NodeDetailsView->SetObject(nullptr);
+		return;
+	}
+
+	// Unwrap Task nodes: show the inner task directly so its existing customizations (header
+	// warnings, context resolution, etc.) apply naturally and the wrapper's own fields stay hidden.
+	if (UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(RuntimeNode))
+	{
+		NodeDetailsView->SetObject(TaskNode->Task);
+		return;
+	}
+
+	NodeDetailsView->SetObject(RuntimeNode);
 }
 
 #undef LOCTEXT_NAMESPACE
