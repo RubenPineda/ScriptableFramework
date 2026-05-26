@@ -60,6 +60,10 @@ public:
 		SLATE_ARGUMENT(const UClass*, AdditionalBaseClass)
 		/** Category meta key used by AdditionalBaseClass. If None, falls back to ClassCategoryMeta. */
 		SLATE_ARGUMENT(FName, AdditionalClassCategoryMeta)
+		/** Optional top-level category name prepended to every entry coming from BaseClass. Leave empty to keep current behavior (no extra grouping). Lets a caller render "BaseClass items" and "AdditionalBaseClass items" as visually separate sections in the tree. */
+		SLATE_ARGUMENT(FText, BaseClassRootCategory)
+		/** Same as BaseClassRootCategory, applied to entries coming from AdditionalBaseClass. */
+		SLATE_ARGUMENT(FText, AdditionalBaseClassRootCategory)
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */
@@ -104,7 +108,9 @@ private:
 	static void SortNodeTypesFunctionItemsRecursive(TArray<TSharedPtr<FScriptableTypeItem>>& Items);
 	static TSharedPtr<FScriptableTypeItem> FindOrCreateItemForCategory(TArray<TSharedPtr<FScriptableTypeItem>>& Items, TArrayView<FString> CategoryPath);
 	FText GetNodeCategory(const UStruct* Struct, const FName& MetaKey) const;
-	void AddNode(const UStruct* Struct, const FName& MetaKey);
+
+	/** RootCategory, if non-empty, becomes the top-level parent under which this entry is placed; the entry's own MetaKey-driven hierarchy hangs below it. Lets a caller force a "Native Nodes" / "Scriptable Tasks" split at the top of the tree. */
+	void AddNode(const UStruct* Struct, const FName& MetaKey, const FText& RootCategory = FText::GetEmpty());
 	void AddNode(const FAssetData& AssetData);
 
 	bool MatchesCategoryPath(const TArray<FString>& CategoryPath);
@@ -112,7 +118,7 @@ private:
 	bool MatchesFilter(const UStruct* Struct, const FName& MetaKey);
 
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
-	void CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey);
+	void CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory = FText::GetEmpty());
 
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const;
@@ -132,6 +138,8 @@ private:
 	FName FilterCategoryMeta;
 	const UClass* AdditionalBaseClass = nullptr;
 	FName AdditionalClassCategoryMeta;
+	FText BaseClassRootCategory;
+	FText AdditionalBaseClassRootCategory;
 
 	TArray<TArray<FString>> FilterPaths;
 

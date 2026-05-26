@@ -42,7 +42,8 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 	ClassCategoryMeta = InArgs._ClassCategoryMeta;
 	FilterCategoryMeta = InArgs._FilterCategoryMeta;
 	AdditionalBaseClass = InArgs._AdditionalBaseClass;
-	AdditionalClassCategoryMeta = InArgs._AdditionalClassCategoryMeta;
+	BaseClassRootCategory = InArgs._BaseClassRootCategory;
+	AdditionalBaseClassRootCategory = InArgs._AdditionalBaseClassRootCategory;
 
 	TArray<FString> Filters;
 	InArgs._Filter.ParseIntoArray(Filters, TEXT(","));
@@ -283,7 +284,7 @@ FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct, const FNam
 	return Struct->GetMetaDataText(MetaKey);
 }
 
-void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKey)
+void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKey, const FText& RootCategory)
 {
 	if (!Struct || !RootNode.IsValid())
 	{
@@ -292,23 +293,30 @@ void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKe
 
 	const FText CategoryName = GetNodeCategory(Struct, MetaKey);
 
-	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
-
+	// Build the full category path: RootCategory (if any) is the top-level group, then the
+	// node's own meta-driven path appends below it. This is what creates the "Native Nodes /
+	// Sequence" vs "Scriptable Tasks / Debug / Log Message" split when the caller asks for it,
+	// while leaving callers that pass an empty RootCategory unaffected (no extra grouping).
+	TArray<FString> CategoryPath;
+	if (!RootCategory.IsEmpty())
+	{
+		CategoryPath.Add(RootCategory.ToString());
+	}
 	if (!CategoryName.IsEmpty())
 	{
-		// Parse "Combat|Melee" -> ["Combat", "Melee"]
-		TArray<FString> CategoryPath;
-		CategoryName.ToString().ParseIntoArray(CategoryPath, TEXT("|"));
-		for (FString& SubCategory : CategoryPath)
+		TArray<FString> SubPath;
+		CategoryName.ToString().ParseIntoArray(SubPath, TEXT("|"));
+		for (FString& SubCategory : SubPath)
 		{
 			SubCategory.TrimStartAndEndInline();
 		}
+		CategoryPath.Append(MoveTemp(SubPath));
+	}
 
-		// Create items for the entire category path
-		for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
-		{
-			ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
-		}
+	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
+	for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
+	{
+		ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
 	}
 	check(ParentItem);
 
@@ -500,14 +508,14 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 		}
 	}
 
-	// 2. Classes from BaseClass (uses ClassCategoryMeta).
-	CacheClassesFromBase(BaseClass, ClassCategoryMeta);
+	// 2. Classes from BaseClass (uses ClassCategoryMeta), grouped under BaseClassRootCategory if set.
+	CacheClassesFromBase(BaseClass, ClassCategoryMeta, BaseClassRootCategory);
 
 	// 3. Classes from AdditionalBaseClass (uses AdditionalClassCategoryMeta, falling back to ClassCategoryMeta).
 	if (AdditionalBaseClass)
 	{
 		const FName ExtraMetaKey = AdditionalClassCategoryMeta.IsNone() ? ClassCategoryMeta : AdditionalClassCategoryMeta;
-		CacheClassesFromBase(AdditionalBaseClass, ExtraMetaKey);
+		CacheClassesFromBase(AdditionalBaseClass, ExtraMetaKey, AdditionalBaseClassRootCategory);
 	}
 
 	// 4. Assets associated with BaseClass (Task → ActionAsset, Condition → RequirementAsset).
@@ -547,7 +555,7 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 	FilteredRootNode = RootNode;
 }
 
-void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey)
+void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory)
 {
 	if (!BaseClass) return;
 
@@ -567,7 +575,7 @@ void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, cons
 		if (Class->HasMetaData(TEXT("Hidden"))) continue;
 		if (!MatchesFilter(Class, MetaKey)) continue;
 
-		AddNode(Class, MetaKey);
+		AddNode(Class, MetaKey, RootCategory);
 	}
 }
 
@@ -767,6 +775,8 @@ int32 SScriptableTypeSelector::FilterNodeTypesChildren(const TArray<FString>& Fi
 			TSharedPtr<FScriptableTypeItem>& NewItem = OutDestArray.Add_GetRef(MakeShared<FScriptableTypeItem>());
 			NewItem->CategoryPath = SourceItem->CategoryPath;
 			NewItem->Struct = SourceItem->Struct;
+			NewItem->Icon = SourceItem->Icon;
+			NewItem->IconColor = SourceItem->IconColor;
 			NewItem->Children = FilteredChildren;
 
 			NumFound += NumChildren;

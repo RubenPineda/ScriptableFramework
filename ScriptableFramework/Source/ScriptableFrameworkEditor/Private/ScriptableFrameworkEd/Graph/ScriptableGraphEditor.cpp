@@ -172,6 +172,7 @@ namespace
 const FName FScriptableGraphEditor::GraphTabId(TEXT("ScriptableGraphEditor_Graph"));
 const FName FScriptableGraphEditor::AssetDetailsTabId(TEXT("ScriptableGraphEditor_AssetDetails"));
 const FName FScriptableGraphEditor::NodeDetailsTabId(TEXT("ScriptableGraphEditor_NodeDetails"));
+const FName FScriptableGraphEditor::PaletteTabId(TEXT("ScriptableGraphEditor_Palette"));
 
 static const FName ScriptableGraphEditorAppId(TEXT("ScriptableGraphEditorApp"));
 
@@ -233,16 +234,29 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	ReconstructEdGraphFromAsset();
 
 	// Default three-pane layout: details left | graph center | node details right.
-	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v1")
+	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v2")
 		->AddArea
 		(
 			FTabManager::NewPrimaryArea()
 			->SetOrientation(Orient_Horizontal)
 			->Split
 			(
-				FTabManager::NewStack()
+				// Left column: Asset Details on top, Palette below — same split BP uses.
+				FTabManager::NewSplitter()
 				->SetSizeCoefficient(0.2f)
-				->AddTab(AssetDetailsTabId, ETabState::OpenedTab)
+				->SetOrientation(Orient_Vertical)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.6f)
+					->AddTab(AssetDetailsTabId, ETabState::OpenedTab)
+				)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.4f)
+					->AddTab(PaletteTabId, ETabState::OpenedTab)
+				)
 			)
 			->Split
 			(
@@ -303,6 +317,11 @@ void FScriptableGraphEditor::RegisterTabSpawners(const TSharedRef<FTabManager>& 
 		.SetDisplayName(LOCTEXT("NodeDetailsTab", "Node Details"))
 		.SetGroup(Category)
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Properties"));
+
+	InTabManager->RegisterTabSpawner(PaletteTabId, FOnSpawnTab::CreateSP(this, &FScriptableGraphEditor::SpawnTab_Palette))
+		.SetDisplayName(LOCTEXT("PaletteTabLabel", "Palette"))
+		.SetGroup(Category)
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Kismet.Tabs.Palette"));
 }
 
 void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>& InTabManager)
@@ -312,6 +331,7 @@ void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>
 	InTabManager->UnregisterTabSpawner(GraphTabId);
 	InTabManager->UnregisterTabSpawner(AssetDetailsTabId);
 	InTabManager->UnregisterTabSpawner(NodeDetailsTabId);
+	InTabManager->UnregisterTabSpawner(PaletteTabId);
 }
 
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs& Args)
@@ -353,6 +373,24 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_NodeDetails(const FSpawnTa
 		.Label(LOCTEXT("NodeDetailsTab", "Node Details"))
 		[
 			NodeDetailsView.IsValid() ? NodeDetailsView.ToSharedRef() : SNullWidget::NullWidget
+		];
+}
+
+TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Palette(const FSpawnTabArgs& Args)
+{
+	TSharedRef<SScriptableTypeSelector> Selector = SNew(SScriptableTypeSelector)
+		.BaseClass(UScriptableTask::StaticClass())
+		.ClassCategoryMeta(ScriptableFrameworkEditor::MD_TaskCategory)
+		.AdditionalBaseClass(UScriptableNode::StaticClass())
+		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
+		.BaseClassRootCategory(LOCTEXT("PaletteScriptableTasks", "Scriptable Tasks"))
+		.AdditionalBaseClassRootCategory(LOCTEXT("PaletteNativeNodes", "Native Nodes"))
+		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnPaletteTypePicked));
+
+	return SNew(SDockTab)
+		.Label(LOCTEXT("PaletteTabLabel", "Palette"))
+		[
+			Selector
 		];
 }
 
@@ -456,6 +494,8 @@ FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, c
 		.ClassCategoryMeta(ScriptableFrameworkEditor::MD_TaskCategory)
 		.AdditionalBaseClass(UScriptableNode::StaticClass())
 		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
+		.BaseClassRootCategory(LOCTEXT("PickerScriptableTasks", "Scriptable Tasks"))
+		.AdditionalBaseClassRootCategory(LOCTEXT("PickerNativeNodes", "Native Nodes"))
 		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins))
 		.OnPickerClosed(MenuClosedAdapter);
 
@@ -500,6 +540,20 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 		GraphEditorWidget->ClearSelectionSet();
 		GraphEditorWidget->SetNodeSelection(SpawnedNode, true);
 	}
+}
+
+void FScriptableGraphEditor::OnPaletteTypePicked(const UStruct* InStruct, const FAssetData& InAssetData)
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	UEdGraph* Graph = GraphEditorWidget->GetCurrentGraph();
+	if (!Graph) return;
+
+	const FVector2f Location = GraphEditorWidget->GetPasteLocation2f();
+
+	// Reuse the same dispatch the right-click menu uses. Pass an empty pin list since there's no
+	// drag-off context to wire from.
+	OnNodeMenuTypePicked(InStruct, InAssetData, Graph, Location, TArray<UEdGraphPin*>());
 }
 
 // ---------------------------------------------------------------------------------------------

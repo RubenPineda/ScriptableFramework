@@ -37,6 +37,7 @@ private:
 	TSharedRef<SDockTab> SpawnTab_Graph(const FSpawnTabArgs& Args);
 	TSharedRef<SDockTab> SpawnTab_AssetDetails(const FSpawnTabArgs& Args);
 	TSharedRef<SDockTab> SpawnTab_NodeDetails(const FSpawnTabArgs& Args);
+	TSharedRef<SDockTab> SpawnTab_Palette(const FSpawnTabArgs& Args);
 
 	/** Creates the asset's UEdGraph the first time it is opened (after the runtime-only era). */
 	void InitEdGraph();
@@ -49,6 +50,9 @@ private:
 
 	/** Callback invoked by the SScriptableTypeSelector when the user picks a class or asset from the popup. */
 	void OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins);
+
+	/** Palette variant of OnNodeMenuTypePicked: same dispatch, but synthesizes a default spawn position (canvas center) since the palette isn't a drag-off context. */
+	void OnPaletteTypePicked(const UStruct* InStruct, const FAssetData& InAssetData);
 
 	/** Routes the graph selection into the node details panel; Task nodes are unwrapped so the inner task's properties show. Empty or multi-selection clears the panel. */
 	void OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection);
@@ -113,4 +117,5 @@ private:
 	static const FName GraphTabId;
 	static const FName AssetDetailsTabId;
 	static const FName NodeDetailsTabId;
+	static const FName PaletteTabId;
 };
