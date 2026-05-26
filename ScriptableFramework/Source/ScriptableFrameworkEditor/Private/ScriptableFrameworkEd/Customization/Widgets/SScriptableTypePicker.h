@@ -70,6 +70,8 @@ public:
 		SLATE_ARGUMENT(FOnNodeTypePicked, OnNodeTypePicked)
 		/** Optional callback fired when the picker widget is destroyed (i.e. the host menu has closed, regardless of whether a selection was made or the user pressed Escape). Use this to release any drag-off state the menu was hosting. */
 		SLATE_ARGUMENT(FSimpleDelegate, OnPickerClosed)
+		/** When true, item rows emit a drag-drop operation (FGraphSchemaActionDragDropAction wrapping a FScriptablePaletteAction) on mouse drag — for use inside the palette tab. When false (default), the selector behaves as a click-to-pick picker only and never starts drags. Picker callers (right-click context menu, etc.) keep the default false. */
+		SLATE_ARGUMENT(bool, EnableDragOut)
 
 		/** The item style to use. */
 		SLATE_STYLE_ARGUMENT(FTableRowStyle, ItemStyle)
@@ -140,6 +142,7 @@ private:
 	FName AdditionalClassCategoryMeta;
 	FText BaseClassRootCategory;
 	FText AdditionalBaseClassRootCategory;
+	bool bEnableDragOut = false;
 
 	TArray<TArray<FString>> FilterPaths;
 

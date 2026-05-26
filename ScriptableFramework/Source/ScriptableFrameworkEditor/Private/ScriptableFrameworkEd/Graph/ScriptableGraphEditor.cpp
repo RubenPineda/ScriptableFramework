@@ -388,7 +388,7 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Palette(const FSpawnTabArg
 		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
 		.BaseClassRootCategory(LOCTEXT("PaletteScriptableTasks", "Scriptable Tasks"))
 		.AdditionalBaseClassRootCategory(LOCTEXT("PaletteNativeNodes", "Native Nodes"))
-		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnPaletteTypePicked));
+		.EnableDragOut(true);
 
 	return SNew(SDockTab)
 		.Label(LOCTEXT("PaletteTabLabel", "Palette"))

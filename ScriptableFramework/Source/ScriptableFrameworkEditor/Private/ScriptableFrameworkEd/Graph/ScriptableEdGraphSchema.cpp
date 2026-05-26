@@ -5,6 +5,11 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableConnectionDrawingPolicy.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableNodes/ScriptableNode_Task.h"
+#include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
+#include "ScopedTransaction.h"
 
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -33,6 +38,15 @@ namespace
 		OutFrom = (A->Direction == EGPD_Output) ? A : B;
 		OutTo = (A->Direction == EGPD_Output) ? B : A;
 		return true;
+	}
+
+	/** Returns true if the schema can spawn a node from the given asset. Used both for the hover-message decision (green / red icon) and the actual drop dispatch. */
+	bool IsScriptableDroppable(const FAssetData& Asset)
+	{
+		const UClass* AssetClass = Asset.GetClass();
+		if (!AssetClass) return false;
+		return AssetClass->IsChildOf(UScriptableActionAsset::StaticClass())
+			|| AssetClass->IsChildOf(UScriptableGraph::StaticClass());
 	}
 }
 
@@ -257,6 +271,95 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 FConnectionDrawingPolicy* UScriptableEdGraphSchema::CreateConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements, UEdGraph* InGraphObj) const
 {
 	return new FScriptableConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements);
+}
+
+void UScriptableEdGraphSchema::GetAssetsGraphHoverMessage(const TArray<FAssetData>& Assets, const UEdGraph* HoverGraph, FString& OutTooltipText, bool& OutOkIcon) const
+{
+	// UE calls this while a drag-from-Content-Browser is hovering the graph canvas. We answer:
+	// - bOkIcon=true plus a tooltip when at least one asset is droppable here (action or graph).
+	// - bOkIcon=false otherwise, with a tooltip explaining why so the user knows what's expected.
+	int32 NumDroppable = 0;
+	for (const FAssetData& Asset : Assets)
+	{
+		if (IsScriptableDroppable(Asset)) ++NumDroppable;
+	}
+
+	if (NumDroppable == 0)
+	{
+		OutOkIcon = false;
+		OutTooltipText = TEXT("Drop a Scriptable Action or Scriptable Graph asset to add it as a node.");
+		return;
+	}
+
+	OutOkIcon = true;
+	OutTooltipText = FString::Printf(TEXT("Drop %d Scriptable asset(s) here"), NumDroppable);
+}
+
+void UScriptableEdGraphSchema::DroppedAssetsOnGraph(const TArray<FAssetData>& Assets, const FVector2f& GraphPosition, UEdGraph* Graph) const
+{
+	if (!Graph) return;
+
+	const FScopedTransaction Transaction(NSLOCTEXT("ScriptableEdGraphSchema", "DropAssetsTx", "Drop Assets on Graph"));
+
+	// Stagger the spawn positions so dropping multiple assets at once doesn't pile them on top of
+	// each other. Same vertical offset BP uses when handling multi-asset drops.
+	FVector2f Cursor = GraphPosition;
+	constexpr float VerticalStep = 120.0f;
+
+	for (const FAssetData& Asset : Assets)
+	{
+		const UClass* AssetClass = Asset.GetClass();
+		if (!AssetClass) continue;
+
+		UEdGraphNode* SpawnedNode = nullptr;
+
+		if (AssetClass->IsChildOf(UScriptableActionAsset::StaticClass()))
+		{
+			// Action asset: spawn a Task wrapper around UScriptableTask_RunAsset, then point its
+			// Asset field at the dropped action.
+			UScriptableActionAsset* ActionAsset = Cast<UScriptableActionAsset>(Asset.GetAsset());
+			if (!ActionAsset) continue;
+
+			SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(Graph, UScriptableTask_RunAsset::StaticClass(), Cursor, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
+			if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(SpawnedNode))
+			{
+				if (UScriptableNode_Task* Wrapper = Cast<UScriptableNode_Task>(SfEdNode->GetRuntimeNode()))
+				{
+					if (UScriptableTask_RunAsset* RunAssetTask = Cast<UScriptableTask_RunAsset>(Wrapper->Task))
+					{
+						RunAssetTask->Modify();
+						RunAssetTask->Asset = ActionAsset;
+						SfEdNode->ReconstructNode();
+					}
+				}
+			}
+		}
+		else if (AssetClass->IsChildOf(UScriptableGraph::StaticClass()))
+		{
+			// Graph asset: spawn a Task wrapper around UScriptableTask_RunGraph, set the asset.
+			UScriptableGraph* GraphAsset = Cast<UScriptableGraph>(Asset.GetAsset());
+			if (!GraphAsset) continue;
+
+			SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(Graph, UScriptableTask_RunGraph::StaticClass(), Cursor, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
+			if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(SpawnedNode))
+			{
+				if (UScriptableNode_Task* Wrapper = Cast<UScriptableNode_Task>(SfEdNode->GetRuntimeNode()))
+				{
+					if (UScriptableTask_RunGraph* RunGraphTask = Cast<UScriptableTask_RunGraph>(Wrapper->Task))
+					{
+						RunGraphTask->Modify();
+						RunGraphTask->GraphAsset = GraphAsset;
+						SfEdNode->ReconstructNode();
+					}
+				}
+			}
+		}
+
+		if (SpawnedNode)
+		{
+			Cursor.Y += VerticalStep;
+		}
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

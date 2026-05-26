@@ -16,6 +16,9 @@
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableRequirementAsset.h"
 
+#include "ScriptableFrameworkEd/Graph/ScriptablePaletteAction.h"
+#include "GraphEditorDragDropAction.h"
+
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
 // --------------------------------------------------------------------------------------
@@ -44,6 +47,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 	AdditionalBaseClass = InArgs._AdditionalBaseClass;
 	BaseClassRootCategory = InArgs._BaseClassRootCategory;
 	AdditionalBaseClassRootCategory = InArgs._AdditionalBaseClassRootCategory;
+	bEnableDragOut = InArgs._EnableDragOut;
 
 	TArray<FString> Filters;
 	InArgs._Filter.ParseIntoArray(Filters, TEXT(","));
@@ -632,9 +636,36 @@ TSharedRef<ITableRow> SScriptableTypeSelector::GenerateNodeTypeRow(TSharedPtr<FS
 		}
 	}
 
+	FOnDragDetected DragHandler;
+	if (bEnableDragOut)
+	{
+		DragHandler.BindLambda([Item](const FGeometry&, const FPointerEvent&) -> FReply
+			{
+				if (!Item.IsValid() || Item->IsCategory())
+				{
+					return FReply::Unhandled();
+				}
+
+				// Wrap the row's payload in a schema action that SGraphPanel recognizes at drop.
+				// FGraphSchemaActionDragDropAction is the standard UE op — at drop, SGraphPanel
+				// calls PerformAction on the wrapped action with the graph and cursor position.
+				TSharedPtr<FEdGraphSchemaAction> Action = MakeShared<FScriptablePaletteAction>(
+					FText::GetEmpty(),
+					Item->Struct ? Item->Struct->GetDisplayNameText() : FText::FromName(Item->AssetData.AssetName),
+					FText::GetEmpty(),
+					0,
+					Item->Struct,
+					Item->AssetData);
+
+				return FReply::Handled().BeginDragDrop(FGraphSchemaActionDragDropAction::New(Action));
+			});
+	}
+
 	TSharedRef<STableRow<TSharedPtr<FScriptableTypeItem>>> Row = SNew(STableRow<TSharedPtr<FScriptableTypeItem>>, OwnerTable)
 		.Style(ItemStyle)
-		.Padding(MenuRowPadding);
+		.Padding(MenuRowPadding)
+		.OnDragDetected(DragHandler);
+
 	Row->SetContent(
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot()
