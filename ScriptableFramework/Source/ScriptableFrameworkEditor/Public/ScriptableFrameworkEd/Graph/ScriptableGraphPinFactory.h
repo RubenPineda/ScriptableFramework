@@ -6,8 +6,8 @@
 #include "EdGraphUtilities.h"
 
 /**
- * Pin factory that creates SScriptableGraphPin widgets for any pin whose category is our
- * ScriptableExec category. Registered with FEdGraphUtilities during editor module startup.
+ * Creates SScriptableGraphPin widgets for ScriptableExec-category pins.
+ * Registered with FEdGraphUtilities at editor module startup.
  */
 class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableGraphPinFactory : public FGraphPanelPinFactory
 {

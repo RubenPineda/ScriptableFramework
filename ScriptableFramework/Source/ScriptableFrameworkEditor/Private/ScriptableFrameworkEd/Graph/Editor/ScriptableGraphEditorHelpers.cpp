@@ -81,9 +81,8 @@ namespace ScriptableGraphEditorHelpers
 	{
 		if (!FromPin || !TargetNode) return;
 
-		// Drag was from an output pin → look for the new node's first input pin.
-		// Drag was from an input pin → look for the new node's first output pin.
-		// Pin categories filtered to ScriptableExec so we don't try to bridge incompatible pin systems.
+		// Pick the opposite-direction pin (output drag → first input, input drag → first output),
+		// filtered to ScriptableExec so we don't bridge incompatible pin systems.
 		const EEdGraphPinDirection TargetDir = (FromPin->Direction == EGPD_Output) ? EGPD_Input : EGPD_Output;
 
 		UEdGraphPin* TargetPin = nullptr;

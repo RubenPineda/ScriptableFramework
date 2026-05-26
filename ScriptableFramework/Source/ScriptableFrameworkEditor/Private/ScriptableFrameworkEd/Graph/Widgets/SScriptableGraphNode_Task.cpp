@@ -56,9 +56,7 @@ TArray<FOverlayWidgetInfo> SScriptableGraphNode_Task::GetOverlayWidgets(bool bSe
 		Widgets.Add(Info);
 	}
 
-	// Loop badge: top-right corner. LoopCount = 0 means "infinite" in the model; surface that
-	// with the infinity glyph rather than the literal zero, which would otherwise read as
-	// "loops zero times".
+	// Loop badge: top-right. LoopCount = 0 means infinite — show the infinity glyph, not a literal 0.
 	if (Control.bLoop)
 	{
 		const FText LoopLabel = (Control.LoopCount <= 0)

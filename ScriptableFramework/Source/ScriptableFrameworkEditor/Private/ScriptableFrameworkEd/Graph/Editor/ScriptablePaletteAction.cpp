@@ -23,9 +23,8 @@ namespace
 				{
 					Inner->Modify();
 
-					// Set the named UObjectProperty by reflection — keeps this helper task-agnostic
-					// so RunAsset and RunGraph share one code path with the field name as the only
-					// difference.
+					// Set the named UObjectProperty by reflection, so RunAsset and RunGraph share one
+					// path (field name is the only difference).
 					if (FObjectProperty* ObjProp = FindFProperty<FObjectProperty>(Inner->GetClass(), AssetFieldName))
 					{
 						ObjProp->SetObjectPropertyValue_InContainer(Inner, AssetToAssign);

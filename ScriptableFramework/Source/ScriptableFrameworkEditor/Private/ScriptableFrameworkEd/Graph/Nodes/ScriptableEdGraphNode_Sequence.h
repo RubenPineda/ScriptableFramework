@@ -10,10 +10,8 @@ class UToolMenu;
 class UGraphNodeContextMenuContext;
 
 /**
- * Specialized visual node for UScriptableNode_Sequence. Inherits the generic native styling
- * (system tint, unlabelled sole input) and contributes pin-level context-menu actions:
- * specifically, "Remove pin" on each output, which preserves downstream connections by sliding
- * higher-indexed branches down to fill the gap.
+ * Specialized ed-node for UScriptableNode_Sequence. Adds per-output "Remove pin" context actions,
+ * which preserve downstream connections by sliding higher-indexed branches down to fill the gap.
  */
 UCLASS()
 class UScriptableEdGraphNode_Sequence : public UScriptableEdGraphNode_Native

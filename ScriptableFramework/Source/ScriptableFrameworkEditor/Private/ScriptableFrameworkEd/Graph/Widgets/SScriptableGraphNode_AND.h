@@ -9,9 +9,8 @@ class UScriptableEdGraphNode;
 class UScriptableNode_AND;
 
 /**
- * Slate widget for UScriptableEdGraphNode_AND. Adds the FlowGraph / K2-style "Add pin" affordance
- * to the *input* side of the node so the user can grow the gate's input set directly from the
- * canvas. Mirrors SScriptableGraphNode_Sequence but on the input column.
+ * Slate widget for UScriptableEdGraphNode_AND. Adds the K2-style "Add pin" affordance on the input
+ * side so the user can grow the gate's inputs from the canvas. Mirrors SScriptableGraphNode_Sequence.
  */
 class SScriptableGraphNode_AND : public SGraphNode
 {

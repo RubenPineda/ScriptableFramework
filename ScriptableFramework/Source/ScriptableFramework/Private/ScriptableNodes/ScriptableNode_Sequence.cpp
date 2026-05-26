@@ -70,11 +70,8 @@ void UScriptableNode_Sequence::RemoveOutputPinAt(int32 BranchIndex)
 		if (OwningGraph->EdGraph) OwningGraph->EdGraph->Modify();
 	}
 
-	// Rewrite outgoing connections in two phases for clarity:
-	//   1. Drop wires originating from the victim pin (BranchIndex).
-	//   2. Shift wires originating from any higher-indexed pin (BranchIndex+1..OutputCount-1)
-	//      down by one. Iterate ascending so each rename targets a free slot.
-	// Asset->Connections is the source of truth.
+	// Rewrite outgoing connections: drop wires from the victim pin, then shift wires from higher pins
+	// down by one (ascending, so each rename targets a free slot). Asset->Connections is the source of truth.
 	if (OwningGraph)
 	{
 		const FGuid SelfID = GetBindingID();

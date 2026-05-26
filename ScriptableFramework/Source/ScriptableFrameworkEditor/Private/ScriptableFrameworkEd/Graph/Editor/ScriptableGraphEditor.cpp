@@ -45,8 +45,7 @@
 
 namespace
 {
-	// Marker line prefixes for the clipboard header. Lines are T3D-compatible comments so the
-	// engine's text factory skips them when it scans for object exports.
+	// Clipboard-header prefixes. Start with ';' so the engine's T3D text factory skips them as comments.
 	constexpr const TCHAR* PositionHeaderPrefix = TEXT(";SF_POS:");
 	constexpr const TCHAR* ConnectionHeaderPrefix = TEXT(";SF_CONN:");
 
@@ -511,10 +510,8 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 
 	UEdGraphNode* SpawnedNode = nullptr;
 
-	// Asset path: dropping a UScriptableActionAsset spawns a Task wrapper around a
-	// UScriptableTask_RunAsset, with the task's Asset field pointing to the picked asset. From
-	// then on the node behaves like any other task — runner instantiates the action at execution
-	// time, no special handling at the graph level.
+	// Asset path: a UScriptableActionAsset spawns a Task wrapper around UScriptableTask_RunAsset
+	// pointing at the picked asset. From there it behaves like any other task.
 	if (InAssetData.IsValid())
 	{
 		UScriptableActionAsset* ActionAsset = Cast<UScriptableActionAsset>(InAssetData.GetAsset());
@@ -616,17 +613,14 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(FGraphEditorCommands::Get().CreateComment,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCreateComment));
 
-	// Undo/Redo: forward to GEditor's transaction stack. FAssetEditorToolkit already provides the
-	// callbacks; map them through so Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z hit the same path while focus
-	// is inside the SGraphEditor widget.
+	// Undo/Redo: forward to GEditor's transaction stack so the shortcuts work while focus is in the graph widget.
 	Commands->MapAction(Generic.Undo,
 		FExecuteAction::CreateLambda([]() { if (GEditor) GEditor->UndoTransaction(); }));
 
 	Commands->MapAction(Generic.Redo,
 		FExecuteAction::CreateLambda([]() { if (GEditor) GEditor->RedoTransaction(); }));
 
-	// Pin context: Remove pin on Sequence. UE resolves the menu entry against this command list
-	// because the SGraphEditor widget was constructed with AdditionalCommands = GetToolkitCommands().
+	// Pin context: Remove pin. Resolved against this command list (SGraphEditor was built with AdditionalCommands = GetToolkitCommands()).
 	Commands->MapAction(FScriptableGraphCommands::Get().RemoveSequencePin,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveSequencePin),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveSequencePin));
@@ -761,9 +755,8 @@ void FScriptableGraphEditor::OnPasteAtCursor()
 	UScriptableGraph* GraphAsset = EditedGraph.Get();
 	UEdGraph* EdGraph = GraphAsset->EdGraph;
 
-	// Pull the raw clipboard text so we can peel off our header (positions + connections) before
-	// handing the T3D body to the factory. Skipping straight to ClipboardPaste keeps single-node
-	// clipboards (from details views) working: no header → empty offsets/connections → cascade fallback.
+	// Peel our header (positions + connections) off the raw clipboard before handing the T3D body to
+	// the factory. Single-node clipboards (from details views) have no header → cascade fallback.
 	FString FullClipboardText;
 	FPlatformApplicationMisc::ClipboardPaste(FullClipboardText);
 	if (FullClipboardText.IsEmpty()) return;
@@ -818,11 +811,8 @@ void FScriptableGraphEditor::OnPasteAtCursor()
 	const FVector2f BasePasteLocation = GraphEditorWidget->GetPasteLocation2f();
 	const FVector2f CascadeStep(20.f, 20.f); // Fallback for clipboards without our header.
 
-	// Build OldID -> new runtime map as we paste, so we can rewire connections afterwards.
-	// Order in NewRuntimeNodes matches the order objects were exported, which matches the order
-	// of ;SF_POS lines in the header, but we cannot rely on indices alone if Entry was dropped
-	// mid-loop above. Walking both lists in parallel works because BindClipboardHeader iterates
-	// SelectedEdNodes in the same order CopyObjectsToClipboard iterates RuntimeNodes.
+	// Build OldID -> new runtime map as we paste, to rewire connections afterwards. Walk NewRuntimeNodes
+	// and the ;SF_POS order in parallel (same order CopyObjectsToClipboard exported them).
 	TArray<FGuid> OldIDsInOrder;
 	OldIDsInOrder.Reserve(OldNodeOffsets.Num());
 	{
@@ -851,9 +841,8 @@ void FScriptableGraphEditor::OnPasteAtCursor()
 	{
 		UScriptableNode* NewRuntimeNode = NewRuntimeNodes[i];
 
-		// Patch bindings: the deserialized runtime got a fresh BindingID via PostEditImport, but its
-		// PropertyBindings still carry the OLD BindingID in TargetPath. Re-stamp them so the bindings
-		// target the new instance. Same fix as FScriptableObjectCustomization::OnPasteNode.
+		// The deserialized runtime got a fresh BindingID, but its PropertyBindings still carry the
+		// old one in TargetPath. Re-stamp them to the new instance (as in OnPasteNode).
 		const FGuid NewGuid = NewRuntimeNode->GetBindingID();
 		for (FScriptablePropertyBinding& Binding : NewRuntimeNode->GetPropertyBindings().Bindings)
 		{
@@ -969,9 +958,7 @@ void FScriptableGraphEditor::OnCreateComment()
 	UEdGraph* Graph = GraphEditorWidget->GetCurrentGraph();
 	if (!Graph) return;
 
-	// Compute placement: if the user has a node selection, the comment is sized to wrap it. Else
-	// it lands at the cursor's graph-space location at a sensible default size, so pressing C on
-	// empty canvas still produces a usable comment.
+	// If nodes are selected, size the comment to wrap them; otherwise place it at the cursor with a default size.
 	FSlateRect BoundsRect;
 	const bool bSelectionHasBounds = GraphEditorWidget->GetBoundsForSelectedNodes(BoundsRect, /*Padding*/ 50.0f);
 
@@ -1104,16 +1091,12 @@ bool FScriptableGraphEditor::CanRemoveANDPin() const
 
 void FScriptableGraphEditor::OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event)
 {
-	// We only care about transactions applied to the asset we're editing. UE fires this delegate
-	// for every transacted object globally, so filter aggressively. Both undo and redo emit this
-	// event with EventType ETransactionObjectEventType::UndoRedo.
+	// UE fires this for every transacted object globally; filter to our asset and to UndoRedo events.
 	if (!Object) return;
 	if (Object != EditedGraph.Get()) return;
 	if (Event.GetEventType() != ETransactionObjectEventType::UndoRedo) return;
 
-	// Rebuild the ed-graph from the asset's now-restored state. ReconstructEdGraphFromAsset
-	// builds pins fresh from Asset->Nodes + Asset->Connections, so any stale ed-graph state from
-	// before the transaction is wiped clean and replaced with one coherent with the asset.
+	// Rebuild the ed-graph from the asset's now-restored Nodes + Connections, wiping any stale state.
 	ReconstructEdGraphFromAsset();
 }
 

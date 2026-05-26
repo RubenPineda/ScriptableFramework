@@ -6,9 +6,8 @@
 #include "KismetPins/SGraphPinExec.h"
 
 /**
- * Custom pin widget for scriptable graph pins. Renders the standard BP-style exec triangle
- * (hollow when disconnected, filled when connected, routed behind the node) and respects
- * the owning ed-node's per-pin label visibility hint.
+ * Custom pin widget: renders the BP-style exec triangle (hollow/filled by connection state) and
+ * respects the owning ed-node's per-pin label visibility hint.
  */
 class SCRIPTABLEFRAMEWORKEDITOR_API SScriptableGraphPin : public SGraphPinExec
 {

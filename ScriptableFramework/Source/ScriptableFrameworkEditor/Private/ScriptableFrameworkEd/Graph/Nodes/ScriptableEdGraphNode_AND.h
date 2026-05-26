@@ -7,9 +7,8 @@
 #include "ScriptableEdGraphNode_AND.generated.h"
 
 /**
- * Specialized ed-node for UScriptableNode_AND. Carries the standard system tint, shows a small
- * AND-themed icon, and contributes per-input pin actions (Remove pin), mirroring Sequence's
- * per-output affordance but on the input side.
+ * Specialized ed-node for UScriptableNode_AND. Adds per-input "Remove pin" context actions —
+ * Sequence's per-output affordance, mirrored onto the input side.
  */
 UCLASS()
 class UScriptableEdGraphNode_AND : public UScriptableEdGraphNode_Native

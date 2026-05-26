@@ -93,9 +93,8 @@ void UScriptableGraph::PruneOrphanConnections()
 {
 	if (Connections.IsEmpty()) return;
 
-	// Build a quick lookup of GUID -> node for the cross-checks. Node IDs are stable across runs;
-	// pin names are not (a task's GetOutputPins can return different sets after edits), so we
-	// validate both the endpoint node existence AND the endpoint pin name's current presence.
+	// GUID -> node lookup for cross-checks. Node IDs are stable but pin names aren't (GetOutputPins can
+	// change after edits), so validate both the endpoint node and the pin name's current presence.
 	TMap<FGuid, UScriptableNode*> NodesByGuid;
 	NodesByGuid.Reserve(Nodes.Num());
 	for (const TObjectPtr<UScriptableNode>& Node : Nodes)

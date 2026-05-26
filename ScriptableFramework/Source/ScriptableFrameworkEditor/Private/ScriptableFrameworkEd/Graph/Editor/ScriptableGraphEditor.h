@@ -51,19 +51,19 @@ private:
 	/** Callback invoked by the SScriptableTypeSelector when the user picks a class or asset from the popup. */
 	void OnNodeMenuTypePicked(const UStruct* InStruct, const FAssetData& InAssetData, UEdGraph* InGraph, FVector2f InLocation, TArray<UEdGraphPin*> InDraggedPins);
 
-	/** Palette variant of OnNodeMenuTypePicked: same dispatch, but synthesizes a default spawn position (canvas center) since the palette isn't a drag-off context. */
+	/** Palette variant of OnNodeMenuTypePicked: spawns at canvas center (no drag-off context). */
 	void OnPaletteTypePicked(const UStruct* InStruct, const FAssetData& InAssetData);
 
-	/** Routes the graph selection into the node details panel; Task nodes are unwrapped so the inner task's properties show. Empty or multi-selection clears the panel. */
+	/** Routes selection into the node details panel (Task nodes unwrapped to show the inner task). Empty/multi-selection clears it. */
 	void OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection);
 
-	/** Reconstructs the ed-node wrapping the runtime node that owns the changed property, so dynamic node titles (and any future pin-changing customizations) stay in sync with the details panel edits. */
+	/** Reconstructs the ed-node whose runtime node changed, keeping dynamic titles/pins in sync with details-panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 
-	/** Pin-context command executor: removes the right-clicked Sequence output pin (or no-op if the selected pin isn't a removable Sequence branch). Reads the target pin from the GraphEditorWidget's current selection set, since FUICommandInfo executors don't receive the pin directly. */
+	/** Removes the right-clicked Sequence output pin (no-op if not a removable branch). Reads the pin from the widget's selection, since command executors don't receive it. */
 	void OnRemoveSequencePin();
 
-	/** Enables the Remove pin entry only when the right-clicked pin belongs to a UScriptableNode_Sequence with OutputCount > 1 and is an output. */
+	/** Enables Remove pin only for a Sequence output pin when OutputCount > 1. */
 	bool CanRemoveSequencePin() const;
 
 	/** Pin-context executor: removes the right-clicked AND input pin. Reads the target pin from the GraphEditorWidget's current selection. */
@@ -72,7 +72,7 @@ private:
 	/** Greys out the AND Remove-pin entry once the node would dip below MinInputCount. */
 	bool CanRemoveANDPin() const;
 
-	/** Hooked to FCoreUObjectDelegates::OnObjectTransacted. Fires after UE applies an undo or redo to any object; we filter to the edited asset and rebuild the ed-graph to match the restored Connections / Nodes state. This is how pin-removal undo works without us doing in-place pin manipulation inside the transaction. */
+	/** Fires after any undo/redo (FCoreUObjectDelegates::OnObjectTransacted); filters to the edited asset and rebuilds the ed-graph to match the restored Connections/Nodes. This is how pin-removal undo works. */
 	void OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event);
 
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */

@@ -23,10 +23,8 @@ void UScriptableNode_Branch::ProcessInput(FName InputName)
 	const bool bResult = Requirement.Evaluate();
 	const FName ChosenOutput = bResult ? TrueOutputName : FalseOutputName;
 
-	// Arm only the chosen output. Unlike Sequence (which arms all outputs then fires sequentially),
-	// Branch picks one — arming the other would just be teardown noise: it would be marked
-	// inactive on the same call without ever firing. The ActivateInput suppress scope hides the
-	// transient zero-pin state if it occurs (after MarkInputInactive, before MarkOutputActive).
+	// Arm only the chosen output (arming the other would just be marked inactive without firing).
+	// The ActivateInput suppress scope hides the transient zero-pin state between consume and arm.
 	MarkInputInactive(InInputName);
 	MarkOutputActive(ChosenOutput);
 	FireOutput(ChosenOutput);

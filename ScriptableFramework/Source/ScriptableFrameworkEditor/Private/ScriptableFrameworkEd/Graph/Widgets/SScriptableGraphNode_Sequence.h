@@ -24,6 +24,6 @@ public:
 	//~ End of SGraphNode interface
 
 private:
-	/** Resolves the runtime Sequence node from the ed-node weakly held by SGraphNode::GraphNode. Returns null defensively (typically only during teardown). */
+	/** Resolves the runtime Sequence node from SGraphNode::GraphNode. Null only during teardown. */
 	UScriptableNode_Sequence* GetRuntimeSequence() const;
 };

@@ -9,10 +9,8 @@
 class UScriptableTask;
 
 /**
- * Wrapper node that hosts a single UScriptableTask inside a graph.
- *
- * Declares inputs Start (always) and Stop (if the task is stoppable). Outputs are taken from the
- * task's GetOutputPins(); the base class auto-appends Stopped whenever Stop is among the inputs.
+ * Wrapper node hosting a single UScriptableTask. Inputs: Start (always) and Stop (if stoppable).
+ * Outputs come from the task's GetOutputPins(); the base auto-appends Stopped when Stop is an input.
  */
 UCLASS(meta = (Hidden))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_Task : public UScriptableNode

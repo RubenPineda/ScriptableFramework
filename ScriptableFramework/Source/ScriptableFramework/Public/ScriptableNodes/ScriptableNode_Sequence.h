@@ -7,10 +7,8 @@
 #include "ScriptableNode_Sequence.generated.h"
 
 /**
- * Fans the incoming signal out across N ordered outputs ("Then 0", "Then 1", ...).
- * Outputs fire synchronously in order during a single ProcessInput call: each FireOutput broadcasts
- * to the runner, which queues downstream activations on Pending; no branch waits for any other to
- * complete. Mirrors the Blueprint Sequence node semantics.
+ * Fans the incoming signal out across N ordered outputs, firing them in order within one ProcessInput
+ * (each fire just queues downstream work; no branch waits for another). Mirrors the Blueprint Sequence node.
  */
 UCLASS(DisplayName = "Sequence", meta = (NodeCategory = "System|Flow"))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_Sequence : public UScriptableNode
@@ -18,10 +16,10 @@ class SCRIPTABLEFRAMEWORK_API UScriptableNode_Sequence : public UScriptableNode
 	GENERATED_BODY()
 
 public:
-	/** Minimum number of output pins. Hard floor for guards in pin removal paths and defensive clamps in pin enumeration. */
+	/** Hard floor for output count, enforced in pin-removal and enumeration paths. */
 	static constexpr int32 MinOutputCount = 2;
 
-	/** Number of ordered outputs the node exposes. BP-style default is 2; minimum 1 for placeholder / pass-through uses. */
+	/** Number of ordered outputs. Default 2 (BP-style). */
 	UPROPERTY()
 	int32 OutputCount = 2;
 
@@ -37,10 +35,10 @@ public:
 	//~ End of UScriptableNode interface
 
 #if WITH_EDITOR
-	/** Editor helper: bumps OutputCount by one. Emits a property-changed event so the editor's title/pin refresh paths fire automatically (matches the user editing OutputCount in the details panel). */
+	/** Editor helper: adds one output pin. */
 	void AddOutputPin();
 
-	/** Editor helper: removes the output pin at BranchIndex (0-based) and shifts every higher-indexed pin down by one, rewriting the outgoing wires in the owning UScriptableGraph so downstream connections keep pointing at the same branch under its new name. Connections originating from the victim pin are lost; connections originating from any other branch slide down their indices intact. No-op when only one pin would remain or BranchIndex is out of range. */
+	/** Editor helper: removes the output pin at BranchIndex and shifts higher pins down, rewriting the owning graph's wires so downstream stays connected. Wires from the removed pin are lost. No-op if only one pin would remain or index is out of range. */
 	void RemoveOutputPinAt(int32 BranchIndex);
 #endif
 

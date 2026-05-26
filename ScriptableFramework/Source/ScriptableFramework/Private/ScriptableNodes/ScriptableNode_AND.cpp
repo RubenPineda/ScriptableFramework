@@ -99,10 +99,7 @@ void UScriptableNode_AND::RemoveInputPinAt(int32 BranchIndex)
 		}
 	}
 
-	// Defensive: forget any pending pulse on the victim pin so the gate doesn't carry stale state
-	// across a structural change. SeenInputs is transient and only matters at runtime, but if a
-	// graph is being edited during a paused-runtime debug session this avoids a deadlock on
-	// the next pulse.
+	// Defensive: forget any pending pulse on the victim pin so a mid-edit gate can't deadlock on the next pulse.
 	SeenInputs.Remove(MakeInputName(BranchIndex));
 
 	InputCount -= 1;

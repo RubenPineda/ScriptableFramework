@@ -6,9 +6,8 @@
 #include "EdGraphUtilities.h"
 
 /**
- * Slate node factory that supplies custom SGraphNode subclasses for our editor graph nodes.
- * Currently maps UScriptableEdGraphNode_Task -> SScriptableGraphNode_Task; all other node
- * types fall through to the default factory by returning null.
+ * Slate node factory mapping ed-nodes to custom SGraphNode widgets (e.g. Task -> SScriptableGraphNode_Task).
+ * Returns null for unmapped types so they fall through to the default factory.
  */
 class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableGraphNodeFactory : public FGraphPanelNodeFactory
 {

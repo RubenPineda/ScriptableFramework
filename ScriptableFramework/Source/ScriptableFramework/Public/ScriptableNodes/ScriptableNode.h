@@ -12,12 +12,9 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FScriptableNodePinFiredNative, UScriptableN
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeInactiveNative, UScriptableNode* /*Node*/);
 
 /**
- * Base class for any node that can live inside a UScriptableGraph.
- * Defines the pin-state model (active input/output pins) and the activation protocol used by the runner.
- *
- * Subclasses declare their inputs/outputs, decide when an active input can be consumed (CanProcessInput),
- * and implement the actual reaction to consumption (ProcessInput). The base class manages pin sets,
- * fires the appropriate delegates, and notifies the runner when the node becomes inactive.
+ * Base class for any node inside a UScriptableGraph: defines the pin-state model and activation protocol.
+ * Subclasses declare inputs/outputs and implement ProcessInput; the base manages pin sets, fires delegates,
+ * and notifies the runner on inactivity.
  */
 UCLASS(Abstract, DefaultToInstanced, EditInlineNew, Blueprintable, BlueprintType, HideCategories = (Hidden), CollapseCategories)
 class SCRIPTABLEFRAMEWORK_API UScriptableNode : public UScriptableObject
@@ -46,10 +43,7 @@ public:
 	/** Returns true if the given input is ready to be processed right now. */
 	virtual bool CanProcessInput(FName InputName) const { return true; }
 
-	/**
-	 * External activation entry point. Called by the runner when a wire delivers a signal to InputName.
-	 * Marks the input active and, if CanProcessInput returns true, invokes ProcessInput.
-	 */
+	/** Runner entry point: marks InputName active and, if CanProcessInput, invokes ProcessInput. */
 	void ActivateInput(FName InputName);
 
 	/** Returns true if any input or output pin is currently active. */
@@ -67,17 +61,11 @@ public:
 	/** Fired when the node has no active pins left. The runner subscribes to detect node completion. */
 	FScriptableNodeInactiveNative OnNodeInactiveNative;
 
-	/**
-	 * Releases any in-flight resources without propagating downstream. Called by the graph runner
-	 * when the graph is hard-cancelled. Subclasses override to e.g. cancel internal tasks silently.
-	 */
+	/** Releases in-flight resources without propagating downstream. Called on hard-cancel; override to cancel internal work silently. */
 	virtual void Teardown() {}
 
 protected:
-	/**
-	 * Implements the reaction to an active input being consumed. Default: no-op.
-	 * Subclasses are responsible for calling MarkInputInactive on the input they consume.
-	 */
+	/** Reaction to a consumed input (default no-op). Subclasses must MarkInputInactive on the input they consume. */
 	virtual void ProcessInput(FName InputName) {}
 
 	/** Marks the given input as inactive. Subclasses call this when they consume an input. */
@@ -89,10 +77,7 @@ protected:
 	/** Marks the given output as inactive without firing. Use for cleanup paths (e.g. Stop invalidating pending outputs). */
 	void MarkOutputInactive(FName OutputName);
 
-	/**
-	 * Fires the given output: broadcasts the pin-fired delegate so the runner can propagate, then
-	 * marks the output inactive. If this leaves the node with no active pins, notifies inactivity.
-	 */
+	/** Broadcasts the pin-fired delegate (runner propagates), then marks the output inactive and notifies if now idle. */
 	void FireOutput(FName OutputName);
 
 	/** Helper to deactivate every currently active output without firing. Used in cancellation paths. */
@@ -108,6 +93,6 @@ private:
 	UPROPERTY(Transient)
 	TSet<FName> ActiveOutputPins;
 
-	/** Defers OnNodeInactiveNative while > 0. Set during ActivateInput → ProcessInput so that subclasses can transition pins (consume an input, arm outputs) without the transient zero-pin state in between leaking out as a spurious "inactive" broadcast. Without this, latent subclasses that arm outputs after consuming their input get evicted from the runner's ActiveNodes set before their first output ever fires, and the graph completes the moment the latent operation begins. */
+	/** Defers OnNodeInactiveNative while > 0. Wraps ProcessInput so the transient zero-pin state mid-transition (input consumed, outputs not yet armed) isn't seen as "inactive" — otherwise latent nodes get evicted before their first output fires and the graph completes early. */
 	int32 InactiveNotificationsSuppressed = 0;
 };

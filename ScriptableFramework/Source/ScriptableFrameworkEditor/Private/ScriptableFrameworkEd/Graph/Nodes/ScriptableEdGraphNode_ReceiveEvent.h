@@ -8,8 +8,7 @@
 
 /**
  * Specialized ed-node for UScriptableNode_ReceiveEvent. Reuses Entry's red tint (both are
- * origin-of-flow nodes) and the canonical event icon. The runtime's GetDisplayTitle already
- * surfaces EventName as the canvas-visible title, so no override here is needed for that.
+ * origin-of-flow) and the event icon; the canvas title comes from the runtime's GetDisplayTitle.
  */
 UCLASS()
 class UScriptableEdGraphNode_ReceiveEvent : public UScriptableEdGraphNode_Native

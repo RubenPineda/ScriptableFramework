@@ -93,9 +93,8 @@ bool UScriptableEdGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPin* 
 	const FPinConnectionResponse Response = CanCreateConnection(A, B);
 	if (Response.Response == CONNECT_RESPONSE_DISALLOW) return false;
 
-	// The default UEdGraphSchema::TryCreateConnection calls PinX->BreakAllPinLinks() for the
-	// BREAK_OTHERS_* responses, which sidesteps BreakSinglePinLink and leaves stale entries in
-	// UScriptableGraph::Connections. Route the breaks through this schema instead.
+	// Default TryCreateConnection's BreakAllPinLinks() for BREAK_OTHERS_* sidesteps BreakSinglePinLink,
+	// leaving stale UScriptableGraph::Connections. Route the breaks through this schema instead.
 	auto BreakAllThroughSchema = [this](UEdGraphPin* Pin)
 		{
 			const TArray<UEdGraphPin*> Snapshot = Pin->LinkedTo;
@@ -235,19 +234,13 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 {
 	if (!Menu || !Context || !Context->Node) return;
 
-	// Per-pin route: standard entries (Break Link, Select Connected Nodes, Straighten) added
-	// conditionally on whether the pin actually has connections — empty pins legitimately have
-	// nothing to break or follow. Then delegate to the ed-node so it can append type-specific
-	// entries (e.g. Sequence's Remove pin). FGraphEditorCommands entries are mapped to executors
-	// by the SGraphEditor widget itself; our FScriptableGraphCommands entries are mapped in the
-	// toolkit's BindGraphCommands. Both command lists are reachable from the rendered menu.
+	// Two routes: pin context vs empty-graph context. FGraphEditorCommands entries are wired by the
+	// SGraphEditor widget; our FScriptableGraphCommands entries are wired in the toolkit's BindGraphCommands.
 	if (Context->Pin)
 	{
-		// Engine-supplied PIN ACTIONS (Break This Link, Break All Links, Jump to Connection,
-		// Straighten Connection, Select All Input/Output Nodes) are added to the menu by SGraphPin
-		// itself, BEFORE this schema callback runs. Adding them here too produces a duplicate
-		// "PIN ACTIONS" section. So we only contribute node-type-specific entries (e.g. Sequence's
-		// Remove pin) and let the engine cover the standard set.
+		// The engine adds the standard PIN ACTIONS (Break, Straighten, Select...) before this
+		// callback, so adding them here would duplicate the section. Contribute only node-type-
+		// specific entries (e.g. Sequence's Remove pin).
 		if (const UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Context->Node))
 		{
 			SfEdNode->AppendPinContextActions(Menu, Context);
@@ -275,9 +268,8 @@ FConnectionDrawingPolicy* UScriptableEdGraphSchema::CreateConnectionDrawingPolic
 
 void UScriptableEdGraphSchema::GetAssetsGraphHoverMessage(const TArray<FAssetData>& Assets, const UEdGraph* HoverGraph, FString& OutTooltipText, bool& OutOkIcon) const
 {
-	// UE calls this while a drag-from-Content-Browser is hovering the graph canvas. We answer:
-	// - bOkIcon=true plus a tooltip when at least one asset is droppable here (action or graph).
-	// - bOkIcon=false otherwise, with a tooltip explaining why so the user knows what's expected.
+	// Called while dragging Content-Browser assets over the canvas: green icon + tooltip if at least
+	// one asset is droppable (action or graph), red icon + explanation otherwise.
 	int32 NumDroppable = 0;
 	for (const FAssetData& Asset : Assets)
 	{

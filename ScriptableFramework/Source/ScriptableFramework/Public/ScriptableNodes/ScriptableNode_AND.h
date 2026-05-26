@@ -7,15 +7,10 @@
 #include "ScriptableNode_AND.generated.h"
 
 /**
- * Joins N input pulses into a single output. Fires "Out" once all declared inputs have been
- * activated at least once since the last fire. Pulses across different inputs accumulate, so
- * inputs may arrive in any order and across multiple frames (latent upstreams welcome). After
- * firing, the gate resets and is ready to gather the next round of pulses.
- *
- * Within a single activation cycle, repeated pulses on the same input are idempotent (the set
- * of "seen" inputs is a set, not a counter) — matching the K2/blueprint AND convention. Inputs
- * removed via the canvas affordance never deadlock the gate because pruning also drops their
- * entry from the seen-set.
+ * Joins N input pulses into a single "Out". Fires once all declared inputs have pulsed at least once
+ * since the last fire, then resets. Pulses accumulate across inputs in any order and across frames
+ * (latent upstreams welcome); repeated pulses on the same input are idempotent. Removing an input via
+ * the canvas also drops it from the seen-set so the gate can't deadlock. Matches the K2/Blueprint AND.
  */
 UCLASS(DisplayName = "AND", meta = (NodeCategory = "System|Flow"))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_AND : public UScriptableNode
@@ -33,7 +28,7 @@ public:
 	/** Canonical output pin name. */
 	static const FName OutOutputName;
 
-	/** Builds an input pin name for the given branch index ("0", "1", ...). Same convention as Sequence so the user sees a consistent numbering across native flow nodes. */
+	/** Builds an input pin name from the branch index ("0", "1", ...), matching Sequence's numbering. */
 	static FName MakeInputName(int32 BranchIndex);
 
 	//~ UScriptableNode interface
@@ -47,7 +42,7 @@ public:
 	/** Editor helper: bumps InputCount by one. Mirrors UScriptableNode_Sequence::AddOutputPin. */
 	void AddInputPin();
 
-	/** Editor helper: removes the input pin at BranchIndex, shifting higher-indexed pins down by one and rewriting incoming wires in the owning graph so connections keep pointing at the same branch under its new name. */
+	/** Editor helper: removes the input pin at BranchIndex, shifting higher pins down and rewriting incoming wires so connections stay intact. */
 	void RemoveInputPinAt(int32 BranchIndex);
 #endif
 
@@ -57,7 +52,7 @@ protected:
 	//~ End of UScriptableNode interface
 
 private:
-	/** Inputs that have already pulsed since the last fire. Transient: belongs to the runtime cycle, not to the asset's persisted state. Reset on each fire. */
+	/** Inputs that have pulsed since the last fire. Transient runtime state; reset on each fire. */
 	UPROPERTY(Transient)
 	TSet<FName> SeenInputs;
 };

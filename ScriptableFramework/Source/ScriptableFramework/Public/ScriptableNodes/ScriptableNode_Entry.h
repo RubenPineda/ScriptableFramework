@@ -21,9 +21,6 @@ public:
 
 	virtual TArray<FName> GetDeclaredOutputPins() const override { return { OutOutputName }; }
 
-	/**
-	 * Called by the graph runner when the graph starts. Marks "Out" active and immediately fires it,
-	 * propagating execution to whatever the user wired downstream.
-	 */
+	/** Called by the runner on graph start: arms and fires "Out", propagating downstream. */
 	void Activate();
 };

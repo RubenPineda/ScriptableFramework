@@ -13,10 +13,8 @@ class UScriptableGraphInstance;
 class UEdGraph;
 
 /**
- * An asset that defines a reusable scriptable graph: a network of UScriptableNode.
- *
- * The asset stores nodes, the centralized connection list, the ID of the (always present) Entry node,
- * and the declared context shape.
+ * Asset defining a reusable scriptable graph: a network of UScriptableNode.
+ * Stores the nodes, the central connection list, the (always present) Entry node ID, and the context shape.
  */
 UCLASS(BlueprintType, Const)
 class SCRIPTABLEFRAMEWORK_API UScriptableGraph final : public UScriptableObjectAsset
@@ -70,10 +68,10 @@ private:
 	/** Creates the Entry node if missing and registers its BindingID in EntryNodeID. */
 	void EnsureEntryNode();
 
-	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent; safe to call from PostLoad and from any property-change handler that touches Context. */
+	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent. */
 	void RebuildContextBag();
 
-	/** Removes entries from Connections whose endpoint node IDs no longer resolve to a node, or whose pin names no longer exist on the resolved node. Marks the package dirty if any entry was pruned so the cleanup persists on next save. Called from PostLoad. */
+	/** Drops connections whose endpoint node or pin no longer exists; marks the package dirty if any were removed. Called from PostLoad. */
 	void PruneOrphanConnections();
 
 public:

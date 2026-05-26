@@ -14,12 +14,9 @@ struct FScriptableContext;
 DECLARE_MULTICAST_DELEGATE(FScriptableGraphFinishedNative);
 
 /**
- * Runtime owner for a single execution of a UScriptableGraph.
- * UScriptableGraph::Run(...) constructs and launches an instance under the hood.
- *
- * Deep-copies the asset's nodes, references the asset's connections as immutable lookup data,
- * pumps activations through the pin-based execution model, and tears itself down when no active
- * work remains.
+ * Runtime owner for a single execution of a UScriptableGraph (created by UScriptableGraph::Run).
+ * Deep-copies the asset's nodes, reads its connections as immutable lookup data, pumps activations
+ * through the pin-based model, and tears itself down when no active work remains.
  */
 UCLASS()
 class UScriptableGraphInstance : public UObject
@@ -30,7 +27,7 @@ public:
 	/** Sets up runtime state from the asset and starts execution by activating the Entry node. */
 	void Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext);
 
-	/** Wakes every UScriptableNode_ReceiveEvent in this runner whose EventName matches. Multiple matches fire in parallel (each enqueues its downstream branch); zero matches is a silent no-op. Re-entrant: callable from inside a task's execution. If the runner is currently draining, the new activations are appended to the in-flight pass; otherwise FireEvent starts a new drain. Single-threaded API — must be called from the game thread alongside the rest of the runner. */
+	/** Wakes every matching UScriptableNode_ReceiveEvent (parallel fan-out; no match = no-op). Re-entrant: appends to the in-flight drain if one is running, else starts a new one. Game-thread only. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void FireEvent(FName EventName);
 

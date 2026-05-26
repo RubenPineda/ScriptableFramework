@@ -18,10 +18,10 @@ class SCRIPTABLEFRAMEWORKEDITOR_API UScriptableEdGraphNode : public UEdGraphNode
 	GENERATED_BODY()
 
 public:
-	/** Pin category used for all scriptable-graph pins. Single category for now: any pin connects to any compatible pin. */
+	/** Pin category for all scriptable-graph pins. Single category: any pin connects to any compatible pin. */
 	static const FName ScriptableExecPinCategory;
 
-	/** Runtime class this ed-node visualizes. Concrete subclasses set this in their constructor; the framework uses it to build the runtime-class -> ed-node-class lookup table during module startup. Left null on the abstract base (and on the generic fallback) so the registry skips them. */
+	/** Runtime class this ed-node visualizes. Concrete subclasses set it in their constructor; the registry uses it to map runtime class -> ed-node. Null on the abstract base and generic fallback so the registry skips them. */
 	UClass* RuntimeNodeClass = nullptr;
 
 	/** The runtime node this editor node wraps. Persisted so the link survives save/load. */
@@ -42,7 +42,7 @@ public:
 	virtual void ReconstructNode() override;
 	//~ End of UEdGraphNode interface
 
-	/** Hook for subclasses to contribute right-click menu entries when the user clicks a specific pin. Called by UScriptableEdGraphSchema::GetContextMenuActions on the pin route. Base does nothing; specialized ed-nodes (e.g. Sequence's "Remove pin") override and append entries. */
+	/** Hook for subclasses to add pin-specific right-click entries (called from the schema's pin route). Base does nothing; e.g. Sequence overrides to add "Remove pin". */
 	virtual void AppendPinContextActions(class UToolMenu* Menu, class UGraphNodeContextMenuContext* Context) const {}
 
 	/** Decides whether a pin's label is rendered. Default shows every label; override to hide. */

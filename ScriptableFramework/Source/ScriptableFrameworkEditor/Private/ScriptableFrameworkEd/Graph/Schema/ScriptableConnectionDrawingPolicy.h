@@ -6,9 +6,8 @@
 #include "ConnectionDrawingPolicy.h"
 
 /**
- * Connection drawing policy for the scriptable graph. Mirrors the default behaviour but
- * suppresses the mid-wire arrow head — wire direction is already implied by the BP-style
- * exec triangles at each pin.
+ * Connection drawing policy: like the default but suppresses the mid-wire arrowhead — direction
+ * is already implied by the BP-style exec triangles at each pin.
  */
 class FScriptableConnectionDrawingPolicy : public FConnectionDrawingPolicy
 {

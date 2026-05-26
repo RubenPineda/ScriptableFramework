@@ -20,10 +20,8 @@ void SScriptableGraphNode_AND::Construct(const FArguments& InArgs, UScriptableEd
 
 void SScriptableGraphNode_AND::CreateInputSideAddButton(TSharedPtr<SVerticalBox> InputBox)
 {
-	// Same construction as Sequence's CreateOutputSideAddButton but routed to the input column.
-	// SGraphNode::AddPinButtonContent is the canonical helper that builds an "Add pin" affordance
-	// with the standard label font and icon; padding comes from the user's graph editor settings
-	// so the button aligns with the pin column above it.
+	// Like Sequence's CreateOutputSideAddButton but on the input column. AddPinButtonContent builds the
+	// standard "Add pin" affordance; padding from graph editor settings aligns it with the pin column.
 	TSharedRef<SWidget> AddPinButton = AddPinButtonContent(
 		LOCTEXT("AddPinLabel", "Add pin"),
 		LOCTEXT("AddPinTooltip", "Add new input pin"));
