@@ -37,6 +37,8 @@ public:
 	//~ End of UScriptableNode interface
 
 #if WITH_EDITOR
+	virtual void PostEditUndo() override;
+
 	/** Editor helper: bumps OutputCount by one. Emits a property-changed event so the editor's title/pin refresh paths fire automatically (matches the user editing OutputCount in the details panel). */
 	void AddOutputPin();
 

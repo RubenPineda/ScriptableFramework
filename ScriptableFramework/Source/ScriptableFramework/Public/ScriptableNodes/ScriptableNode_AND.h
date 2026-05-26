@@ -42,6 +42,8 @@ public:
 	//~ End of UScriptableNode interface
 
 #if WITH_EDITOR
+	virtual void PostEditUndo() override;
+
 	virtual FText GetDisplayTitle() const override;
 
 	/** Editor helper: bumps InputCount by one. Mirrors UScriptableNode_Sequence::AddOutputPin. */
