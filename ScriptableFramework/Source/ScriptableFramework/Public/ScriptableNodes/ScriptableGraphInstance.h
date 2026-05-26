@@ -42,6 +42,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	bool IsRunning() const { return !ActiveNodes.IsEmpty() || !Pending.IsEmpty(); }
 
+	/** Returns true if execution has finished. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	bool IsFinished() const { return bFinished; }
+
+	/** Returns true if execution was cancelled. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	bool IsCancelled() const { return bCancelled; }
+
 	/** Broadcast once when the graph naturally finishes (no active nodes, no pending activations). */
 	FScriptableGraphFinishedNative OnGraphFinishedNative;
 

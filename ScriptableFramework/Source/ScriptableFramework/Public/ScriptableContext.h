@@ -18,6 +18,17 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableContext
 	GENERATED_BODY()
 
 public:
+	FScriptableContext() = default;
+
+	/** Builds a context whose internal bag is a copy of the supplied one. */
+	explicit FScriptableContext(const FInstancedPropertyBag* InSource)
+	{
+		if (InSource)
+		{
+			Bag.MigrateToNewBagInstance(*InSource);
+		}
+	}
+
 	/** Returns the internal property bag (used to copy values between bags). */
 	FInstancedPropertyBag& GetBag() { return Bag; }
 
