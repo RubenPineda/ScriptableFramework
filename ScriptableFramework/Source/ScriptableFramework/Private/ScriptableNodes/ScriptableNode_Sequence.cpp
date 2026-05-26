@@ -50,26 +50,10 @@ void UScriptableNode_Sequence::ProcessInput(FName InputName)
 }
 
 #if WITH_EDITOR
-void UScriptableNode_Sequence::PostEditUndo()
-{
-	Super::PostEditUndo();
-
-	// After undo restores OutputCount, the visual ed-node still has the pre-undo pin set wired up.
-	// Re-broadcast property-changed so the editor toolkit's OnObjectPropertyChanged hook fires
-	// and reconstructs the ed-node's pin list to match the restored OutputCount.
-	FProperty* OutputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_Sequence, OutputCount));
-	FPropertyChangedEvent ChangeEvent(OutputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
-}
-
 void UScriptableNode_Sequence::AddOutputPin()
 {
 	Modify();
 	OutputCount += 1;
-
-	FProperty* OutputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_Sequence, OutputCount));
-	FPropertyChangedEvent ChangeEvent(OutputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
 }
 
 void UScriptableNode_Sequence::RemoveOutputPinAt(int32 BranchIndex)
@@ -117,9 +101,5 @@ void UScriptableNode_Sequence::RemoveOutputPinAt(int32 BranchIndex)
 	}
 
 	OutputCount -= 1;
-
-	FProperty* OutputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_Sequence, OutputCount));
-	FPropertyChangedEvent ChangeEvent(OutputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
 }
 #endif

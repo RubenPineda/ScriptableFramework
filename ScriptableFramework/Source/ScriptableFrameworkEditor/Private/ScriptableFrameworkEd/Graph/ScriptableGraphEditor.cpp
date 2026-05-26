@@ -899,7 +899,13 @@ void FScriptableGraphEditor::OnRemoveSequencePin()
 	if (BranchIndex < 0 || BranchIndex >= Sequence->OutputCount) return;
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveSequencePinTx", "Remove Sequence Pin"));
+	SfEdNode->Modify();
 	Sequence->RemoveOutputPinAt(BranchIndex);
+	SfEdNode->ReconstructNode();
+	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
+	{
+		OwningGraph->NotifyGraphChanged();
+	}
 }
 
 bool FScriptableGraphEditor::CanRemoveSequencePin() const
@@ -944,7 +950,13 @@ void FScriptableGraphEditor::OnRemoveANDPin()
 	if (BranchIndex < 0 || BranchIndex >= AND->InputCount) return;
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveANDPinTx", "Remove AND Pin"));
+	SfEdNode->Modify();
 	AND->RemoveInputPinAt(BranchIndex);
+	SfEdNode->ReconstructNode();
+	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
+	{
+		OwningGraph->NotifyGraphChanged();
+	}
 }
 
 bool FScriptableGraphEditor::CanRemoveANDPin() const

@@ -47,15 +47,6 @@ void UScriptableNode_AND::ProcessInput(FName InputName)
 }
 
 #if WITH_EDITOR
-void UScriptableNode_AND::PostEditUndo()
-{
-	Super::PostEditUndo();
-
-	FProperty* InputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_AND, InputCount));
-	FPropertyChangedEvent ChangeEvent(InputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
-}
-
 FText UScriptableNode_AND::GetDisplayTitle() const
 {
 	return INVTEXT("AND");
@@ -65,10 +56,6 @@ void UScriptableNode_AND::AddInputPin()
 {
 	Modify();
 	InputCount += 1;
-
-	FProperty* InputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_AND, InputCount));
-	FPropertyChangedEvent ChangeEvent(InputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
 }
 
 void UScriptableNode_AND::RemoveInputPinAt(int32 BranchIndex)
@@ -119,9 +106,5 @@ void UScriptableNode_AND::RemoveInputPinAt(int32 BranchIndex)
 	SeenInputs.Remove(MakeInputName(BranchIndex));
 
 	InputCount -= 1;
-
-	FProperty* InputCountProperty = FindFProperty<FProperty>(GetClass(), GET_MEMBER_NAME_CHECKED(UScriptableNode_AND, InputCount));
-	FPropertyChangedEvent ChangeEvent(InputCountProperty, EPropertyChangeType::ValueSet);
-	PostEditChangeProperty(ChangeEvent);
 }
 #endif
