@@ -23,6 +23,8 @@
 #include "GraphEditor.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
+#include "EdGraphNode_Comment.h"
+#include "GraphEditorActions.h"
 #include "Framework/Commands/GenericCommands.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
@@ -611,6 +613,9 @@ void FScriptableGraphEditor::BindGraphCommands()
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnSelectAllNodes),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanSelectAll));
 
+	Commands->MapAction(FGraphEditorCommands::Get().CreateComment,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCreateComment));
+
 	// Undo/Redo: forward to GEditor's transaction stack. FAssetEditorToolkit already provides the
 	// callbacks; map them through so Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z hit the same path while focus
 	// is inside the SGraphEditor widget.
@@ -957,6 +962,54 @@ void FScriptableGraphEditor::OnSelectAllNodes()
 	}
 }
 
+void FScriptableGraphEditor::OnCreateComment()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	UEdGraph* Graph = GraphEditorWidget->GetCurrentGraph();
+	if (!Graph) return;
+
+	// Compute placement: if the user has a node selection, the comment is sized to wrap it. Else
+	// it lands at the cursor's graph-space location at a sensible default size, so pressing C on
+	// empty canvas still produces a usable comment.
+	FSlateRect BoundsRect;
+	const bool bSelectionHasBounds = GraphEditorWidget->GetBoundsForSelectedNodes(BoundsRect, /*Padding*/ 50.0f);
+
+	const FScopedTransaction Transaction(LOCTEXT("CreateCommentTx", "Create Comment"));
+	Graph->Modify();
+
+	UEdGraphNode_Comment* CommentNode = NewObject<UEdGraphNode_Comment>(Graph);
+	CommentNode->SetFlags(RF_Transactional);
+	Graph->AddNode(CommentNode, /*bFromUI*/ true, /*bSelectNewNode*/ true);
+	CommentNode->CreateNewGuid();
+	CommentNode->PostPlacedNewNode();
+	CommentNode->AllocateDefaultPins();
+
+	if (bSelectionHasBounds)
+	{
+		// Wrap the selection: place top-left at the selection's bounds and size accordingly.
+		CommentNode->NodePosX = BoundsRect.Left;
+		CommentNode->NodePosY = BoundsRect.Top;
+		CommentNode->NodeWidth = BoundsRect.Right - BoundsRect.Left;
+		CommentNode->NodeHeight = BoundsRect.Bottom - BoundsRect.Top;
+	}
+	else
+	{
+		// Default placement at the paste location with stock dimensions matching BP's convention.
+		const FVector2f PasteLocation = GraphEditorWidget->GetPasteLocation2f();
+		CommentNode->NodePosX = PasteLocation.X;
+		CommentNode->NodePosY = PasteLocation.Y;
+		CommentNode->NodeWidth = 400;
+		CommentNode->NodeHeight = 100;
+	}
+
+	// Select the new comment so the user can start typing the title immediately.
+	GraphEditorWidget->ClearSelectionSet();
+	GraphEditorWidget->SetNodeSelection(CommentNode, true);
+
+	Graph->NotifyGraphChanged();
+}
+
 void FScriptableGraphEditor::OnRemoveSequencePin()
 {
 	if (!GraphEditorWidget.IsValid()) return;
@@ -1102,21 +1155,21 @@ void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionS
 	}
 
 	UObject* Selected = *NewSelection.CreateConstIterator();
-	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Selected);
-	if (!SfEdNode)
+
+	if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Selected))
 	{
-		NodeDetailsView->SetObject(nullptr);
+		UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode();
+		NodeDetailsView->SetObject(RuntimeNode);
 		return;
 	}
 
-	UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode();
-	if (!RuntimeNode)
+	if (Selected && Selected->IsA<UEdGraphNode>())
 	{
-		NodeDetailsView->SetObject(nullptr);
+		NodeDetailsView->SetObject(Selected);
 		return;
 	}
 
-	NodeDetailsView->SetObject(RuntimeNode);
+	NodeDetailsView->SetObject(nullptr);
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -90,6 +90,7 @@ private:
 	void OnPasteAtCursor();
 	void OnDuplicateSelected();
 	void OnSelectAllNodes();
+	void OnCreateComment();
 
 	bool CanDelete() const { return HasAnyDeletableSelected(); }
 	bool CanCopy() const { return HasAnyCopyableSelected(); }
