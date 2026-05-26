@@ -59,15 +59,17 @@ const FPinConnectionResponse UScriptableEdGraphSchema::CanCreateConnection(const
 		return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, LOCTEXT("IncompatibleCategory", "Incompatible pin category."));
 	}
 
-	// Each pin holds at most one connection. If either side is already wired, the engine breaks
-	// the existing link(s) before making the new one (we route those breaks through this schema
-	// in TryCreateConnection so the asset's Connections list stays in sync).
-	const bool bABusy = A->LinkedTo.Num() > 0;
-	const bool bBBusy = B->LinkedTo.Num() > 0;
+	// An OUTPUT can fan out to at most one consumer.
+	// An INPUT can accept fan-in from multiple sources
+	const UEdGraphPin* OutputPin = (A->Direction == EGPD_Output) ? A : B;
+	const bool bOutputBusy = OutputPin && OutputPin->LinkedTo.Num() > 0;
 
-	if (bABusy && bBBusy) return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_AB, LOCTEXT("ReplaceBoth", "Replace existing connections."));
-	if (bABusy)           return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_A, LOCTEXT("ReplaceA", "Replace existing connection."));
-	if (bBBusy)           return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_B, LOCTEXT("ReplaceB", "Replace existing connection."));
+	if (bOutputBusy)
+	{
+		// Break only the output side, leave any existing input-side connections intact.
+		const ECanCreateConnectionResponse Response = (A->Direction == EGPD_Output) ? CONNECT_RESPONSE_BREAK_OTHERS_A : CONNECT_RESPONSE_BREAK_OTHERS_B;
+		return FPinConnectionResponse(Response, LOCTEXT("ReplaceOutput", "Replace existing output connection."));
+	}
 
 	return FPinConnectionResponse(CONNECT_RESPONSE_MAKE, FText::GetEmpty());
 }
