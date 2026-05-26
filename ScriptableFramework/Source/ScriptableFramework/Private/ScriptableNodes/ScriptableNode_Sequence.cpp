@@ -17,7 +17,7 @@ TArray<FName> UScriptableNode_Sequence::GetInputPins() const
 
 TArray<FName> UScriptableNode_Sequence::GetDeclaredOutputPins() const
 {
-	const int32 Count = FMath::Max(1, OutputCount);
+	const int32 Count = FMath::Max(MinOutputCount, OutputCount);
 
 	TArray<FName> Outputs;
 	Outputs.Reserve(Count);
@@ -32,7 +32,7 @@ void UScriptableNode_Sequence::ProcessInput(FName InputName)
 {
 	if (InputName != InInputName) return;
 
-	const int32 Count = FMath::Max(1, OutputCount);
+	const int32 Count = FMath::Max(MinOutputCount, OutputCount);
 
 	// Arm every output up-front.
 	for (int32 Index = 0; Index < Count; ++Index)
@@ -62,7 +62,7 @@ void UScriptableNode_Sequence::AddOutputPin()
 
 void UScriptableNode_Sequence::RemoveOutputPinAt(int32 BranchIndex)
 {
-	if (OutputCount <= 1) return;
+	if (OutputCount <= MinOutputCount) return;
 	if (BranchIndex < 0 || BranchIndex >= OutputCount) return;
 
 	UScriptableGraph* OwningGraph = Cast<UScriptableGraph>(GetOuter());

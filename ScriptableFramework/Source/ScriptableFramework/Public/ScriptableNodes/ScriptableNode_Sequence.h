@@ -18,6 +18,9 @@ class SCRIPTABLEFRAMEWORK_API UScriptableNode_Sequence : public UScriptableNode
 	GENERATED_BODY()
 
 public:
+	/** Minimum number of output pins. Hard floor for guards in pin removal paths and defensive clamps in pin enumeration. */
+	static constexpr int32 MinOutputCount = 2;
+
 	/** Number of ordered outputs the node exposes. BP-style default is 2; minimum 1 for placeholder / pass-through uses. */
 	UPROPERTY()
 	int32 OutputCount = 2;

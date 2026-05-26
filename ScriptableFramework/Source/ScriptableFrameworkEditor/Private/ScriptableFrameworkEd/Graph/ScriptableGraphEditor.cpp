@@ -910,7 +910,7 @@ bool FScriptableGraphEditor::CanRemoveSequencePin() const
 	const UScriptableNode_Sequence* Sequence = Cast<UScriptableNode_Sequence>(SfEdNode->GetRuntimeNode());
 	if (!Sequence) return false;
 
-	return Sequence->OutputCount > 1;
+	return Sequence->OutputCount > UScriptableNode_Sequence::MinOutputCount;
 }
 
 void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
