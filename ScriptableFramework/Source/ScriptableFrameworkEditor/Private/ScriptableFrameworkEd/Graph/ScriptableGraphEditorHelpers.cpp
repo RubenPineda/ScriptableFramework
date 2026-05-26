@@ -6,7 +6,9 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Branch.h"
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
+#include "ScriptableNodes/ScriptableNode_Branch.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
@@ -73,6 +75,10 @@ namespace ScriptableGraphEditorHelpers
 		{
 			EdNodeClass = UScriptableEdGraphNode_Sequence::StaticClass();
 		}
+		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
+		{
+			EdNodeClass = UScriptableEdGraphNode_Branch::StaticClass();
+		}
 
 		UScriptableEdGraphNode* EdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, EdNodeClass, NAME_None, RF_Transactional);
 		EdNode->SetRuntimeNode(RuntimeNode);
@@ -129,6 +135,10 @@ namespace ScriptableGraphEditorHelpers
 		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
 		{
 			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(ParentGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
+		}
+		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Branch>(ParentGraph, UScriptableEdGraphNode_Branch::StaticClass(), NAME_None, RF_Transactional);
 		}
 		else
 		{

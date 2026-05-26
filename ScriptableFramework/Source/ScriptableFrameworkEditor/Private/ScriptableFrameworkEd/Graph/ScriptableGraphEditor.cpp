@@ -8,9 +8,11 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Branch.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
+#include "ScriptableNodes/ScriptableNode_Branch.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
@@ -398,6 +400,10 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
 		{
 			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(Graph->EdGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
+		}
+		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Branch>(Graph->EdGraph, UScriptableEdGraphNode_Branch::StaticClass(), NAME_None, RF_Transactional);
 		}
 		else
 		{
