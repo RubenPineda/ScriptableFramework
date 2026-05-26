@@ -900,8 +900,30 @@ void FScriptableGraphEditor::OnRemoveSequencePin()
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveSequencePinTx", "Remove Sequence Pin"));
 	SfEdNode->Modify();
+
+	const int32 OldOutputCount = Sequence->OutputCount;
+	UEdGraphPin* VictimPin = SfEdNode->FindPin(UScriptableNode_Sequence::MakeOutputName(BranchIndex), EGPD_Output);
+
+	for (int32 OldIdx = BranchIndex + 1; OldIdx < OldOutputCount; ++OldIdx)
+	{
+		UEdGraphPin* PinToRename = SfEdNode->FindPin(UScriptableNode_Sequence::MakeOutputName(OldIdx), EGPD_Output);
+		if (PinToRename)
+		{
+			PinToRename->Modify();
+			PinToRename->PinName = UScriptableNode_Sequence::MakeOutputName(OldIdx - 1);
+		}
+	}
+
+	if (VictimPin)
+	{
+		VictimPin->BreakAllPinLinks(/*bNotifyNodes*/ true);
+		SfEdNode->RemovePin(VictimPin);
+	}
+
+	// Runtime mutation: drops the victim from OutputCount and rewrites Asset->Connections
+	// in lockstep with the visual rename above.
 	Sequence->RemoveOutputPinAt(BranchIndex);
-	SfEdNode->ReconstructNode();
+
 	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
 	{
 		OwningGraph->NotifyGraphChanged();
@@ -951,8 +973,28 @@ void FScriptableGraphEditor::OnRemoveANDPin()
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveANDPinTx", "Remove AND Pin"));
 	SfEdNode->Modify();
+
+	const int32 OldInputCount = AND->InputCount;
+	UEdGraphPin* VictimPin = SfEdNode->FindPin(UScriptableNode_AND::MakeInputName(BranchIndex), EGPD_Input);
+
+	for (int32 OldIdx = BranchIndex + 1; OldIdx < OldInputCount; ++OldIdx)
+	{
+		UEdGraphPin* PinToRename = SfEdNode->FindPin(UScriptableNode_AND::MakeInputName(OldIdx), EGPD_Input);
+		if (PinToRename)
+		{
+			PinToRename->Modify();
+			PinToRename->PinName = UScriptableNode_AND::MakeInputName(OldIdx - 1);
+		}
+	}
+
+	if (VictimPin)
+	{
+		VictimPin->BreakAllPinLinks(/*bNotifyNodes*/ true);
+		SfEdNode->RemovePin(VictimPin);
+	}
+
 	AND->RemoveInputPinAt(BranchIndex);
-	SfEdNode->ReconstructNode();
+
 	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
 	{
 		OwningGraph->NotifyGraphChanged();
