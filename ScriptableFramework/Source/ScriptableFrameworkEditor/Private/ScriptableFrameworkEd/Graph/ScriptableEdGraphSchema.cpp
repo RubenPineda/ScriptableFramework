@@ -132,6 +132,31 @@ void UScriptableEdGraphSchema::BreakSinglePinLink(UEdGraphPin* SourcePin, UEdGra
 		});
 }
 
+void UScriptableEdGraphSchema::BreakPinLinks(UEdGraphPin& TargetPin, bool bSendsNodeNotification) const
+{
+	const UScriptableEdGraphNode* SfNode = Cast<UScriptableEdGraphNode>(TargetPin.GetOwningNode());
+	const UEdGraph* OwningGraph = TargetPin.GetOwningNode() ? TargetPin.GetOwningNode()->GetGraph() : nullptr;
+	UScriptableGraph* GraphAsset = OwningGraph ? Cast<UScriptableGraph>(OwningGraph->GetOuter()) : nullptr;
+
+	Super::BreakPinLinks(TargetPin, bSendsNodeNotification);
+
+	if (!SfNode || !SfNode->GetRuntimeNode() || !GraphAsset) return;
+
+	const FGuid NodeID = SfNode->GetRuntimeNode()->GetBindingID();
+	const FName PinName = TargetPin.PinName;
+	const EEdGraphPinDirection Direction = TargetPin.Direction;
+
+	GraphAsset->Modify();
+	GraphAsset->Connections.RemoveAll([&](const FScriptableGraphConnection& C)
+		{
+			if (Direction == EGPD_Output)
+			{
+				return C.From.NodeID == NodeID && C.From.PinName == PinName;
+			}
+			return C.To.NodeID == NodeID && C.To.PinName == PinName;
+		});
+}
+
 void UScriptableEdGraphSchema::BreakNodeLinks(UEdGraphNode& TargetNode) const
 {
 	Super::BreakNodeLinks(TargetNode);
