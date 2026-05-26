@@ -780,6 +780,18 @@ void FScriptableGraphEditor::OnPasteAtCursor()
 			Binding.TargetPath.SetStructID(NewGuid);
 		}
 
+		if (UScriptableNode_Task* TaskWrapper = Cast<UScriptableNode_Task>(NewRuntimeNode))
+		{
+			if (UScriptableTask* InnerTask = TaskWrapper->Task)
+			{
+				const FGuid InnerNewGuid = InnerTask->GetBindingID();
+				for (FScriptablePropertyBinding& Binding : InnerTask->GetPropertyBindings().Bindings)
+				{
+					Binding.TargetPath.SetStructID(InnerNewGuid);
+				}
+			}
+		}
+
 		GraphAsset->Nodes.Add(NewRuntimeNode);
 
 		// Position: use the header offset if available, otherwise fall back to cascade.
