@@ -7,6 +7,7 @@
 
 #include "ScriptableContainer.h"
 #include "ScriptableObjectAsset.h"
+#include "ScriptableNodes/ScriptableNode.h"
 
 #include "DetailLayoutBuilder.h"
 #include "DetailWidgetRow.h"
@@ -250,6 +251,7 @@ EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() cons
 	for (UObject* OuterObj : OuterObjects)
 	{
 		bool bIsInsideAssetOrTemplate = false;
+		bool bIsInsideGraphNode = false;
 		UObject* CurrentOuter = OuterObj;
 
 		// Traverse the ownership chain upwards until we hit the package
@@ -260,6 +262,14 @@ EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() cons
 			if (CurrentOuter->IsA<ULevel>() || CurrentOuter->IsA<UWorld>())
 			{
 				bIsInsideAssetOrTemplate = false;
+				break;
+			}
+
+			// A UScriptableNode anywhere in the chain means 
+			// his container is nested inside a graph node
+			if (CurrentOuter->IsA<UScriptableNode>())
+			{
+				bIsInsideGraphNode = true;
 				break;
 			}
 
@@ -276,6 +286,11 @@ EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() cons
 
 		// If we hit a Level/World, or reached the root package without finding an Asset/CDO
 		if (!bIsInsideAssetOrTemplate)
+		{
+			return EVisibility::Collapsed;
+		}
+
+		if (bIsInsideGraphNode)
 		{
 			return EVisibility::Collapsed;
 		}
