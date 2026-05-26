@@ -190,6 +190,7 @@ void FScriptableGraphEditor::CreateEditor(const EToolkitMode::Type Mode, const T
 FScriptableGraphEditor::~FScriptableGraphEditor()
 {
 	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
+	FCoreUObjectDelegates::OnObjectTransacted.Remove(OnObjectTransactedHandle);
 }
 
 void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, UScriptableGraph* InGraph)
@@ -222,6 +223,10 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	BindGraphCommands();
 
 	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableGraphEditor::OnRuntimeNodePropertyChanged);
+
+	OnObjectTransactedHandle = FCoreUObjectDelegates::OnObjectTransacted.AddSP(
+		StaticCastSharedRef<FScriptableGraphEditor>(AsShared()),
+		&FScriptableGraphEditor::OnObjectTransacted);
 
 	// Ensure the asset has a visual UEdGraph, then mirror its runtime Nodes onto it.
 	InitEdGraph();
@@ -367,21 +372,36 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph || !Graph->EdGraph) return;
 
-	// Build a set of runtime nodes that already have a visual representation.
 	TSet<UScriptableNode*> AlreadyVisualized;
+	TMap<FGuid, UScriptableEdGraphNode*> EdNodeByID;
+
+	// 1. Sync visual pins and wipe visual links to prepare for a clean rebuild from the asset.
 	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
 	{
 		if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode))
 		{
 			if (UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode())
 			{
+				// Ensure visual pins reflect current runtime state (crucial after Undo/Redo)
+				SfEdNode->ReconstructNode();
+
 				AlreadyVisualized.Add(RuntimeNode);
+				EdNodeByID.Add(RuntimeNode->GetBindingID(), SfEdNode);
+			}
+
+			// Manually break all visual links without triggering the schema
+			for (UEdGraphPin* Pin : SfEdNode->Pins)
+			{
+				for (UEdGraphPin* Linked : Pin->LinkedTo)
+				{
+					if (Linked) Linked->LinkedTo.Remove(Pin);
+				}
+				Pin->LinkedTo.Empty();
 			}
 		}
 	}
 
-	// Spawn ed-nodes for any runtime node not yet represented. The visual class chosen mirrors
-	// the one picked by ScriptableGraphEditorHelpers when nodes are created from the picker.
+	// 2. Spawn ed-nodes for any runtime node not yet represented.
 	for (const TObjectPtr<UScriptableNode>& RuntimeNode : Graph->Nodes)
 	{
 		if (!RuntimeNode || AlreadyVisualized.Contains(RuntimeNode)) continue;
@@ -397,23 +417,12 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 			NewEdNode->CreateNewGuid();
 			NewEdNode->AllocateDefaultPins();
 			Graph->EdGraph->AddNode(NewEdNode, /*bUserAction*/ false, /*bSelectNewNode*/ false);
+
+			EdNodeByID.Add(RuntimeNode->GetBindingID(), NewEdNode);
 		}
 	}
 
-	// Rebuild a NodeID -> ed-node lookup including the freshly spawned ones, then re-link pins
-	// according to the persisted FScriptableGraphConnection list.
-	TMap<FGuid, UScriptableEdGraphNode*> EdNodeByID;
-	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
-	{
-		if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode))
-		{
-			if (UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode())
-			{
-				EdNodeByID.Add(RuntimeNode->GetBindingID(), SfEdNode);
-			}
-		}
-	}
-
+	// 3. Re-link pins according to the persisted FScriptableGraphConnection list.
 	for (const FScriptableGraphConnection& Conn : Graph->Connections)
 	{
 		UScriptableEdGraphNode* FromNode = EdNodeByID.FindRef(Conn.From.NodeID);
@@ -424,11 +433,10 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		UEdGraphPin* ToPin = ToNode->FindPin(Conn.To.PinName, EGPD_Input);
 		if (!FromPin || !ToPin) continue;
 
-		// Defensive: avoid double-linking if reconstruction runs more than once.
-		if (FromPin->LinkedTo.Contains(ToPin)) continue;
-
 		FromPin->MakeLinkTo(ToPin);
 	}
+
+	Graph->EdGraph->NotifyGraphChanged();
 }
 
 FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, const FVector2f& InNodePosition, const TArray<UEdGraphPin*>& InDraggedPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed InOnMenuClosed)
@@ -899,35 +907,8 @@ void FScriptableGraphEditor::OnRemoveSequencePin()
 	if (BranchIndex < 0 || BranchIndex >= Sequence->OutputCount) return;
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveSequencePinTx", "Remove Sequence Pin"));
-	SfEdNode->Modify();
-
-	const int32 OldOutputCount = Sequence->OutputCount;
-	UEdGraphPin* VictimPin = SfEdNode->FindPin(UScriptableNode_Sequence::MakeOutputName(BranchIndex), EGPD_Output);
-
-	for (int32 OldIdx = BranchIndex + 1; OldIdx < OldOutputCount; ++OldIdx)
-	{
-		UEdGraphPin* PinToRename = SfEdNode->FindPin(UScriptableNode_Sequence::MakeOutputName(OldIdx), EGPD_Output);
-		if (PinToRename)
-		{
-			PinToRename->Modify();
-			PinToRename->PinName = UScriptableNode_Sequence::MakeOutputName(OldIdx - 1);
-		}
-	}
-
-	if (VictimPin)
-	{
-		VictimPin->BreakAllPinLinks(/*bNotifyNodes*/ true);
-		SfEdNode->RemovePin(VictimPin);
-	}
-
-	// Runtime mutation: drops the victim from OutputCount and rewrites Asset->Connections
-	// in lockstep with the visual rename above.
 	Sequence->RemoveOutputPinAt(BranchIndex);
-
-	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
-	{
-		OwningGraph->NotifyGraphChanged();
-	}
+	ReconstructEdGraphFromAsset();
 }
 
 bool FScriptableGraphEditor::CanRemoveSequencePin() const
@@ -972,33 +953,8 @@ void FScriptableGraphEditor::OnRemoveANDPin()
 	if (BranchIndex < 0 || BranchIndex >= AND->InputCount) return;
 
 	const FScopedTransaction Transaction(LOCTEXT("RemoveANDPinTx", "Remove AND Pin"));
-	SfEdNode->Modify();
-
-	const int32 OldInputCount = AND->InputCount;
-	UEdGraphPin* VictimPin = SfEdNode->FindPin(UScriptableNode_AND::MakeInputName(BranchIndex), EGPD_Input);
-
-	for (int32 OldIdx = BranchIndex + 1; OldIdx < OldInputCount; ++OldIdx)
-	{
-		UEdGraphPin* PinToRename = SfEdNode->FindPin(UScriptableNode_AND::MakeInputName(OldIdx), EGPD_Input);
-		if (PinToRename)
-		{
-			PinToRename->Modify();
-			PinToRename->PinName = UScriptableNode_AND::MakeInputName(OldIdx - 1);
-		}
-	}
-
-	if (VictimPin)
-	{
-		VictimPin->BreakAllPinLinks(/*bNotifyNodes*/ true);
-		SfEdNode->RemovePin(VictimPin);
-	}
-
 	AND->RemoveInputPinAt(BranchIndex);
-
-	if (UEdGraph* OwningGraph = SfEdNode->GetGraph())
-	{
-		OwningGraph->NotifyGraphChanged();
-	}
+	ReconstructEdGraphFromAsset();
 }
 
 bool FScriptableGraphEditor::CanRemoveANDPin() const
@@ -1015,6 +971,21 @@ bool FScriptableGraphEditor::CanRemoveANDPin() const
 	if (!AND) return false;
 
 	return AND->InputCount > UScriptableNode_AND::MinInputCount;
+}
+
+void FScriptableGraphEditor::OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event)
+{
+	// We only care about transactions applied to the asset we're editing. UE fires this delegate
+	// for every transacted object globally, so filter aggressively. Both undo and redo emit this
+	// event with EventType ETransactionObjectEventType::UndoRedo.
+	if (!Object) return;
+	if (Object != EditedGraph.Get()) return;
+	if (Event.GetEventType() != ETransactionObjectEventType::UndoRedo) return;
+
+	// Rebuild the ed-graph from the asset's now-restored state. ReconstructEdGraphFromAsset
+	// builds pins fresh from Asset->Nodes + Asset->Connections, so any stale ed-graph state from
+	// before the transaction is wiped clean and replaced with one coherent with the asset.
+	ReconstructEdGraphFromAsset();
 }
 
 void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)

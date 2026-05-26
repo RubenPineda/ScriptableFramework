@@ -84,9 +84,16 @@ void UScriptableEdGraphNode::ReconstructNode()
 			}
 		}
 
-		// Sever the old pin from its peers before we destroy it, otherwise the other ends keep a
-		// dangling pointer in their LinkedTo lists.
-		OldPin->BreakAllPinLinks(/*bNotifyNodes*/ false);
+		// Sever the old pin from its peers manually to avoid triggering the Schema.
+		// Calling BreakAllPinLinks here would corrupt Asset->Connections during reconstruction.
+		for (UEdGraphPin* Linked : OldPin->LinkedTo)
+		{
+			if (Linked)
+			{
+				Linked->LinkedTo.Remove(OldPin);
+			}
+		}
+		OldPin->LinkedTo.Empty();
 	}
 
 	for (UEdGraphPin* OldPin : OldPins)

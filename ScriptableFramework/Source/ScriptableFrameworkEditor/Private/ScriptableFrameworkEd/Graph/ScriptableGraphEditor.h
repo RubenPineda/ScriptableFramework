@@ -68,6 +68,9 @@ private:
 	/** Greys out the AND Remove-pin entry once the node would dip below MinInputCount. */
 	bool CanRemoveANDPin() const;
 
+	/** Hooked to FCoreUObjectDelegates::OnObjectTransacted. Fires after UE applies an undo or redo to any object; we filter to the edited asset and rebuild the ed-graph to match the restored Connections / Nodes state. This is how pin-removal undo works without us doing in-place pin manipulation inside the transaction. */
+	void OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event);
+
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
 	void BindGraphCommands();
 
@@ -105,6 +108,7 @@ private:
 
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
+	FDelegateHandle OnObjectTransactedHandle;
 
 	static const FName GraphTabId;
 	static const FName AssetDetailsTabId;
