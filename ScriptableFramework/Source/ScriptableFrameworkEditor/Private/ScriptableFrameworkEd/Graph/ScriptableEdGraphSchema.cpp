@@ -179,13 +179,27 @@ void UScriptableEdGraphSchema::PersistConnection(UEdGraphPin* PinA, UEdGraphPin*
 
 void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
 {
-	Super::GetContextMenuActions(Menu, Context);
-
 	if (!Menu || !Context || !Context->Node) return;
 
-	// Pin or canvas right-clicks land here too; only contribute the node-edit block when the user
-	// actually right-clicked on a node.
-	if (Context->Pin) return;
+	// Per-pin route: standard entries (Break Link, Select Connected Nodes, Straighten) added
+	// conditionally on whether the pin actually has connections — empty pins legitimately have
+	// nothing to break or follow. Then delegate to the ed-node so it can append type-specific
+	// entries (e.g. Sequence's Remove pin). FGraphEditorCommands entries are mapped to executors
+	// by the SGraphEditor widget itself; our FScriptableGraphCommands entries are mapped in the
+	// toolkit's BindGraphCommands. Both command lists are reachable from the rendered menu.
+	if (Context->Pin)
+	{
+		// Engine-supplied PIN ACTIONS (Break This Link, Break All Links, Jump to Connection,
+		// Straighten Connection, Select All Input/Output Nodes) are added to the menu by SGraphPin
+		// itself, BEFORE this schema callback runs. Adding them here too produces a duplicate
+		// "PIN ACTIONS" section. So we only contribute node-type-specific entries (e.g. Sequence's
+		// Remove pin) and let the engine cover the standard set.
+		if (const UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Context->Node))
+		{
+			SfEdNode->AppendPinContextActions(Menu, Context);
+		}
+		return;
+	}
 
 	// The SGraphEditor attaches its FUICommandList (the one we filled in BindGraphCommands) to the
 	// menu, so referencing FGenericCommands entries resolves to our handlers without further wiring.
@@ -196,6 +210,8 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 	Section.AddMenuEntry(FGenericCommands::Get().Duplicate);
 	Section.AddSeparator(TEXT("ScriptableNodeEditDeleteSep"));
 	Section.AddMenuEntry(FGenericCommands::Get().Delete);
+
+	Super::GetContextMenuActions(Menu, Context);
 }
 
 FConnectionDrawingPolicy* UScriptableEdGraphSchema::CreateConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements, UEdGraph* InGraphObj) const

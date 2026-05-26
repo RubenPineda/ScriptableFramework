@@ -56,6 +56,12 @@ private:
 	/** Reconstructs the ed-node wrapping the runtime node that owns the changed property, so dynamic node titles (and any future pin-changing customizations) stay in sync with the details panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 
+	/** Pin-context command executor: removes the right-clicked Sequence output pin (or no-op if the selected pin isn't a removable Sequence branch). Reads the target pin from the GraphEditorWidget's current selection set, since FUICommandInfo executors don't receive the pin directly. */
+	void OnRemoveSequencePin();
+
+	/** Enables the Remove pin entry only when the right-clicked pin belongs to a UScriptableNode_Sequence with OutputCount > 1 and is an output. */
+	bool CanRemoveSequencePin() const;
+
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
 	void BindGraphCommands();
 

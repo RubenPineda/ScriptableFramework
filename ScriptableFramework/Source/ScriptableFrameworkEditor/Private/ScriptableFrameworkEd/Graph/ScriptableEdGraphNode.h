@@ -39,6 +39,9 @@ public:
 	virtual void ReconstructNode() override;
 	//~ End of UEdGraphNode interface
 
+	/** Hook for subclasses to contribute right-click menu entries when the user clicks a specific pin. Called by UScriptableEdGraphSchema::GetContextMenuActions on the pin route. Base does nothing; specialized ed-nodes (e.g. Sequence's "Remove pin") override and append entries. */
+	virtual void AppendPinContextActions(class UToolMenu* Menu, class UGraphNodeContextMenuContext* Context) const {}
+
 	/** Decides whether a pin's label is rendered. Default shows every label; override to hide. */
 	virtual bool ShouldShowPinLabel(FName PinName) const { return true; }
 };

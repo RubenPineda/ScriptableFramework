@@ -6,14 +6,17 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
+#include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableNodes/ScriptableNode_Sequence.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
-#include "ScriptableNodes/ScriptableNode_Entry.h"
-#include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
 #include "GraphEditor.h"
@@ -392,9 +395,13 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		{
 			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(Graph->EdGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
 		}
+		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(Graph->EdGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
+		}
 		else
 		{
-			NewEdNode = NewObject<UScriptableEdGraphNode>(Graph->EdGraph, UScriptableEdGraphNode::StaticClass(), NAME_None, RF_Transactional);
+			NewEdNode = NewObject<UScriptableEdGraphNode_Native>(Graph->EdGraph, UScriptableEdGraphNode_Native::StaticClass(), NAME_None, RF_Transactional);
 		}
 
 		if (NewEdNode)
@@ -541,6 +548,12 @@ void FScriptableGraphEditor::BindGraphCommands()
 
 	Commands->MapAction(Generic.Redo,
 		FExecuteAction::CreateLambda([]() { if (GEditor) GEditor->RedoTransaction(); }));
+
+	// Pin context: Remove pin on Sequence. UE resolves the menu entry against this command list
+	// because the SGraphEditor widget was constructed with AdditionalCommands = GetToolkitCommands().
+	Commands->MapAction(FScriptableGraphCommands::Get().RemoveSequencePin,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveSequencePin),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveSequencePin));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -857,6 +870,51 @@ void FScriptableGraphEditor::OnSelectAllNodes()
 	}
 }
 
+void FScriptableGraphEditor::OnRemoveSequencePin()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Output) return;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return;
+
+	UScriptableNode_Sequence* Sequence = Cast<UScriptableNode_Sequence>(SfEdNode->GetRuntimeNode());
+	if (!Sequence) return;
+
+	// Parse the branch index from the pin name (pure numeric per MakeOutputName).
+	const FString PinNameStr = Pin->PinName.ToString();
+	int32 DigitStart = PinNameStr.Len();
+	while (DigitStart > 0 && FChar::IsDigit(PinNameStr[DigitStart - 1]))
+	{
+		--DigitStart;
+	}
+	if (DigitStart == PinNameStr.Len()) return;
+
+	const int32 BranchIndex = FCString::Atoi(*PinNameStr.Mid(DigitStart));
+	if (BranchIndex < 0 || BranchIndex >= Sequence->OutputCount) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("RemoveSequencePinTx", "Remove Sequence Pin"));
+	Sequence->RemoveOutputPinAt(BranchIndex);
+}
+
+bool FScriptableGraphEditor::CanRemoveSequencePin() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Output) return false;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return false;
+
+	const UScriptableNode_Sequence* Sequence = Cast<UScriptableNode_Sequence>(SfEdNode->GetRuntimeNode());
+	if (!Sequence) return false;
+
+	return Sequence->OutputCount > 1;
+}
+
 void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
 {
 	UScriptableGraph* Graph = EditedGraph.Get();
@@ -887,9 +945,7 @@ void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionS
 {
 	if (!NodeDetailsView.IsValid()) return;
 
-	// Single-selection only: anything else (empty or multi) clears the panel. Bindings make
-	// multi-edit semantically dubious (each node has its own context references), so we don't
-	// even try to present a homogeneous array.
+	// Single-selection only: anything else (empty or multi) clears the panel.
 	if (NewSelection.Num() != 1)
 	{
 		NodeDetailsView->SetObject(nullptr);

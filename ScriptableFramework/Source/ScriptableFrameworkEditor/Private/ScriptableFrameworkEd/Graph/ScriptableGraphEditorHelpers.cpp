@@ -4,6 +4,9 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableNodes/ScriptableNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
@@ -62,9 +65,16 @@ namespace ScriptableGraphEditorHelpers
 		UScriptableNode* RuntimeNode = NewObject<UScriptableNode>(GraphAsset, NodeClass, NAME_None, RF_Transactional);
 		GraphAsset->Nodes.Add(RuntimeNode);
 
-		// For now, native nodes share the base UScriptableEdGraphNode visual. Specialized visuals
-		// can be introduced later by mapping runtime class -> ed-node class.
-		UScriptableEdGraphNode* EdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, UScriptableEdGraphNode::StaticClass(), NAME_None, RF_Transactional);
+		// Pick the right ed-node class for the runtime node: native types that have specialized
+		// visuals/affordances (Sequence's pin-removal menu, future Branch True/False labels, etc.)
+		// land on their own subclass; everything else falls back to the generic concrete native.
+		UClass* EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
+		if (RuntimeNode->IsA<UScriptableNode_Sequence>())
+		{
+			EdNodeClass = UScriptableEdGraphNode_Sequence::StaticClass();
+		}
+
+		UScriptableEdGraphNode* EdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, EdNodeClass, NAME_None, RF_Transactional);
 		EdNode->SetRuntimeNode(RuntimeNode);
 		EdNode->CreateNewGuid();
 		EdNode->NodePosX = Location.X;
@@ -116,9 +126,13 @@ namespace ScriptableGraphEditorHelpers
 		{
 			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(ParentGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
 		}
+		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
+		{
+			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(ParentGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
+		}
 		else
 		{
-			NewEdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, UScriptableEdGraphNode::StaticClass(), NAME_None, RF_Transactional);
+			NewEdNode = NewObject<UScriptableEdGraphNode_Native>(ParentGraph, UScriptableEdGraphNode_Native::StaticClass(), NAME_None, RF_Transactional);
 		}
 
 		if (NewEdNode)
