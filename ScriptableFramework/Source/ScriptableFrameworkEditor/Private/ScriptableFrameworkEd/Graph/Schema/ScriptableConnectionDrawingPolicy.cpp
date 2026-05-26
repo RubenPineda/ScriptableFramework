@@ -1,6 +1,6 @@
 // Copyright 2026 kirzo
 
-#include "ScriptableFrameworkEd/Graph/ScriptableConnectionDrawingPolicy.h"
+#include "ScriptableFrameworkEd/Graph/Schema/ScriptableConnectionDrawingPolicy.h"
 
 FScriptableConnectionDrawingPolicy::FScriptableConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements)
 	: FConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements)

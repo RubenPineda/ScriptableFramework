@@ -2,11 +2,11 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_AND.h"
-#include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_Task.h"
-#include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_Sequence.h"
-#include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_AND.h"
 
 TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Node) const
 {

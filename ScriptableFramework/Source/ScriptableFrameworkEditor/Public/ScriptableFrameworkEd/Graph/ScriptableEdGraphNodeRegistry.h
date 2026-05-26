@@ -11,7 +11,7 @@ class UScriptableEdGraphNode;
  * Lookup table: runtime UScriptableNode class -> visual UScriptableEdGraphNode class. Populated
  * once at module startup by scanning every subclass of UScriptableEdGraphNode.
  */
-class FScriptableEdGraphNodeRegistry
+class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableEdGraphNodeRegistry
 {
 public:
 	/** Populates the singleton by iterating all UScriptableEdGraphNode subclasses. Idempotent. */

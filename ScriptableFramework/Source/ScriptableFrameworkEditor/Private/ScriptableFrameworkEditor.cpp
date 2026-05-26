@@ -25,7 +25,7 @@
 
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
+#include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphPinFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"

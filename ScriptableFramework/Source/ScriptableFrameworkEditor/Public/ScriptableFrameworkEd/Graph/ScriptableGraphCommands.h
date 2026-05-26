@@ -7,7 +7,7 @@
 #include "Styling/AppStyle.h"
 
 /** Centralized FUICommandInfo registry for the Scriptable Graph editor. */
-class FScriptableGraphCommands : public TCommands<FScriptableGraphCommands>
+class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableGraphCommands : public TCommands<FScriptableGraphCommands>
 {
 public:
 	FScriptableGraphCommands()

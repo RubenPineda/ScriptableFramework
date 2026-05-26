@@ -13,7 +13,7 @@ class UScriptableNode;
  * Mirrors the runtime node's input/output pins onto the visual graph.
  */
 UCLASS(Abstract)
-class UScriptableEdGraphNode : public UEdGraphNode
+class SCRIPTABLEFRAMEWORKEDITOR_API UScriptableEdGraphNode : public UEdGraphNode
 {
 	GENERATED_BODY()
 

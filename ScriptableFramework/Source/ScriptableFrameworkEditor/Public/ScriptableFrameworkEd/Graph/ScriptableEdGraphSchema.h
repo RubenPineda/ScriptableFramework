@@ -11,7 +11,7 @@
  * context menu offers, and other editor-only graph semantics.
  */
 UCLASS()
-class UScriptableEdGraphSchema : public UEdGraphSchema
+class SCRIPTABLEFRAMEWORKEDITOR_API UScriptableEdGraphSchema : public UEdGraphSchema
 {
 	GENERATED_BODY()
 

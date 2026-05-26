@@ -10,7 +10,7 @@
  * Currently maps UScriptableEdGraphNode_Task -> SScriptableGraphNode_Task; all other node
  * types fall through to the default factory by returning null.
  */
-class FScriptableGraphNodeFactory : public FGraphPanelNodeFactory
+class SCRIPTABLEFRAMEWORKEDITOR_API FScriptableGraphNodeFactory : public FGraphPanelNodeFactory
 {
 public:
 	virtual TSharedPtr<class SGraphNode> CreateNode(class UEdGraphNode* Node) const override;

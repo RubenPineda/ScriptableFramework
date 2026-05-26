@@ -7,7 +7,7 @@
 #include "AssetRegistry/AssetData.h"
 
 /** Schema action used as the payload for palette drags. */
-struct FScriptablePaletteAction : public FEdGraphSchemaAction
+struct SCRIPTABLEFRAMEWORKEDITOR_API FScriptablePaletteAction : public FEdGraphSchemaAction
 {
 	static FName StaticGetTypeId() { static FName Type("FScriptablePaletteAction"); return Type; }
 	virtual FName GetTypeId() const override { return StaticGetTypeId(); }

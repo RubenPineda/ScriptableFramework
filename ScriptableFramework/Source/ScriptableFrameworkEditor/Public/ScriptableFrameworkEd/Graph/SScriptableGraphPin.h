@@ -10,7 +10,7 @@
  * (hollow when disconnected, filled when connected, routed behind the node) and respects
  * the owning ed-node's per-pin label visibility hint.
  */
-class SScriptableGraphPin : public SGraphPinExec
+class SCRIPTABLEFRAMEWORKEDITOR_API SScriptableGraphPin : public SGraphPinExec
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphPin) {}

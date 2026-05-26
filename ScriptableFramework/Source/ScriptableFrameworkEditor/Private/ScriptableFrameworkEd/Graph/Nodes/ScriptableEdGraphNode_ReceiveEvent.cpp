@@ -1,6 +1,6 @@
 // Copyright 2026 kirzo
 
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_ReceiveEvent.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_ReceiveEvent.h"
 #include "ScriptableFrameworkEditorStyle.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 

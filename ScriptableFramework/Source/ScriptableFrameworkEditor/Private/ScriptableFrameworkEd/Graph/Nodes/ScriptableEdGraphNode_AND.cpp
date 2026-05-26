@@ -1,6 +1,6 @@
 // Copyright 2026 kirzo
 
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_AND.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
 #include "ScriptableNodes/ScriptableNode_AND.h"
 

@@ -2,7 +2,7 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableConnectionDrawingPolicy.h"
+#include "ScriptableFrameworkEd/Graph/Schema/ScriptableConnectionDrawingPolicy.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"

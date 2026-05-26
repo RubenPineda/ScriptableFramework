@@ -1,6 +1,6 @@
 // Copyright 2026 kirzo
 
-#include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_Task.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEditorStyle.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
