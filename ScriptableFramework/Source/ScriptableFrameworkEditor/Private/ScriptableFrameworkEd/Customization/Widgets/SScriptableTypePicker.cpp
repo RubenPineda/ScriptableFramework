@@ -329,7 +329,7 @@ void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKe
 	Item->IconColor = FLinearColor::Gray;
 }
 
-void SScriptableTypeSelector::AddNode(const FAssetData& AssetData)
+void SScriptableTypeSelector::AddNode(const FAssetData& AssetData, const FText& RootCategory)
 {
 	if (!RootNode.IsValid())
 	{
@@ -341,23 +341,27 @@ void SScriptableTypeSelector::AddNode(const FAssetData& AssetData)
 	FString CategoryStr;
 	AssetData.GetTagValue<FString>(CategoryTagName, CategoryStr);
 
-	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
-
+	// Build full category path: RootCategory (if any) at top, then the asset's tag-driven path.
+	TArray<FString> CategoryPath;
+	if (!RootCategory.IsEmpty())
+	{
+		CategoryPath.Add(RootCategory.ToString());
+	}
 	if (!CategoryStr.IsEmpty())
 	{
-		// Parse "Combat|Melee" -> ["Combat", "Melee"]
-		TArray<FString> CategoryPath;
-		CategoryStr.ParseIntoArray(CategoryPath, TEXT("|"), true);
-		for (FString& SubCategory : CategoryPath)
+		TArray<FString> SubPath;
+		CategoryStr.ParseIntoArray(SubPath, TEXT("|"), true);
+		for (FString& SubCategory : SubPath)
 		{
 			SubCategory.TrimStartAndEndInline();
 		}
+		CategoryPath.Append(MoveTemp(SubPath));
+	}
 
-		// Create items for the entire category path
-		for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
-		{
-			ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
-		}
+	TSharedPtr<FScriptableTypeItem> ParentItem = RootNode;
+	for (int32 PathIndex = 0; PathIndex < CategoryPath.Num(); ++PathIndex)
+	{
+		ParentItem = FindOrCreateItemForCategory(ParentItem->Children, MakeArrayView(CategoryPath.GetData(), PathIndex + 1));
 	}
 	check(ParentItem);
 
@@ -545,7 +549,7 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 		{
 			if (MatchesFilter(Asset))
 			{
-				AddNode(Asset);
+				AddNode(Asset, BaseClassRootCategory);
 			}
 		}
 	}

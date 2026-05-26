@@ -111,7 +111,7 @@ private:
 
 	/** RootCategory, if non-empty, becomes the top-level parent under which this entry is placed; the entry's own MetaKey-driven hierarchy hangs below it. Lets a caller force a "Native Nodes" / "Scriptable Tasks" split at the top of the tree. */
 	void AddNode(const UStruct* Struct, const FName& MetaKey, const FText& RootCategory = FText::GetEmpty());
-	void AddNode(const FAssetData& AssetData);
+	void AddNode(const FAssetData& AssetData, const FText& RootCategory = FText::GetEmpty());
 
 	bool MatchesCategoryPath(const TArray<FString>& CategoryPath);
 	bool MatchesFilter(const FAssetData& AssetData);

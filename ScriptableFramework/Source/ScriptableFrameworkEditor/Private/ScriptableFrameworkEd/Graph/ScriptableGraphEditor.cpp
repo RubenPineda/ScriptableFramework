@@ -18,6 +18,7 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableActionAsset.h"
 
 #include "GraphEditor.h"
 #include "EdGraph/EdGraph.h"
@@ -506,29 +507,50 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 {
 	UEdGraphPin* FromPin = (InDraggedPins.Num() > 0) ? InDraggedPins[0] : nullptr;
 
-	// Asset picks are deferred: when content-browser assets like UScriptableActionAsset
-	// are dropped, we'll wrap them in UScriptableTask_RunAsset. Not implemented yet.
+	UEdGraphNode* SpawnedNode = nullptr;
+
+	// Asset path: dropping a UScriptableActionAsset spawns a Task wrapper around a
+	// UScriptableTask_RunAsset, with the task's Asset field pointing to the picked asset. From
+	// then on the node behaves like any other task — runner instantiates the action at execution
+	// time, no special handling at the graph level.
 	if (InAssetData.IsValid())
 	{
-		FSlateApplication::Get().DismissAllMenus();
-		return;
-	}
+		UScriptableActionAsset* ActionAsset = Cast<UScriptableActionAsset>(InAssetData.GetAsset());
+		if (ActionAsset)
+		{
+			SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, UScriptableTask_RunAsset::StaticClass(), InLocation, FromPin, /*bSelectNewNode*/ true);
 
-	const UClass* PickedClass = Cast<UClass>(InStruct);
-	if (!PickedClass)
-	{
-		FSlateApplication::Get().DismissAllMenus();
-		return;
-	}
+			if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(SpawnedNode))
+			{
+				if (UScriptableNode_Task* WrapperRuntime = Cast<UScriptableNode_Task>(SfEdNode->GetRuntimeNode()))
+				{
+					if (UScriptableTask_RunAsset* RunAssetTask = Cast<UScriptableTask_RunAsset>(WrapperRuntime->Task))
+					{
+						RunAssetTask->Modify();
+						RunAssetTask->Asset = ActionAsset;
 
-	UEdGraphNode* SpawnedNode = nullptr;
-	if (PickedClass->IsChildOf(UScriptableTask::StaticClass()))
-	{
-		SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+						// Refresh the node title so the canvas shows the asset name immediately rather
+						// than the generic "Run Asset" default.
+						SfEdNode->ReconstructNode();
+					}
+				}
+			}
+		}
 	}
-	else if (PickedClass->IsChildOf(UScriptableNode::StaticClass()))
+	else
 	{
-		SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+		const UClass* PickedClass = Cast<UClass>(InStruct);
+		if (PickedClass)
+		{
+			if (PickedClass->IsChildOf(UScriptableTask::StaticClass()))
+			{
+				SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+			}
+			else if (PickedClass->IsChildOf(UScriptableNode::StaticClass()))
+			{
+				SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+			}
+		}
 	}
 
 	// Dismiss the menu now that the spawn has executed. The picker's destructor will fire
