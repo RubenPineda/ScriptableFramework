@@ -28,7 +28,9 @@ void UScriptableTask_CreateLevelSequencePlayer::BeginTask()
 
 	if (!bPlayAutomatically)
 	{
+		// Player created but not auto-playing: nothing more to do.
 		Finish();
+		return;
 	}
 
 	if (bWaitUntilFinished)
