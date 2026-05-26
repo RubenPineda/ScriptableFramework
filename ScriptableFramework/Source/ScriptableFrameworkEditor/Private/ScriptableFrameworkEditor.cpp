@@ -38,7 +38,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	FScriptableFrameworkEditorStyle::Initialize();
 	FScriptableGraphCommands::Register();
 
-	FScriptableEdGraphNodeRegistry::Build();
+	FScriptableEdGraphNodeRegistry::Initialize();
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));
@@ -59,6 +59,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 
 void FScriptableFrameworkEditorModule::OnShutdownModule()
 {
+	FScriptableEdGraphNodeRegistry::Shutdown();
 	FScriptableGraphCommands::Unregister();
 	FScriptableFrameworkEditorStyle::Shutdown();
 }
