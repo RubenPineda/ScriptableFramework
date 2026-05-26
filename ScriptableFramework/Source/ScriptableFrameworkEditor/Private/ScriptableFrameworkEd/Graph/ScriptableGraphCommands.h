@@ -23,4 +23,7 @@ public:
 
 	/** Removes the right-clicked output pin from a Sequence node, sliding higher branches down. */
 	TSharedPtr<FUICommandInfo> RemoveSequencePin;
+
+	/** Removes the right-clicked input pin from an AND node, sliding higher inputs down. */
+	TSharedPtr<FUICommandInfo> RemoveANDPin;
 };

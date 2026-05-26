@@ -22,9 +22,3 @@ FSlateIcon UScriptableEdGraphNode_Branch::GetIconAndTint(FLinearColor& OutColor)
 	OutColor = FLinearColor::White;
 	return FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.Branch_16x");
 }
-
-bool UScriptableEdGraphNode_Branch::ShouldShowPinLabel(FName PinName) const
-{
-	if (PinName == UScriptableNode_Branch::InInputName) return false;
-	return true;
-}

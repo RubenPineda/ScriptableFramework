@@ -14,6 +14,14 @@ void FScriptableGraphCommands::RegisterCommands()
 		EUserInterfaceActionType::Button,
 		FInputChord()
 	);
+
+	UI_COMMAND(
+		RemoveANDPin,
+		"Remove pin",
+		"Remove this input from the AND node. Higher-indexed inputs shift down to fill the gap and keep their incoming connections.",
+		EUserInterfaceActionType::Button,
+		FInputChord()
+	);
 }
 
 #undef LOCTEXT_NAMESPACE

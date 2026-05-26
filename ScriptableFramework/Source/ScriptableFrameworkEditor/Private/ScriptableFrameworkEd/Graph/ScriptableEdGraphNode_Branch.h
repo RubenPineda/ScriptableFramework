@@ -20,8 +20,4 @@ public:
 	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
 	virtual bool ShowPaletteIconOnNode() const override { return true; }
 	//~ End of UEdGraphNode interface
-
-	//~ UScriptableEdGraphNode interface
-	virtual bool ShouldShowPinLabel(FName PinName) const override;
-	//~ End of UScriptableEdGraphNode interface
 };

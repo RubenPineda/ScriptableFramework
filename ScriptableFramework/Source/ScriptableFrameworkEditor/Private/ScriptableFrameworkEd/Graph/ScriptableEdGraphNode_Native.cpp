@@ -17,5 +17,8 @@ bool UScriptableEdGraphNode_Native::ShouldShowPinLabel(FName PinName) const
 	const TArray<FName> Inputs = Runtime->GetInputPins();
 	if (Inputs.Num() == 1 && Inputs[0] == PinName) return false;
 
+	const TArray<FName> Outputs = Runtime->GetOutputPins();
+	if (Outputs.Num() == 1 && Outputs[0] == PinName) return false;
+
 	return Super::ShouldShowPinLabel(PinName);
 }

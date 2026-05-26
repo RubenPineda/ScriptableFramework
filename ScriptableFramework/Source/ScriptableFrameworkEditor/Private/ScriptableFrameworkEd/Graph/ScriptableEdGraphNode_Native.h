@@ -15,6 +15,7 @@ class UScriptableEdGraphNode_Native : public UScriptableEdGraphNode
 {
 	GENERATED_BODY()
 
+public:
 	//~ UEdGraphNode interface
 	virtual FLinearColor GetNodeTitleColor() const override;
 	//~ End of UEdGraphNode interface

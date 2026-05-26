@@ -3,8 +3,10 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_AND.h"
 #include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_Sequence.h"
+#include "ScriptableFrameworkEd/Graph/SScriptableGraphNode_AND.h"
 
 TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Node) const
 {
@@ -16,6 +18,11 @@ TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Nod
 	if (UScriptableEdGraphNode_Sequence* SequenceNode = Cast<UScriptableEdGraphNode_Sequence>(Node))
 	{
 		return SNew(SScriptableGraphNode_Sequence, SequenceNode);
+	}
+
+	if (UScriptableEdGraphNode_AND* ANDNode = Cast<UScriptableEdGraphNode_AND>(Node))
+	{
+		return SNew(SScriptableGraphNode_AND, ANDNode);
 	}
 
 	return nullptr;

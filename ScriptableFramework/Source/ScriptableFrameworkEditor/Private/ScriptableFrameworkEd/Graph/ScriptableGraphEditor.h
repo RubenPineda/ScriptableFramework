@@ -62,6 +62,12 @@ private:
 	/** Enables the Remove pin entry only when the right-clicked pin belongs to a UScriptableNode_Sequence with OutputCount > 1 and is an output. */
 	bool CanRemoveSequencePin() const;
 
+	/** Pin-context executor: removes the right-clicked AND input pin. Reads the target pin from the GraphEditorWidget's current selection. */
+	void OnRemoveANDPin();
+
+	/** Greys out the AND Remove-pin entry once the node would dip below MinInputCount. */
+	bool CanRemoveANDPin() const;
+
 	/** Maps generic Slate commands (delete, copy, cut, paste, duplicate, select all, undo, redo) into the graph editor. */
 	void BindGraphCommands();
 

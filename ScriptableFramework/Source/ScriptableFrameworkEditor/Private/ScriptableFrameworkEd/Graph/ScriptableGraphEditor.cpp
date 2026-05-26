@@ -9,6 +9,7 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
+#include "ScriptableNodes/ScriptableNode_AND.h"
 #include "ScriptableNodes/ScriptableNode_Branch.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
@@ -540,6 +541,10 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(FScriptableGraphCommands::Get().RemoveSequencePin,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveSequencePin),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveSequencePin));
+
+	Commands->MapAction(FScriptableGraphCommands::Get().RemoveANDPin,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveANDPin),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveANDPin));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -911,6 +916,51 @@ bool FScriptableGraphEditor::CanRemoveSequencePin() const
 	if (!Sequence) return false;
 
 	return Sequence->OutputCount > UScriptableNode_Sequence::MinOutputCount;
+}
+
+void FScriptableGraphEditor::OnRemoveANDPin()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Input) return;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return;
+
+	UScriptableNode_AND* AND = Cast<UScriptableNode_AND>(SfEdNode->GetRuntimeNode());
+	if (!AND) return;
+
+	// Parse the branch index from the pin name (pure numeric per MakeInputName).
+	const FString PinNameStr = Pin->PinName.ToString();
+	int32 DigitStart = PinNameStr.Len();
+	while (DigitStart > 0 && FChar::IsDigit(PinNameStr[DigitStart - 1]))
+	{
+		--DigitStart;
+	}
+	if (DigitStart == PinNameStr.Len()) return;
+
+	const int32 BranchIndex = FCString::Atoi(*PinNameStr.Mid(DigitStart));
+	if (BranchIndex < 0 || BranchIndex >= AND->InputCount) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("RemoveANDPinTx", "Remove AND Pin"));
+	AND->RemoveInputPinAt(BranchIndex);
+}
+
+bool FScriptableGraphEditor::CanRemoveANDPin() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Input) return false;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return false;
+
+	const UScriptableNode_AND* AND = Cast<UScriptableNode_AND>(SfEdNode->GetRuntimeNode());
+	if (!AND) return false;
+
+	return AND->InputCount > UScriptableNode_AND::MinInputCount;
 }
 
 void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent)
