@@ -17,7 +17,7 @@
  * removed via the canvas affordance never deadlock the gate because pruning also drops their
  * entry from the seen-set.
  */
-UCLASS(DisplayName = "AND", meta = (NodeCategory = "Flow"))
+UCLASS(DisplayName = "AND", meta = (NodeCategory = "System|Flow"))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_AND : public UScriptableNode
 {
 	GENERATED_BODY()

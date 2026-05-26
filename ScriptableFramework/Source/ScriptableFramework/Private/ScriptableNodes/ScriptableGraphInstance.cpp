@@ -3,6 +3,7 @@
 #include "ScriptableNodes/ScriptableGraphInstance.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableContext.h"
 
 void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext)
@@ -69,6 +70,27 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 	}
 
 	// Activate() above may have left the queue with pending activations. Drain now (if not already).
+	if (!bProcessing)
+	{
+		ProcessQueue();
+	}
+}
+
+void UScriptableGraphInstance::FireEvent(FName EventName)
+{
+	if (EventName.IsNone()) return;
+	if (bCancelled || bFinished) return;
+
+	// Linear scan for now.
+	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
+	{
+		UScriptableNode_ReceiveEvent* Receiver = Cast<UScriptableNode_ReceiveEvent>(Node);
+		if (!Receiver || Receiver->EventName != EventName) continue;
+
+		ActiveNodes.Add(Receiver);
+		Receiver->Trigger();
+	}
+
 	if (!bProcessing)
 	{
 		ProcessQueue();

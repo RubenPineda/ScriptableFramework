@@ -4,6 +4,15 @@
 #include "ScriptableFrameworkEditorStyle.h"
 #include "ScriptableNodes/ScriptableNode.h"
 
+FText UScriptableEdGraphNode_Native::GetNodeTitle(ENodeTitleType::Type TitleType) const
+{
+	if (const UScriptableNode* Runtime = GetRuntimeNode())
+	{
+		return Runtime->GetDisplayTitle();
+	}
+	return Super::GetNodeTitle(TitleType);
+}
+
 FLinearColor UScriptableEdGraphNode_Native::GetNodeTitleColor() const
 {
 	return FScriptableFrameworkEditorStyle::ScriptableSystemNodeColor;

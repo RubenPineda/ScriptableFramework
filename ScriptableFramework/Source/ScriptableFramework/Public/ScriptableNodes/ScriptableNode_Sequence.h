@@ -12,7 +12,7 @@
  * to the runner, which queues downstream activations on Pending; no branch waits for any other to
  * complete. Mirrors the Blueprint Sequence node semantics.
  */
-UCLASS(DisplayName = "Sequence", meta = (NodeCategory = "Flow"))
+UCLASS(DisplayName = "Sequence", meta = (NodeCategory = "System|Flow"))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_Sequence : public UScriptableNode
 {
 	GENERATED_BODY()

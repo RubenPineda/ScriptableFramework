@@ -8,7 +8,7 @@
 #include "ScriptableNode_Branch.generated.h"
 
 /** Evaluates a FScriptableRequirement at activation time and fires "True" or "False" accordingly. */
-UCLASS(DisplayName = "Branch", meta = (NodeCategory = "Flow"))
+UCLASS(DisplayName = "Branch", meta = (NodeCategory = "System|Flow"))
 class SCRIPTABLEFRAMEWORK_API UScriptableNode_Branch : public UScriptableNode
 {
 	GENERATED_BODY()
