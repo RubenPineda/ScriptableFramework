@@ -20,6 +20,8 @@ public:
 	virtual bool CanDuplicateNode() const override { return false; }
 	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
 	virtual FLinearColor GetNodeTitleColor() const override;
+	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
+	virtual bool ShowPaletteIconOnNode() const override { return true; }
 	//~ End of UEdGraphNode interface
 
 	virtual bool ShouldShowPinLabel(FName PinName) const override { return false; }

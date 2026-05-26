@@ -12,3 +12,9 @@ FLinearColor UScriptableEdGraphNode_Entry::GetNodeTitleColor() const
 {
 	return FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor;
 }
+
+FSlateIcon UScriptableEdGraphNode_Entry::GetIconAndTint(FLinearColor& OutColor) const
+{
+	OutColor = FLinearColor::White;
+	return FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.Event_16x");
+}
