@@ -15,6 +15,8 @@ class UScriptableEdGraphNode_Entry : public UScriptableEdGraphNode
 	GENERATED_BODY()
 
 public:
+	UScriptableEdGraphNode_Entry();
+
 	//~ UEdGraphNode interface
 	virtual bool CanUserDeleteNode() const override { return false; }
 	virtual bool CanDuplicateNode() const override { return false; }

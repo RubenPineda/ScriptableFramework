@@ -1,10 +1,14 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
-#include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableFrameworkEditorStyle.h"
+
+UScriptableEdGraphNode_Task::UScriptableEdGraphNode_Task()
+{
+	RuntimeNodeClass = UScriptableNode_Task::StaticClass();
+}
 
 FText UScriptableEdGraphNode_Task::GetNodeTitle(ENodeTitleType::Type TitleType) const
 {

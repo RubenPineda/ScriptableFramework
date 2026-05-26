@@ -10,6 +10,11 @@
 
 #define LOCTEXT_NAMESPACE "ScriptableEdGraphNode_Sequence"
 
+UScriptableEdGraphNode_Sequence::UScriptableEdGraphNode_Sequence()
+{
+	RuntimeNodeClass = UScriptableNode_Sequence::StaticClass();
+}
+
 FSlateIcon UScriptableEdGraphNode_Sequence::GetIconAndTint(FLinearColor& OutColor) const
 {
 	OutColor = FLinearColor::White;

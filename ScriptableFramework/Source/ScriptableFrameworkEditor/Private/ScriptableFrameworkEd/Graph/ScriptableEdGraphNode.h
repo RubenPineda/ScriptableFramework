@@ -21,6 +21,9 @@ public:
 	/** Pin category used for all scriptable-graph pins. Single category for now: any pin connects to any compatible pin. */
 	static const FName ScriptableExecPinCategory;
 
+	/** Runtime class this ed-node visualizes. Concrete subclasses set this in their constructor; the framework uses it to build the runtime-class -> ed-node-class lookup table during module startup. Left null on the abstract base (and on the generic fallback) so the registry skips them. */
+	UClass* RuntimeNodeClass = nullptr;
+
 	/** The runtime node this editor node wraps. Persisted so the link survives save/load. */
 	UPROPERTY()
 	TObjectPtr<UScriptableNode> RuntimeNode;

@@ -21,6 +21,8 @@ class UScriptableEdGraphNode_Sequence : public UScriptableEdGraphNode_Native
 	GENERATED_BODY()
 
 public:
+	UScriptableEdGraphNode_Sequence();
+
 	//~ UEdGraphNode interface
 	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
 	virtual bool ShowPaletteIconOnNode() const override { return true; }

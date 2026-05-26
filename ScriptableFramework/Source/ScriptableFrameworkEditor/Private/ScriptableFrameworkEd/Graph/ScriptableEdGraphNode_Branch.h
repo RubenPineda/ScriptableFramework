@@ -13,6 +13,8 @@ class UScriptableEdGraphNode_Branch : public UScriptableEdGraphNode_Native
 	GENERATED_BODY()
 
 public:
+	UScriptableEdGraphNode_Branch();
+
 	//~ UEdGraphNode interface
 	virtual FLinearColor GetNodeTitleColor() const override;
 	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;

@@ -13,6 +13,8 @@ class UScriptableEdGraphNode_Task : public UScriptableEdGraphNode
 	GENERATED_BODY()
 
 public:
+	UScriptableEdGraphNode_Task();
+
 	//~ UEdGraphNode interface
 	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
 	virtual FLinearColor GetNodeTitleColor() const override;

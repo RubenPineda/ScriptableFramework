@@ -29,6 +29,7 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphPinFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
 
 #define LOCTEXT_NAMESPACE "FScriptableFrameworkEditorModule"
 
@@ -36,6 +37,8 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 {
 	FScriptableFrameworkEditorStyle::Initialize();
 	FScriptableGraphCommands::Register();
+
+	FScriptableEdGraphNodeRegistry::Build();
 
 	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	ScriptableAssetCategoryBit = AssetTools.RegisterAdvancedAssetCategory("ScriptableFramework", INVTEXT("Scriptable Framework"));

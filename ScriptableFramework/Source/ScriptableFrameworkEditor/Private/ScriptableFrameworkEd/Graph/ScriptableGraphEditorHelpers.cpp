@@ -1,15 +1,10 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Branch.h"
-#include "ScriptableNodes/ScriptableNode_Sequence.h"
-#include "ScriptableNodes/ScriptableNode_Branch.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
@@ -67,18 +62,8 @@ namespace ScriptableGraphEditorHelpers
 		UScriptableNode* RuntimeNode = NewObject<UScriptableNode>(GraphAsset, NodeClass, NAME_None, RF_Transactional);
 		GraphAsset->Nodes.Add(RuntimeNode);
 
-		// Pick the right ed-node class for the runtime node: native types that have specialized
-		// visuals/affordances (Sequence's pin-removal menu, future Branch True/False labels, etc.)
-		// land on their own subclass; everything else falls back to the generic concrete native.
-		UClass* EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
-		if (RuntimeNode->IsA<UScriptableNode_Sequence>())
-		{
-			EdNodeClass = UScriptableEdGraphNode_Sequence::StaticClass();
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
-		{
-			EdNodeClass = UScriptableEdGraphNode_Branch::StaticClass();
-		}
+		UClass* EdNodeClass = FScriptableEdGraphNodeRegistry::FindEdNodeClassFor(RuntimeNode);
+		if (!EdNodeClass) EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
 
 		UScriptableEdGraphNode* EdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, EdNodeClass, NAME_None, RF_Transactional);
 		EdNode->SetRuntimeNode(RuntimeNode);
@@ -123,27 +108,10 @@ namespace ScriptableGraphEditorHelpers
 	{
 		if (!ParentGraph || !RuntimeNode) return nullptr;
 
-		UScriptableEdGraphNode* NewEdNode = nullptr;
-		if (RuntimeNode->IsA<UScriptableNode_Entry>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Entry>(ParentGraph, UScriptableEdGraphNode_Entry::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Task>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(ParentGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(ParentGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Branch>(ParentGraph, UScriptableEdGraphNode_Branch::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Native>(ParentGraph, UScriptableEdGraphNode_Native::StaticClass(), NAME_None, RF_Transactional);
-		}
+		UClass* EdNodeClass = FScriptableEdGraphNodeRegistry::FindEdNodeClassFor(RuntimeNode);
+		if (!EdNodeClass) EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
+
+		UScriptableEdGraphNode* NewEdNode = NewObject<UScriptableEdGraphNode>(ParentGraph, EdNodeClass, NAME_None, RF_Transactional);
 
 		if (NewEdNode)
 		{

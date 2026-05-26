@@ -2,13 +2,10 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraph.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Entry.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Sequence.h"
-#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Branch.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
@@ -388,27 +385,10 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 	{
 		if (!RuntimeNode || AlreadyVisualized.Contains(RuntimeNode)) continue;
 
-		UScriptableEdGraphNode* NewEdNode = nullptr;
-		if (RuntimeNode->IsA<UScriptableNode_Entry>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Entry>(Graph->EdGraph, UScriptableEdGraphNode_Entry::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Task>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Task>(Graph->EdGraph, UScriptableEdGraphNode_Task::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Sequence>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Sequence>(Graph->EdGraph, UScriptableEdGraphNode_Sequence::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else if (RuntimeNode->IsA<UScriptableNode_Branch>())
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Branch>(Graph->EdGraph, UScriptableEdGraphNode_Branch::StaticClass(), NAME_None, RF_Transactional);
-		}
-		else
-		{
-			NewEdNode = NewObject<UScriptableEdGraphNode_Native>(Graph->EdGraph, UScriptableEdGraphNode_Native::StaticClass(), NAME_None, RF_Transactional);
-		}
+		UClass* EdNodeClass = FScriptableEdGraphNodeRegistry::FindEdNodeClassFor(RuntimeNode);
+		if (!EdNodeClass) EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
+
+		UScriptableEdGraphNode* NewEdNode = NewObject<UScriptableEdGraphNode>(Graph->EdGraph, EdNodeClass, NAME_None, RF_Transactional);
 
 		if (NewEdNode)
 		{
