@@ -2,13 +2,16 @@
 
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphSchema.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Reroute.h"
 #include "ScriptableFrameworkEd/Graph/Schema/ScriptableConnectionDrawingPolicy.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableNode_Reroute.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
 #include "ScopedTransaction.h"
 
 #include "EdGraph/EdGraph.h"
@@ -352,6 +355,63 @@ void UScriptableEdGraphSchema::DroppedAssetsOnGraph(const TArray<FAssetData>& As
 			Cursor.Y += VerticalStep;
 		}
 	}
+}
+
+void UScriptableEdGraphSchema::OnPinConnectionDoubleCicked(UEdGraphPin* PinA, UEdGraphPin* PinB, const FVector2f& GraphPosition) const
+{
+	if (!PinA || !PinB) return;
+	UEdGraph* Graph = PinA->GetOwningNode() ? PinA->GetOwningNode()->GetGraph() : nullptr;
+	if (!Graph) return;
+
+	// Identify output side vs input side.
+	UEdGraphPin* OutputPin = (PinA->Direction == EGPD_Output) ? PinA : PinB;
+	UEdGraphPin* InputPin = (PinA->Direction == EGPD_Input) ? PinA : PinB;
+	if (!OutputPin || !InputPin) return;
+
+	UScriptableGraph* GraphAsset = Cast<UScriptableGraph>(Graph->GetOuter());
+	if (!GraphAsset) return;
+
+	const FScopedTransaction Transaction(NSLOCTEXT("ScriptableEdGraphSchema", "CreateRerouteTx", "Create Reroute"));
+	GraphAsset->Modify();
+	Graph->Modify();
+
+	UScriptableNode* RuntimeNode = NewObject<UScriptableNode>(GraphAsset, UScriptableNode_Reroute::StaticClass(), NAME_None, RF_Transactional);
+	GraphAsset->Nodes.Add(RuntimeNode);
+
+	UClass* EdNodeClass = FScriptableEdGraphNodeRegistry::FindEdNodeClassFor(RuntimeNode);
+	if (!EdNodeClass) EdNodeClass = UScriptableEdGraphNode_Reroute::StaticClass();
+
+	UScriptableEdGraphNode* RerouteEdNode = NewObject<UScriptableEdGraphNode>(Graph, EdNodeClass, NAME_None, RF_Transactional);
+	RerouteEdNode->SetRuntimeNode(RuntimeNode);
+	RerouteEdNode->CreateNewGuid();
+	RerouteEdNode->NodePosX = GraphPosition.X;
+	RerouteEdNode->NodePosY = GraphPosition.Y;
+	RerouteEdNode->AllocateDefaultPins();
+	Graph->AddNode(RerouteEdNode, /*bUserAction*/ true, /*bSelectNewNode*/ true);
+
+	// Hook up the new wires: OutputPin -> Reroute.In, Reroute.Out -> InputPin.
+	UEdGraphPin* RerouteIn = RerouteEdNode->FindPin(TEXT("In"), EGPD_Input);
+	UEdGraphPin* RerouteOut = RerouteEdNode->FindPin(TEXT("Out"), EGPD_Output);
+	if (RerouteIn && RerouteOut)
+	{
+		// Sever the original wire first (output side carries the link in our asymmetric model).
+		OutputPin->BreakLinkTo(InputPin);
+
+		// Stitch through the reroute.
+		OutputPin->MakeLinkTo(RerouteIn);
+		RerouteOut->MakeLinkTo(InputPin);
+	}
+
+	Graph->NotifyGraphChanged();
+}
+
+FLinearColor UScriptableEdGraphSchema::GetPinTypeColor(const FEdGraphPinType& PinType) const
+{
+	if (PinType.PinCategory == UScriptableEdGraphNode::ScriptableExecPinCategory)
+	{
+		return FLinearColor::White;
+	}
+	return Super::GetPinTypeColor(PinType);
 }
 
 #undef LOCTEXT_NAMESPACE

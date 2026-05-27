@@ -4,9 +4,11 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Reroute.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_AND.h"
+#include "SGraphNodeKnot.h"
 
 TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Node) const
 {
@@ -23,6 +25,11 @@ TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Nod
 	if (UScriptableEdGraphNode_AND* ANDNode = Cast<UScriptableEdGraphNode_AND>(Node))
 	{
 		return SNew(SScriptableGraphNode_AND, ANDNode);
+	}
+
+	if (UScriptableEdGraphNode_Reroute* RerouteNode = Cast<UScriptableEdGraphNode_Reroute>(Node))
+	{
+		return SNew(SGraphNodeKnot, RerouteNode);
 	}
 
 	return nullptr;
