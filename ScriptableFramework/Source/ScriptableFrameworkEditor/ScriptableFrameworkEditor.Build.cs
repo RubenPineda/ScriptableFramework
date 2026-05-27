@@ -32,7 +32,8 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"ApplicationCore",
 				"DataValidation",
 				"ToolMenus",
-				"GraphEditor"
+				"GraphEditor",
+				"KzLib"
 			});
 	}
 }

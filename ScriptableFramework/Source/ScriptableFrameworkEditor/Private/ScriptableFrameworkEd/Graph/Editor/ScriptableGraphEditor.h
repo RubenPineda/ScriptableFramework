@@ -11,6 +11,8 @@ class UEdGraph;
 class UEdGraphPin;
 class IDetailsView;
 class SGraphEditor;
+class SKzValidationPanel;
+struct FKzValidationIssue;
 
 /** Asset editor for UScriptableGraph. */
 class FScriptableGraphEditor : public FAssetEditorToolkit
@@ -101,6 +103,22 @@ private:
 	bool CanDuplicate() const { return HasAnyCopyableSelected(); }
 	bool CanSelectAll() const { return GraphEditorWidget.IsValid(); }
 
+	// --- Validation ---
+	/** Spawns the Validation tab hosting an SKzValidationPanel wired to this graph. */
+	TSharedRef<SDockTab> SpawnTab_Validation(const FSpawnTabArgs& Args);
+
+	/** Adds the "Validate" toolbar button. */
+	void ExtendToolbar();
+
+	/** Toolbar handler: focuses the Validation tab and re-runs validation. */
+	void OnRunValidation();
+
+	/** Runs all matching validators on the graph and returns the fresh issue list for the panel. */
+	TArray<FKzValidationIssue> HandleRunValidation();
+
+	/** Click-to-navigate: selects and pans to the ed-node whose runtime BindingID matches the issue's ContextId. */
+	void HandleValidationIssueActivated(const FKzValidationIssue& Issue);
+
 	/** The asset currently being edited. */
 	TWeakObjectPtr<UScriptableGraph> EditedGraph;
 
@@ -113,6 +131,9 @@ private:
 	/** The graph editor widget shown in the center tab. */
 	TSharedPtr<SGraphEditor> GraphEditorWidget;
 
+	/** Validation panel shown in the Validation tab. */
+	TSharedPtr<SKzValidationPanel> ValidationPanel;
+
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
 	FDelegateHandle OnObjectTransactedHandle;
@@ -121,4 +142,5 @@ private:
 	static const FName AssetDetailsTabId;
 	static const FName NodeDetailsTabId;
 	static const FName PaletteTabId;
+	static const FName ValidationTabId;
 };

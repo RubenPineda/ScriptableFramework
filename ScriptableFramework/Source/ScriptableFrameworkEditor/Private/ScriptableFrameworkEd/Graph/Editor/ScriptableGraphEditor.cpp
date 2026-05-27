@@ -41,6 +41,10 @@
 #include "Widgets/Text/STextBlock.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
+#include "Widgets/SKzValidationPanel.h"
+#include "Validation/KzAssetValidationUtils.h"
+#include "Core/KzValidationTypes.h"
+#include "Framework/MultiBox/MultiBoxBuilder.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditor"
 
@@ -204,6 +208,7 @@ const FName FScriptableGraphEditor::GraphTabId(TEXT("ScriptableGraphEditor_Graph
 const FName FScriptableGraphEditor::AssetDetailsTabId(TEXT("ScriptableGraphEditor_AssetDetails"));
 const FName FScriptableGraphEditor::NodeDetailsTabId(TEXT("ScriptableGraphEditor_NodeDetails"));
 const FName FScriptableGraphEditor::PaletteTabId(TEXT("ScriptableGraphEditor_Palette"));
+const FName FScriptableGraphEditor::ValidationTabId(TEXT("ScriptableGraphEditor_Validation"));
 
 static const FName ScriptableGraphEditorAppId(TEXT("ScriptableGraphEditorApp"));
 
@@ -265,7 +270,7 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	ReconstructEdGraphFromAsset();
 
 	// Default three-pane layout: details left | graph center | node details right.
-	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v2")
+	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v3")
 		->AddArea
 		(
 			FTabManager::NewPrimaryArea()
@@ -297,15 +302,30 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 			)
 			->Split
 			(
-				FTabManager::NewStack()
+				FTabManager::NewSplitter()
 				->SetSizeCoefficient(0.2f)
-				->AddTab(NodeDetailsTabId, ETabState::OpenedTab)
+				->SetOrientation(Orient_Vertical)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.6f)
+					->AddTab(NodeDetailsTabId, ETabState::OpenedTab)
+				)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.4f)
+					->AddTab(ValidationTabId, ETabState::OpenedTab)
+				)
 			)
 		);
 
 	const bool bCreateDefaultStandaloneMenu = true;
 	const bool bCreateDefaultToolbar = true;
 	FAssetEditorToolkit::InitAssetEditor(Mode, InitToolkitHost, ScriptableGraphEditorAppId, Layout, bCreateDefaultStandaloneMenu, bCreateDefaultToolbar, InGraph);
+
+	ExtendToolbar();
+	RegenerateMenusAndToolbars();
 }
 
 FName FScriptableGraphEditor::GetToolkitFName() const
@@ -353,6 +373,11 @@ void FScriptableGraphEditor::RegisterTabSpawners(const TSharedRef<FTabManager>& 
 		.SetDisplayName(LOCTEXT("PaletteTabLabel", "Palette"))
 		.SetGroup(Category)
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Kismet.Tabs.Palette"));
+
+	InTabManager->RegisterTabSpawner(ValidationTabId, FOnSpawnTab::CreateSP(this, &FScriptableGraphEditor::SpawnTab_Validation))
+		.SetDisplayName(LOCTEXT("ValidationTabLabel", "Validation"))
+		.SetGroup(Category)
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.WarningWithColor"));
 }
 
 void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>& InTabManager)
@@ -363,6 +388,7 @@ void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>
 	InTabManager->UnregisterTabSpawner(AssetDetailsTabId);
 	InTabManager->UnregisterTabSpawner(NodeDetailsTabId);
 	InTabManager->UnregisterTabSpawner(PaletteTabId);
+	InTabManager->UnregisterTabSpawner(ValidationTabId);
 }
 
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs& Args)
@@ -1262,6 +1288,79 @@ void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionS
 	}
 
 	NodeDetailsView->SetObject(nullptr);
+}
+
+TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Validation(const FSpawnTabArgs& Args)
+{
+	SAssignNew(ValidationPanel, SKzValidationPanel)
+		.OnIssueActivated(SKzValidationPanel::FOnIssueActivated::CreateSP(this, &FScriptableGraphEditor::HandleValidationIssueActivated))
+		.OnRunValidation(SKzValidationPanel::FOnRunValidation::CreateSP(this, &FScriptableGraphEditor::HandleRunValidation));
+
+	return SNew(SDockTab)
+		.Label(LOCTEXT("ValidationTab", "Validation"))
+		[
+			ValidationPanel.ToSharedRef()
+		];
+}
+
+void FScriptableGraphEditor::ExtendToolbar()
+{
+	TSharedPtr<FExtender> Extender = MakeShared<FExtender>();
+	Extender->AddToolBarExtension(
+		"Asset",
+		EExtensionHook::After,
+		GetToolkitCommands(),
+		FToolBarExtensionDelegate::CreateLambda([this](FToolBarBuilder& ToolbarBuilder)
+			{
+				ToolbarBuilder.BeginSection("Validation");
+				{
+					ToolbarBuilder.AddToolBarButton(
+						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRunValidation)),
+						NAME_None,
+						LOCTEXT("ValidateBtn", "Validate"),
+						LOCTEXT("ValidateBtnTip", "Run structural validation on this graph and open the Validation tab"),
+						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Refresh"));
+				}
+				ToolbarBuilder.EndSection();
+			}));
+
+	AddToolbarExtender(Extender);
+}
+
+void FScriptableGraphEditor::OnRunValidation()
+{
+	if (const TSharedPtr<FTabManager> TabManagerPin = GetTabManager())
+	{
+		TabManagerPin->TryInvokeTab(ValidationTabId);
+	}
+	if (ValidationPanel.IsValid())
+	{
+		ValidationPanel->RefreshIssues();
+	}
+}
+
+TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()
+{
+	return FKzAssetValidationUtils::RunValidation(EditedGraph.Get());
+}
+
+void FScriptableGraphEditor::HandleValidationIssueActivated(const FKzValidationIssue& Issue)
+{
+	if (!Issue.ContextId.IsValid()) return;
+
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph || !GraphEditorWidget.IsValid()) return;
+
+	// Find the ed-node wrapping the runtime node the issue points at, then pan to and select it.
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		const UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode);
+		if (!SfEdNode || !SfEdNode->GetRuntimeNode()) continue;
+		if (SfEdNode->GetRuntimeNode()->GetBindingID() != Issue.ContextId) continue;
+
+		GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
+		return;
+	}
 }
 
 #undef LOCTEXT_NAMESPACE
