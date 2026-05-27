@@ -62,6 +62,16 @@ void UScriptableEdGraphNode::DestroyNode()
 	if (RuntimeNodeToRemove->GetBindingID() == GraphAsset->EntryNodeID) return;
 
 	GraphAsset->Modify();
+
+	// Remove the node's connections too. Super::DestroyNode only breaks the visual pin links; without
+	// this the asset's Connections list keeps dangling entries that reference the now-missing node
+	// (visible in validation) until PruneOrphanConnections clears them on the next load.
+	const FGuid RemovedID = RuntimeNodeToRemove->GetBindingID();
+	GraphAsset->Connections.RemoveAll([&RemovedID](const FScriptableGraphConnection& Conn)
+		{
+			return Conn.From.NodeID == RemovedID || Conn.To.NodeID == RemovedID;
+		});
+
 	GraphAsset->Nodes.Remove(RuntimeNodeToRemove);
 }
 

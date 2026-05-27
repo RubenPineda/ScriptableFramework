@@ -1480,18 +1480,30 @@ void FScriptableGraphEditor::OnCleanGraph()
 		DeletedIds.Add(Id);
 	}
 
-	if (ToDelete.IsEmpty()) return;
+	// Stale connections: those touching a node we're deleting, or referencing a node that no longer
+	// exists (left dangling by an earlier delete — these are what show up as "missing node" in validation).
+	TSet<FGuid> ValidNodeIds;
+	ValidNodeIds.Reserve(Graph->Nodes.Num());
+	for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+	{
+		if (Node) ValidNodeIds.Add(Node->GetBindingID());
+	}
+
+	auto IsStaleConnection = [&DeletedIds, &ValidNodeIds](const FScriptableGraphConnection& Conn)
+		{
+			return DeletedIds.Contains(Conn.From.NodeID) || DeletedIds.Contains(Conn.To.NodeID)
+				|| !ValidNodeIds.Contains(Conn.From.NodeID) || !ValidNodeIds.Contains(Conn.To.NodeID);
+		};
+
+	const bool bHasStaleConnections = Graph->Connections.ContainsByPredicate(IsStaleConnection);
+	if (ToDelete.IsEmpty() && !bHasStaleConnections) return;
 
 	const FScopedTransaction Transaction(LOCTEXT("CleanGraphTx", "Clean Graph"));
 	Graph->Modify();
 	Graph->EdGraph->Modify();
 
-	// Drop connections touching any node we're about to remove, then destroy the ed-nodes
-	// (which also strips their runtime nodes from the asset).
-	Graph->Connections.RemoveAll([&DeletedIds](const FScriptableGraphConnection& Conn)
-		{
-			return DeletedIds.Contains(Conn.From.NodeID) || DeletedIds.Contains(Conn.To.NodeID);
-		});
+	// Drop stale connections, then destroy the orphan ed-nodes (which also strip their runtime nodes).
+	Graph->Connections.RemoveAll(IsStaleConnection);
 
 	GraphEditorWidget->ClearSelectionSet();
 	for (UEdGraphNode* EdNode : ToDelete)
