@@ -6,6 +6,7 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableGraphConnection.h"
 #include "StructUtils/PropertyBag.h"
+#include "Core/KzPropertyBagHelpers.h"
 #include "ScriptableGraphInstance.generated.h"
 
 class UScriptableNode;
@@ -34,6 +35,20 @@ public:
 	/** Hard-cancels the graph: tears down active nodes in-place, drops queued activations, releases self. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void Cancel();
+
+	/** Mutates a context value in place. */
+	template <typename T>
+	void SetContextValue(const FName& Name, const T& Value)
+	{
+		KzPropertyBag::Set(Context, Name, Value);
+	}
+
+	/** Replace the entire context bag with NewContext's bag. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework")
+	void ReplaceContext(const FScriptableContext& NewContext);
+
+	/** Read-only access to the live context bag. For inspectors / debug tooling / validators that need to peek without mutating. */
+	const FInstancedPropertyBag& GetContextBag() const { return Context; }
 
 	/** Returns true if execution is still in progress (active nodes or pending activations exist). */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")

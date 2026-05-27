@@ -110,6 +110,11 @@ void UScriptableGraphInstance::Cancel()
 	Finish();
 }
 
+void UScriptableGraphInstance::ReplaceContext(const FScriptableContext& NewContext)
+{
+	Context.MigrateToNewBagInstance(NewContext.GetBag());
+}
+
 void UScriptableGraphInstance::HandleNodePinFired(UScriptableNode* Node, FName OutputName)
 {
 	if (bCancelled || !Node) return;
