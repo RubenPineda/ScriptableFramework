@@ -296,6 +296,76 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 				GValidatorId, Id));
 		}
 	}
+
+	// --- Cross-node Output bindings: warn when the bound source node is not a static exec-ancestor. ---
+	// These bindings resolve at activation time, so the source must already have run. Static ancestry
+	// can't see event-driven paths, so this is a warning (not an error): the author may know the order
+	// holds, and the runtime no-ops on an unset value.
+	{
+		// Map every node's binding proxy (e.g. its task) back to the node that hosts it.
+		TMap<FGuid, FGuid> ProxyToNode;
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			if (const UScriptableObject* Proxy = Node->GetBindingProxy())
+			{
+				if (Proxy->GetBindingID().IsValid()) ProxyToNode.Add(Proxy->GetBindingID(), Node->GetBindingID());
+			}
+		}
+
+		// Reverse the forward edges (To -> From) so we can walk a reader's ancestors backward.
+		TMultiMap<FGuid, FGuid> ReverseAdjacency;
+		for (const TPair<FGuid, FGuid>& Edge : Adjacency)
+		{
+			ReverseAdjacency.Add(Edge.Value, Edge.Key);
+		}
+
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			const UScriptableObject* Proxy = Node->GetBindingProxy();
+			if (!Proxy) continue;
+
+			const FGuid ReaderId = Node->GetBindingID();
+
+			// Collect the source node GUIDs this reader binds to, keeping only cross-node sources.
+			TSet<FGuid> RequiredSources;
+			for (const FScriptablePropertyBinding& Binding : Proxy->GetPropertyBindings().Bindings)
+			{
+				if (!Binding.SourceID.IsValid()) continue; // Context binding.
+				const FGuid* SourceNodeId = ProxyToNode.Find(Binding.SourceID);
+				if (!SourceNodeId || *SourceNodeId == ReaderId) continue; // Unknown source or self.
+				RequiredSources.Add(*SourceNodeId);
+			}
+			if (RequiredSources.IsEmpty()) continue;
+
+			// Backward BFS to gather every exec-ancestor of the reader.
+			TSet<FGuid> Ancestors;
+			TArray<FGuid> AncestorQueue = { ReaderId };
+			for (int32 Head = 0; Head < AncestorQueue.Num(); ++Head)
+			{
+				TArray<FGuid> Parents;
+				ReverseAdjacency.MultiFind(AncestorQueue[Head], Parents);
+				for (const FGuid& Parent : Parents)
+				{
+					bool bAlready = false;
+					Ancestors.Add(Parent, &bAlready);
+					if (!bAlready) AncestorQueue.Add(Parent);
+				}
+			}
+
+			for (const FGuid& SourceId : RequiredSources)
+			{
+				if (!Ancestors.Contains(SourceId))
+				{
+					OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
+						FText::Format(LOCTEXT("CrossNodeOrder", "Node '{0}' reads an Output of '{1}', which is not upstream of it; the value may be unset when '{0}' runs."),
+							FText::FromString(GetNodeLabel(Node)), FText::FromString(GetNodeLabel(NodesByGuid.FindRef(SourceId)))),
+						GValidatorId, ReaderId));
+				}
+			}
+		}
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

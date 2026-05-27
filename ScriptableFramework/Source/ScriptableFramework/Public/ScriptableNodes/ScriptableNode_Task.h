@@ -29,6 +29,7 @@ public:
 	virtual TArray<FName> GetInputPins() const override;
 	virtual TArray<FName> GetDeclaredOutputPins() const override;
 	virtual void Teardown() override;
+	virtual UScriptableObject* GetBindingProxy() const override;
 	//~ End of UScriptableNode interface
 
 	//~ UScriptableObject interface

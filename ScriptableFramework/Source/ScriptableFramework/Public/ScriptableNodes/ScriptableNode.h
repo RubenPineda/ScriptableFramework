@@ -64,6 +64,9 @@ public:
 	/** Releases in-flight resources without propagating downstream. Called on hard-cancel; override to cancel internal work silently. */
 	virtual void Teardown() {}
 
+	/** Returns the inner object that carries this node's bindable data (e.g. the hosted task), or null if the node exposes none. The graph registers proxies so a node's Input can read a sibling node's Output. */
+	virtual UScriptableObject* GetBindingProxy() const { return nullptr; }
+
 protected:
 	/** Reaction to a consumed input (default no-op). Subclasses must MarkInputInactive on the input they consume. */
 	virtual void ProcessInput(FName InputName) {}

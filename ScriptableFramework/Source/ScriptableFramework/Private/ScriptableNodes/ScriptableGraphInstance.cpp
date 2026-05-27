@@ -35,6 +35,13 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 
 		Nodes.Add(NodeCopy);
 		NodesByID.Add(NodeCopy->GetBindingID(), NodeCopy);
+
+		// Register the node's binding proxy (e.g. its task) so other nodes can read its Output.
+		// IDs survive DuplicateObject, so they match the SourcePaths baked at edit time.
+		if (UScriptableObject* Proxy = NodeCopy->GetBindingProxy())
+		{
+			NodeBindingMap.Add(Proxy->GetBindingID(), Proxy);
+		}
 	}
 
 	// Build the connection lookup once. Reads from the asset's immutable connection list.
@@ -48,9 +55,10 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 	{
 		if (!Node) continue;
 
-		// Nodes can only resolve bindings against the graph context. They cannot bind to each other
-		// because the graph's execution order is not guaranteed at design time.
-		Node->InitRuntimeData(&Context, nullptr);
+		// Nodes resolve against the graph context and, via NodeBindingMap, against other nodes' Outputs.
+		// Cross-node reads resolve at activation time (UScriptableTask::Begin), so an Output is already
+		// populated when a downstream node reads it; ordering across event paths is the author's concern.
+		Node->InitRuntimeData(&Context, &NodeBindingMap);
 		Node->Register(Owner);
 
 		Node->OnPinFiredNative.AddUObject(this, &UScriptableGraphInstance::HandleNodePinFired);

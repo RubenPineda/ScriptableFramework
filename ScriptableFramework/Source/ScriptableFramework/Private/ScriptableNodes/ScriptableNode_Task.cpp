@@ -20,6 +20,11 @@ TArray<FName> UScriptableNode_Task::GetDeclaredOutputPins() const
 	return Task ? Task->GetOutputPins() : TArray<FName>{};
 }
 
+UScriptableObject* UScriptableNode_Task::GetBindingProxy() const
+{
+	return Task;
+}
+
 void UScriptableNode_Task::OnRegister()
 {
 	Super::OnRegister();

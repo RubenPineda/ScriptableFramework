@@ -355,7 +355,24 @@ namespace ScriptableBindingUI
 				}
 			}
 
-			// 3. Check Type Compatibility
+			// 3. Scriptable sources expose only their Outputs: a node/task reads another object's
+			// Output, never its Inputs or internals. Context-bag properties live on a plain struct
+			// (no owner UClass), so they pass through untouched.
+			{
+				const FProperty* RootProp = BindingChain.Num() > 0 ? BindingChain[0].Field.Get<FProperty>() : InProperty;
+				if (RootProp)
+				{
+					if (const UClass* OwnerClass = RootProp->GetOwnerClass())
+					{
+						if (OwnerClass->IsChildOf(UScriptableObject::StaticClass()) && !FScriptablePropertyUtilities::IsPropertyBindableOutput(RootProp))
+						{
+							return false;
+						}
+					}
+				}
+			}
+
+			// 4. Check Type Compatibility
 			return FScriptablePropertyUtilities::ArePropertiesCompatible(InProperty, CachedData->GetProperty());
 		});
 

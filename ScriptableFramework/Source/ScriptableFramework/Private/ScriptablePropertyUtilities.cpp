@@ -5,6 +5,7 @@
 #include "ScriptableObjectAsset.h"
 #include "ScriptableContainer.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableGraph.h"
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
 #include "StructUtils/PropertyBag.h"
@@ -429,9 +430,9 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 		const UObject* ParentNode = IteratorNode->GetOuter();
 		if (!ParentNode || ParentNode == RootObject->GetOuter()) break;
 
-		// A graph-node wrapper hosts the child but is not itself a bindable data source:
-		// nodes only bind to the graph Context, never to each other or to their own host.
-		// Skipping it stops a task from listing its hosting node (i.e. "itself") as a source.
+		// A graph-node wrapper is not itself a bindable source: a task reads the graph Context and
+		// other nodes' Outputs (handled in section 3.5 below), never its own hosting node. Skipping
+		// it stops a task from listing its hosting node (i.e. "itself") as a source.
 		if (const UScriptableObject* ParentScriptableObject = Cast<UScriptableObject>(ParentNode))
 		{
 			if (!ParentNode->IsA<UScriptableNode>())
@@ -444,6 +445,45 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 			}
 		}
 		IteratorNode = ParentNode;
+	}
+
+	// -------------------------------------------------------------------------------
+	// 3.5 Graph cross-node Outputs
+	// In a graph each task lives in its own node, so tasks are never array-siblings. Expose every
+	// OTHER node's proxy that carries an Output, so a node's Input can read it. Ordering across
+	// event-driven paths is the author's responsibility (the runtime no-ops on an unset value).
+	// -------------------------------------------------------------------------------
+	{
+		const UScriptableNode* OwningNode = nullptr;
+		const UScriptableGraph* OwningGraph = nullptr;
+		for (const UObject* Outer = TargetObject->GetOuter(); Outer; Outer = Outer->GetOuter())
+		{
+			if (!OwningNode) OwningNode = Cast<UScriptableNode>(Outer);
+			if (const UScriptableGraph* Graph = Cast<UScriptableGraph>(Outer)) { OwningGraph = Graph; break; }
+		}
+
+		if (OwningGraph)
+		{
+			for (const TObjectPtr<UScriptableNode>& Node : OwningGraph->Nodes)
+			{
+				if (!Node || Node == OwningNode) continue;
+
+				UScriptableObject* Proxy = Node->GetBindingProxy();
+				if (!Proxy) continue;
+
+				// Only expose proxies that actually carry an Output (skip pure inputs/internals).
+				bool bHasOutput = false;
+				for (TFieldIterator<FProperty> PropIt(Proxy->GetClass()); PropIt && !bHasOutput; ++PropIt)
+				{
+					bHasOutput = IsPropertyBindableOutput(*PropIt);
+				}
+
+				if (bHasOutput)
+				{
+					AccessibleObjects.Add(Proxy);
+				}
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------------------

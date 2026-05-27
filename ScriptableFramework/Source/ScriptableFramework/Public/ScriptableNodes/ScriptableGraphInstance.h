@@ -9,6 +9,7 @@
 #include "Core/KzPropertyBagHelpers.h"
 #include "ScriptableGraphInstance.generated.h"
 
+class UScriptableObject;
 class UScriptableNode;
 class UScriptableGraphSubsystem;
 struct FScriptableContext;
@@ -107,6 +108,10 @@ private:
 
 	/** Fast lookup from ID to the deep-copied node. */
 	TMap<FGuid, TObjectPtr<UScriptableNode>> NodesByID;
+
+	/** Binding sources keyed by binding ID: each node's proxy (e.g. its task), so a node's Input can read another node's Output. Injected into every node via InitRuntimeData. */
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UScriptableObject>> NodeBindingMap;
 
 	/** Nodes with at least one active pin. */
 	TSet<TObjectPtr<UScriptableNode>> ActiveNodes;
