@@ -394,12 +394,9 @@ void UScriptableEdGraphSchema::OnPinConnectionDoubleCicked(UEdGraphPin* PinA, UE
 	UEdGraphPin* RerouteOut = RerouteEdNode->FindPin(TEXT("Out"), EGPD_Output);
 	if (RerouteIn && RerouteOut)
 	{
-		// Sever the original wire first (output side carries the link in our asymmetric model).
-		OutputPin->BreakLinkTo(InputPin);
-
-		// Stitch through the reroute.
-		OutputPin->MakeLinkTo(RerouteIn);
-		RerouteOut->MakeLinkTo(InputPin);
+		BreakSinglePinLink(OutputPin, InputPin);
+		TryCreateConnection(OutputPin, RerouteIn);
+		TryCreateConnection(RerouteOut, InputPin);
 	}
 
 	Graph->NotifyGraphChanged();
