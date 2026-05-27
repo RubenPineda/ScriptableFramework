@@ -62,6 +62,9 @@ private:
 	/** Routes selection into the node details panel (Task nodes unwrapped to show the inner task). Empty/multi-selection clears it. */
 	void OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection);
 
+	/** Persists an editable node title (e.g. a comment box) via OnRenameNode. SGraphNode routes commits here and provides no built-in persistence. */
+	void OnNodeTitleCommitted(const FText& NewText, ETextCommit::Type CommitInfo, class UEdGraphNode* NodeBeingChanged);
+
 	/** Reconstructs the ed-node whose runtime node changed, keeping dynamic titles/pins in sync with details-panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 

@@ -420,6 +420,9 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 	SGraphEditor::FGraphEditorEvents InEvents;
 	InEvents.OnCreateActionMenuAtLocation = SGraphEditor::FOnCreateActionMenuAtLocation::CreateSP(this, &FScriptableGraphEditor::OnCreateNodeMenu);
 	InEvents.OnSelectionChanged = SGraphEditor::FOnSelectionChanged::CreateSP(this, &FScriptableGraphEditor::OnGraphSelectionChanged);
+	// SGraphNode routes title commits through this event (it has no built-in persistence); without it
+	// editable titles like comment boxes revert on commit. Forward to the node's OnRenameNode.
+	InEvents.OnTextCommitted = FOnNodeTextCommitted::CreateSP(this, &FScriptableGraphEditor::OnNodeTitleCommitted);
 
 	FGraphAppearanceInfo AppearanceInfo;
 	AppearanceInfo.CornerText = LOCTEXT("ScriptableGraphAppearanceCornerText", "SCRIPTABLE GRAPH");
@@ -1152,6 +1155,16 @@ void FScriptableGraphEditor::OnCreateComment()
 	GraphEditorWidget->SetNodeSelection(CommentNode, true);
 
 	Graph->NotifyGraphChanged();
+}
+
+void FScriptableGraphEditor::OnNodeTitleCommitted(const FText& NewText, ETextCommit::Type CommitInfo, UEdGraphNode* NodeBeingChanged)
+{
+	if (!NodeBeingChanged) return;
+
+	// Persist the edited title (e.g. a comment box's text). OnRenameNode is the node's hook for this.
+	const FScopedTransaction Transaction(LOCTEXT("RenameNodeTx", "Rename Node"));
+	NodeBeingChanged->Modify();
+	NodeBeingChanged->OnRenameNode(NewText.ToString());
 }
 
 void FScriptableGraphEditor::OnRemoveSequencePin()
