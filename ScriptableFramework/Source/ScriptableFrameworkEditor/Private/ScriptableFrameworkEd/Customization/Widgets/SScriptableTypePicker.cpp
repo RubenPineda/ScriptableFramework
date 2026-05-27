@@ -19,6 +19,11 @@
 #include "ScriptableFrameworkEd/Graph/ScriptablePaletteAction.h"
 #include "GraphEditorDragDropAction.h"
 
+#include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Native.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
+
 #define LOCTEXT_NAMESPACE "ScriptableFrameworkEditor"
 
 // --------------------------------------------------------------------------------------
@@ -288,6 +293,27 @@ FText SScriptableTypeSelector::GetNodeCategory(const UStruct* Struct, const FNam
 	return Struct->GetMetaDataText(MetaKey);
 }
 
+namespace
+{
+	/** Returns the icon (and tint) the graph ed-node uses for a native node class, or an unset icon if it has none. */
+	FSlateIcon GetNativeNodeGraphIcon(const UClass* NodeClass, FLinearColor& OutColor)
+	{
+		OutColor = FLinearColor::White;
+		if (!NodeClass || !NodeClass->IsChildOf(UScriptableNode::StaticClass())) return FSlateIcon();
+
+		const UScriptableNode* NodeCDO = Cast<UScriptableNode>(NodeClass->GetDefaultObject());
+		if (!NodeCDO) return FSlateIcon();
+
+		// Resolve the matching ed-node (falling back to the generic one) and ask it for its icon —
+		// the same lookup the graph editor uses when spawning a visual node.
+		UClass* EdNodeClass = FScriptableEdGraphNodeRegistry::FindEdNodeClassFor(NodeCDO);
+		if (!EdNodeClass) EdNodeClass = UScriptableEdGraphNode_Native::StaticClass();
+
+		const UScriptableEdGraphNode* EdCDO = EdNodeClass->GetDefaultObject<UScriptableEdGraphNode>();
+		return EdCDO ? EdCDO->GetIconAndTint(OutColor) : FSlateIcon();
+	}
+}
+
 void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKey, const FText& RootCategory)
 {
 	if (!Struct || !RootNode.IsValid())
@@ -326,11 +352,19 @@ void SScriptableTypeSelector::AddNode(const UStruct* Struct, const FName& MetaKe
 
 	const TSharedPtr<FScriptableTypeItem>& Item = ParentItem->Children.Add_GetRef(MakeShared<FScriptableTypeItem>());
 	Item->Struct = Struct;
-	/*if (!IconName.IsNone())
-	{
-		Item->Icon = UE::StateTreeEditor::EditorNodeUtils::ParseIcon(IconName);
-	}*/
 	Item->IconColor = FLinearColor::Gray;
+
+	// Native nodes show the same icon their ed-node uses on the graph canvas.
+	if (const UClass* NodeClass = Cast<const UClass>(Struct))
+	{
+		FLinearColor IconTint;
+		const FSlateIcon EdIcon = GetNativeNodeGraphIcon(NodeClass, IconTint);
+		if (EdIcon.IsSet())
+		{
+			Item->Icon = EdIcon;
+			Item->IconColor = IconTint;
+		}
+	}
 }
 
 void SScriptableTypeSelector::AddNode(const FAssetData& AssetData, const FText& RootCategory)
