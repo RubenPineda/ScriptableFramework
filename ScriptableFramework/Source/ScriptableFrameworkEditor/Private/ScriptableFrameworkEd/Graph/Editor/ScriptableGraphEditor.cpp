@@ -40,6 +40,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "ScopedTransaction.h"
+#include "UObject/Package.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditor"
 
@@ -168,6 +169,34 @@ namespace
 		}
 
 		OutBody = MoveTemp(Body);
+	}
+
+	/** Compares the ed-node's current pin set (names + directions) against what the runtime node declares. Returns true if anything differs, prompting a full Reconstruct; false if they're already in sync, in which case we leave the ed-node alone to avoid spurious dirty-flagging at editor open time. */
+	bool ArePinsOutOfSyncWithRuntime(const UScriptableEdGraphNode* EdNode, const UScriptableNode* RuntimeNode)
+	{
+		if (!EdNode || !RuntimeNode) return false;
+
+		const TArray<FName> RuntimeInputs = RuntimeNode->GetInputPins();
+		const TArray<FName> RuntimeOutputs = RuntimeNode->GetOutputPins();
+
+		int32 InputCount = 0;
+		int32 OutputCount = 0;
+		for (const UEdGraphPin* Pin : EdNode->Pins)
+		{
+			if (!Pin) continue;
+			if (Pin->Direction == EGPD_Input)
+			{
+				if (!RuntimeInputs.Contains(Pin->PinName)) return true;
+				++InputCount;
+			}
+			else
+			{
+				if (!RuntimeOutputs.Contains(Pin->PinName)) return true;
+				++OutputCount;
+			}
+		}
+
+		return InputCount != RuntimeInputs.Num() || OutputCount != RuntimeOutputs.Num();
 	}
 }
 
@@ -404,13 +433,18 @@ void FScriptableGraphEditor::InitEdGraph()
 	UScriptableEdGraph* NewEdGraph = NewObject<UScriptableEdGraph>(Graph, UScriptableEdGraph::StaticClass(), NAME_None, RF_Transactional);
 	NewEdGraph->Schema = UScriptableEdGraphSchema::StaticClass();
 	Graph->EdGraph = NewEdGraph;
-	Graph->Modify();
 }
 
 void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 {
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph || !Graph->EdGraph) return;
+
+	// Rebuilding the visual graph is a derived-view sync, not a user edit, so it must not dirty the
+	// asset. AddNode / MakeLinkTo call Modify() internally, so snapshot the package dirty state and
+	// restore it at the end. Callers that made a real edit before us leave it dirty (snapshot is true).
+	UPackage* Package = Graph->GetPackage();
+	const bool bWasDirty = Package && Package->IsDirty();
 
 	TSet<UScriptableNode*> AlreadyVisualized;
 	TMap<FGuid, UScriptableEdGraphNode*> EdNodeByID;
@@ -422,8 +456,11 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		{
 			if (UScriptableNode* RuntimeNode = SfEdNode->GetRuntimeNode())
 			{
-				// Ensure visual pins reflect current runtime state (crucial after Undo/Redo)
-				SfEdNode->ReconstructNode();
+				// Only reconstruct pins if they're actually out of sync with the runtime.
+				if (ArePinsOutOfSyncWithRuntime(SfEdNode, RuntimeNode))
+				{
+					SfEdNode->ReconstructNode();
+				}
 
 				AlreadyVisualized.Add(RuntimeNode);
 				EdNodeByID.Add(RuntimeNode->GetBindingID(), SfEdNode);
@@ -477,6 +514,12 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 	}
 
 	Graph->EdGraph->NotifyGraphChanged();
+
+	// Drop the dirtiness introduced purely by rebuilding the view (see snapshot above).
+	if (Package && !bWasDirty)
+	{
+		Package->SetDirtyFlag(false);
+	}
 }
 
 FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, const FVector2f& InNodePosition, const TArray<UEdGraphPin*>& InDraggedPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed InOnMenuClosed)

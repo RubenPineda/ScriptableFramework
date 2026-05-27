@@ -68,6 +68,9 @@ private:
 	/** Creates the Entry node if missing and registers its BindingID in EntryNodeID. */
 	void EnsureEntryNode();
 
+	/** Returns true if ContextBag's shape doesn't match Context's declared params. */
+	bool IsContextBagOutOfSync() const;
+
 	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent. */
 	void RebuildContextBag();
 

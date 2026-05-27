@@ -37,7 +37,10 @@ void UScriptableGraph::PostLoad()
 
 	// Heal assets that lost their entry node (legacy data, external edits, etc.).
 	EnsureEntryNode();
-	RebuildContextBag();
+	if (IsContextBagOutOfSync())
+	{
+		RebuildContextBag();
+	}
 	PruneOrphanConnections();
 }
 
@@ -78,6 +81,26 @@ void UScriptableGraph::EnsureEntryNode()
 	// Flag the asset dirty so the auto-repair persists.
 	Modify();
 #endif
+}
+
+bool UScriptableGraph::IsContextBagOutOfSync() const
+{
+	const UPropertyBag* BagStruct = ContextBag.GetPropertyBagStruct();
+	const int32 BagPropertyCount = BagStruct ? BagStruct->GetPropertyDescs().Num() : 0;
+	if (BagPropertyCount != Context.Num()) return true;
+
+	// Names + types must match for the bag to be considered in sync. We don't deep-compare values.
+	if (BagStruct)
+	{
+		for (const FKzParamDef& Param : Context)
+		{
+			const FPropertyBagPropertyDesc* Found = BagStruct->FindPropertyDescByName(Param.Name);
+			if (!Found) return true;
+			// Could also compare types here; for now matching by name is enough.
+		}
+	}
+
+	return false;
 }
 
 void UScriptableGraph::RebuildContextBag()
