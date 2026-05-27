@@ -47,8 +47,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework")
 	void ReplaceContext(const FScriptableContext& NewContext);
 
-	/** Read-only access to the live context bag. For inspectors / debug tooling / validators that need to peek without mutating. */
+	/** Read-only access to the live context bag. */
 	const FInstancedPropertyBag& GetContextBag() const { return Context; }
+
+	/** Mutable access to the live context bag. */
+	FInstancedPropertyBag& GetMutableContextBag() { return Context; }
 
 	/** Returns true if execution is still in progress (active nodes or pending activations exist). */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")

@@ -10,6 +10,8 @@
 #include "Core/KzTypeDef.h"
 #include "ScriptableBlueprintLibrary.generated.h"
 
+class UScriptableGraphInstance;
+
 UCLASS()
 class SCRIPTABLEFRAMEWORK_API UScriptableBlueprintLibrary : public UBlueprintFunctionLibrary
 {
@@ -74,6 +76,15 @@ public:
 	static void SetRequirementContextParameter(UPARAM(Ref) FScriptableRequirement& Requirement, FName ParameterName, const int32& Value);
 
 	/**
+	 * Sets a context parameter value on a live graph runner.
+	 * @param Runner         The live UScriptableGraphInstance whose context to mutate. Must be valid.
+	 * @param ParameterName  The name of the parameter.
+	 * @param Value          The value to set. Type wildcard.
+	 */
+	UFUNCTION(BlueprintCallable, CustomThunk, Category = "Scriptable Framework|Context", meta = (CustomStructureParam = "Value", AutoCreateRefTerm = "Value"))
+	static void SetGraphInstanceContextProperty(UScriptableGraphInstance* Runner, FName ParameterName, const int32& Value);
+
+	/**
 	 * Copies a context's values into an action's internal bag for matching property names.
 	 * @param Action   The scriptable action to modify.
 	 * @param Context  The context supplying the values.
@@ -93,4 +104,5 @@ private:
 	DECLARE_FUNCTION(execSetScriptableContextProperty);
 	DECLARE_FUNCTION(execSetActionContextParameter);
 	DECLARE_FUNCTION(execSetRequirementContextParameter);
+	DECLARE_FUNCTION(execSetGraphInstanceContextProperty);
 };

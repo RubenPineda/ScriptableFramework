@@ -2,6 +2,7 @@
 
 #include "ScriptableBlueprintLibrary.h"
 #include "ScriptablePropertyUtilities.h"
+#include "ScriptableNodes/ScriptableGraphInstance.h"
 #include "StructUtils/PropertyBag.h"
 #include "Core/KzBagOps.h"
 
@@ -208,6 +209,29 @@ DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetActionContextParameter)
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetRequirementContextParameter)
 {
 	AssignContextParameterToContainer(Stack, FScriptableRequirement::StaticStruct(), TEXT("SetRequirementContextParameter"));
+}
+
+DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetGraphInstanceContextProperty)
+{
+	const FString FunctionName = TEXT("SetGraphInstanceContextProperty");
+
+	Stack.StepCompiledIn<FObjectProperty>(nullptr);
+	UObject* RunnerObject = *(UObject**)Stack.MostRecentPropertyAddress;
+
+	P_GET_PROPERTY(FNameProperty, ParameterName);
+
+	UScriptableGraphInstance* Runner = Cast<UScriptableGraphInstance>(RunnerObject);
+	if (!Runner)
+	{
+		Stack.StepCompiledIn<FProperty>(nullptr);
+		P_FINISH;
+#if WITH_EDITOR
+		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Runner was null or not a UScriptableGraphInstance."), *FunctionName), ELogVerbosity::Warning);
+#endif
+		return;
+	}
+
+	AssignStackValueToBag(Stack, Runner->GetMutableContextBag(), ParameterName, /*bAddIfMissing=*/true, FunctionName);
 }
 
 void UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
