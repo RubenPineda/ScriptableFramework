@@ -8,12 +8,14 @@
 
 class UScriptableGraph;
 class UScriptableGraphInstance;
+class UScriptableActionRunner;
 struct FScriptableContext;
 
 /**
- * World-scoped registry of live UScriptableGraphInstance runners. Holding the runners here keeps them
- * alive while they execute (replacing the old self-reference anchor) and lets the world cancel them all
- * on teardown (PIE end, level change) so callbacks never fire against destroyed actors.
+ * World-scoped registry of live scriptable runners (graph instances and action runners). Holding them
+ * here keeps them alive while they execute (replacing the old self-reference anchor) and lets the world
+ * cancel them all on teardown (PIE end, level change) in a safe context before GC — so their task
+ * Stop/finish logic never fires against destroyed actors or, worse, during garbage collection.
  */
 UCLASS()
 class SCRIPTABLEFRAMEWORK_API UScriptableGraphSubsystem : public UWorldSubsystem
@@ -46,9 +48,23 @@ private:
 	/** Removes a runner from the live set. Called by the runner from Finish (and defensively on destroy). */
 	void UnregisterRunner(UScriptableGraphInstance* Runner);
 
-	/** Live runners. These strong refs are what keep runners alive while they execute. */
+	/** Adds an action runner to the live set (idempotent). Called by the runner from Launch. */
+	void RegisterActionRunner(UScriptableActionRunner* Runner);
+
+	/** Removes an action runner from the live set. Called by the runner on finish (and defensively on destroy). */
+	void UnregisterActionRunner(UScriptableActionRunner* Runner);
+
+	/** Force-finishes every live action runner. Run from Deinitialize — before GC — so task Stop events fire in a safe context. */
+	void CancelAllActionRunners();
+
+	/** Live graph runners. These strong refs keep runners alive while they execute. */
 	UPROPERTY()
 	TArray<TObjectPtr<UScriptableGraphInstance>> ActiveRunners;
 
+	/** Live action runners (FScriptableAction executions); same role as ActiveRunners. */
+	UPROPERTY()
+	TArray<TObjectPtr<UScriptableActionRunner>> ActiveActionRunners;
+
 	friend class UScriptableGraphInstance;
+	friend class UScriptableActionRunner;
 };

@@ -2,6 +2,7 @@
 
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "ScriptableTasks/ScriptableActionRunner.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 
@@ -75,8 +76,40 @@ void UScriptableGraphSubsystem::UnregisterRunner(UScriptableGraphInstance* Runne
 	}
 }
 
+void UScriptableGraphSubsystem::RegisterActionRunner(UScriptableActionRunner* Runner)
+{
+	if (Runner)
+	{
+		ActiveActionRunners.AddUnique(Runner);
+	}
+}
+
+void UScriptableGraphSubsystem::UnregisterActionRunner(UScriptableActionRunner* Runner)
+{
+	if (Runner)
+	{
+		ActiveActionRunners.RemoveSingleSwap(Runner);
+	}
+}
+
+void UScriptableGraphSubsystem::CancelAllActionRunners()
+{
+	// Iterate a copy: each cancel force-finishes the action, whose finish callback unregisters it.
+	const TArray<TObjectPtr<UScriptableActionRunner>> RunnersCopy = ActiveActionRunners;
+	for (const TObjectPtr<UScriptableActionRunner>& Runner : RunnersCopy)
+	{
+		if (Runner)
+		{
+			Runner->CancelFromSubsystem();
+		}
+	}
+
+	ActiveActionRunners.Reset();
+}
+
 void UScriptableGraphSubsystem::Deinitialize()
 {
 	CancelAllRunners();
+	CancelAllActionRunners();
 	Super::Deinitialize();
 }

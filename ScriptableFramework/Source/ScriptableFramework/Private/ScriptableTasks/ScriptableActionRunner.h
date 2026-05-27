@@ -10,8 +10,8 @@
  * Runtime owner for fire-and-forget FScriptableAction executions. Internal — clients
  * use FScriptableAction::Run(MoveTemp(Action), Owner) and never see this type.
  *
- * Holds the action as a stable member (so AddRaw bindings inside the action stay
- * valid), and keeps itself alive via a self-reference until the action finishes.
+ * Holds the action as a stable member (so AddRaw bindings inside the action stay valid). Registered
+ * with UScriptableGraphSubsystem, which keeps it alive while running and cancels it on world teardown.
  */
 UCLASS(Hidden)
 class UScriptableActionRunner : public UObject
@@ -26,10 +26,15 @@ public:
 private:
 	void HandleActionFinished();
 
+	/** Force-finishes the action. Called by the subsystem on world teardown (before GC), where task Stop events are safe. */
+	void CancelFromSubsystem();
+
 	/** The action lives here. Stable address for the duration of this UObject. */
 	FScriptableAction Action;
 
-	/** Self-reference keeps the GC from collecting us while the action runs. */
+	/** Launch owner; world context used to resolve the subsystem for register/unregister. */
 	UPROPERTY()
-	TObjectPtr<UScriptableActionRunner> SelfReference;
+	TObjectPtr<UObject> Owner;
+
+	friend class UScriptableGraphSubsystem;
 };
