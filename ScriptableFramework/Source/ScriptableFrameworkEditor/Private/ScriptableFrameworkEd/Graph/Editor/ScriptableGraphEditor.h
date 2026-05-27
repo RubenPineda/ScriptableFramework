@@ -85,6 +85,7 @@ private:
 
 	// --- Command handlers ---
 	void OnDeleteSelected();
+	void OnDeleteAndReconnectNodes();
 	void OnCopySelected();
 	void OnCutSelected();
 	void OnPasteAtCursor();
@@ -93,6 +94,7 @@ private:
 	void OnCreateComment();
 
 	bool CanDelete() const { return HasAnyDeletableSelected(); }
+	bool CanDeleteAndReconnectNodes() const;
 	bool CanCopy() const { return HasAnyCopyableSelected(); }
 	bool CanCut() const { return HasAnyDeletableSelected() && HasAnyCopyableSelected(); }
 	bool CanPaste() const;

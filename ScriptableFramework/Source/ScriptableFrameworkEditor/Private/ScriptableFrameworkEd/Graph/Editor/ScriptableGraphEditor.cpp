@@ -590,6 +590,10 @@ void FScriptableGraphEditor::BindGraphCommands()
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnDeleteSelected),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanDelete));
 
+	Commands->MapAction(FGraphEditorCommands::Get().DeleteAndReconnectNodes,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnDeleteAndReconnectNodes),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanDeleteAndReconnectNodes));
+
 	Commands->MapAction(Generic.Copy,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCopySelected),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanCopy));
@@ -701,6 +705,68 @@ void FScriptableGraphEditor::OnDeleteSelected()
 	}
 
 	GraphEditorWidget->NotifyGraphChanged();
+}
+
+bool FScriptableGraphEditor::CanDeleteAndReconnectNodes() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+	return GraphEditorWidget->GetSelectedNodes().Num() > 0;
+}
+
+void FScriptableGraphEditor::OnDeleteAndReconnectNodes()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	const FGraphPanelSelectionSet Selection = GraphEditorWidget->GetSelectedNodes();
+	if (Selection.Num() == 0) return;
+
+	UEdGraph* Graph = GraphEditorWidget->GetCurrentGraph();
+	if (!Graph) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("DeleteAndReconnectTx", "Delete and Reconnect"));
+	Graph->Modify();
+
+	for (UObject* SelectedObj : Selection)
+	{
+		UEdGraphNode* Node = Cast<UEdGraphNode>(SelectedObj);
+		if (!Node || !Node->CanUserDeleteNode()) continue;
+
+		for (UEdGraphPin* InputPin : Node->Pins)
+		{
+			if (!InputPin || InputPin->Direction != EGPD_Input) continue;
+
+			for (UEdGraphPin* OutputPin : Node->Pins)
+			{
+				if (!OutputPin || OutputPin->Direction != EGPD_Output) continue;
+
+				// Snapshot the peer arrays — we'll mutate LinkedTo while iterating otherwise.
+				TArray<UEdGraphPin*> UpstreamPeers = InputPin->LinkedTo;
+				TArray<UEdGraphPin*> DownstreamPeers = OutputPin->LinkedTo;
+
+				for (UEdGraphPin* Up : UpstreamPeers)
+				{
+					for (UEdGraphPin* Down : DownstreamPeers)
+					{
+						if (!Up || !Down) continue;
+						if (Up->GetOwningNode() == Node || Down->GetOwningNode() == Node) continue;
+
+						// Route through the schema so Asset->Connections stays in sync (the schema
+						// owns the persist-to-runtime step on TryCreateConnection).
+						const UEdGraphSchema* Schema = Node->GetSchema();
+						if (Schema)
+						{
+							Schema->TryCreateConnection(Up, Down);
+						}
+					}
+				}
+			}
+		}
+
+		Node->Modify();
+		Node->DestroyNode();
+	}
+
+	Graph->NotifyGraphChanged();
 }
 
 void FScriptableGraphEditor::OnCopySelected()
