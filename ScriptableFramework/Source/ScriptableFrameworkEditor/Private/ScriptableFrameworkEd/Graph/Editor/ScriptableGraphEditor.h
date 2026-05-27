@@ -65,6 +65,9 @@ private:
 	/** Persists an editable node title (e.g. a comment box) via OnRenameNode. SGraphNode routes commits here and provides no built-in persistence. */
 	void OnNodeTitleCommitted(const FText& NewText, ETextCommit::Type CommitInfo, class UEdGraphNode* NodeBeingChanged);
 
+	/** Opens the asset a node points to (a Blueprint task, an Action asset, or a sub-graph). No-op for nodes with no associated asset. */
+	void OnNodeDoubleClicked(class UEdGraphNode* Node);
+
 	/** Reconstructs the ed-node whose runtime node changed, keeping dynamic titles/pins in sync with details-panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 

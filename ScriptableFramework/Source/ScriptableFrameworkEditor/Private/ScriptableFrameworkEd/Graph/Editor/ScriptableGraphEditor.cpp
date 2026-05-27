@@ -19,6 +19,10 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "Engine/Blueprint.h"
+#include "Editor.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 
 #include "GraphEditor.h"
 #include "EdGraph/EdGraph.h"
@@ -423,6 +427,8 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs&
 	// SGraphNode routes title commits through this event (it has no built-in persistence); without it
 	// editable titles like comment boxes revert on commit. Forward to the node's OnRenameNode.
 	InEvents.OnTextCommitted = FOnNodeTextCommitted::CreateSP(this, &FScriptableGraphEditor::OnNodeTitleCommitted);
+	// Double-click opens the asset a node points to (a Blueprint task, an Action asset, or a sub-graph).
+	InEvents.OnNodeDoubleClicked = FSingleNodeEvent::CreateSP(this, &FScriptableGraphEditor::OnNodeDoubleClicked);
 
 	FGraphAppearanceInfo AppearanceInfo;
 	AppearanceInfo.CornerText = LOCTEXT("ScriptableGraphAppearanceCornerText", "SCRIPTABLE GRAPH");
@@ -1165,6 +1171,40 @@ void FScriptableGraphEditor::OnNodeTitleCommitted(const FText& NewText, ETextCom
 	const FScopedTransaction Transaction(LOCTEXT("RenameNodeTx", "Rename Node"));
 	NodeBeingChanged->Modify();
 	NodeBeingChanged->OnRenameNode(NewText.ToString());
+}
+
+void FScriptableGraphEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
+{
+	// Resolve the asset this node points to: a Run Graph -> its graph, a Run Asset -> its action asset,
+	// or a Blueprint-authored task -> its Blueprint. Native tasks resolve to nothing (no-op).
+	UObject* AssetToOpen = nullptr;
+
+	if (const UScriptableEdGraphNode* EdNode = Cast<UScriptableEdGraphNode>(Node))
+	{
+		if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(EdNode->GetRuntimeNode()))
+		{
+			if (UScriptableTask* Task = TaskNode->Task)
+			{
+				if (const UScriptableTask_RunGraph* RunGraph = Cast<UScriptableTask_RunGraph>(Task))
+				{
+					AssetToOpen = RunGraph->GraphAsset;
+				}
+				else if (const UScriptableTask_RunAsset* RunAsset = Cast<UScriptableTask_RunAsset>(Task))
+				{
+					AssetToOpen = RunAsset->Asset;
+				}
+				else
+				{
+					AssetToOpen = Task->GetClass()->ClassGeneratedBy; // The UBlueprint for a BP task, else null.
+				}
+			}
+		}
+	}
+
+	if (AssetToOpen && GEditor)
+	{
+		GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(AssetToOpen);
+	}
 }
 
 void FScriptableGraphEditor::OnRemoveSequencePin()
