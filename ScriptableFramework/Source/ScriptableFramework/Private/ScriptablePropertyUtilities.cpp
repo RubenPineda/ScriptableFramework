@@ -4,6 +4,7 @@
 #include "ScriptableObject.h"
 #include "ScriptableObjectAsset.h"
 #include "ScriptableContainer.h"
+#include "ScriptableNodes/ScriptableNode.h"
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
 #include "StructUtils/PropertyBag.h"
@@ -428,12 +429,18 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 		const UObject* ParentNode = IteratorNode->GetOuter();
 		if (!ParentNode || ParentNode == RootObject->GetOuter()) break;
 
+		// A graph-node wrapper hosts the child but is not itself a bindable data source:
+		// nodes only bind to the graph Context, never to each other or to their own host.
+		// Skipping it stops a task from listing its hosting node (i.e. "itself") as a source.
 		if (const UScriptableObject* ParentScriptableObject = Cast<UScriptableObject>(ParentNode))
 		{
-			AccessibleObjects.Add(ParentScriptableObject); // Parent
-			if (AreSiblingBindingsAllowed(ParentScriptableObject))
+			if (!ParentNode->IsA<UScriptableNode>())
 			{
-				CollectPreviousSiblings(ParentScriptableObject, IteratorNode, AccessibleObjects);
+				AccessibleObjects.Add(ParentScriptableObject); // Parent
+				if (AreSiblingBindingsAllowed(ParentScriptableObject))
+				{
+					CollectPreviousSiblings(ParentScriptableObject, IteratorNode, AccessibleObjects);
+				}
 			}
 		}
 		IteratorNode = ParentNode;
