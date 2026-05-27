@@ -126,6 +126,9 @@ protected:
 	/** Weak pointer to the actual object instance (if valid). */
 	TWeakObjectPtr<UScriptableObject> ScriptableObject;
 
+	/** Base class of the customized object property (e.g. UScriptableTask), cached while the handle is fresh so deferred menus never re-derive it from a stale handle. */
+	TWeakObjectPtr<UClass> CachedBaseClass;
+
 	// Cached data for UI generation
 	FText NodeTitle;
 	FText NodeDescription;

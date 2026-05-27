@@ -945,6 +945,14 @@ void FScriptableObjectCustomization::InitCustomization(TSharedRef<IPropertyHandl
 	PropertyHandle = InPropertyHandle;
 	PropertyUtilities = CustomizationUtils.GetPropertyUtilities();
 
+	// Cache the base class now, while the handle is fresh. Deferred menus (the type picker) open later,
+	// when the handle may be stale — re-deriving the class from it then can read a freed FProperty.
+	CachedBaseClass = nullptr;
+	if (const FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(InPropertyHandle->GetProperty()))
+	{
+		CachedBaseClass = ObjectProperty->PropertyClass;
+	}
+
 	UObject* Object = nullptr;
 	PropertyHandle->GetValue(Object);
 	UScriptableObject* ScriptableObj = Cast<UScriptableObject>(Object);
@@ -1260,20 +1268,10 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const
 {
-	// Guard against a stale handle: a deferred menu (e.g. the type picker) can be generated after the
-	// details panel rebuilt, at which point GetProperty() would hand back a dangling FProperty whose
-	// PropertyClass reads as garbage and crashes downstream.
-	if (!PropertyHandle.IsValid() || !PropertyHandle->IsValidHandle())
-	{
-		return nullptr;
-	}
-
-	UClass* MyClass = nullptr;
-	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
-	{
-		MyClass = ObjectProperty->PropertyClass;
-	}
-	return MyClass;
+	// Returns the class cached at customization time (see InitCustomization). We deliberately do NOT
+	// re-derive it from PropertyHandle here: deferred menus can outlive the handle's validity, and a
+	// stale handle hands back a freed FProperty whose PropertyClass reads as garbage.
+	return CachedBaseClass.Get();
 }
 
 bool FScriptableObjectCustomization::IsWrappedByGraphNode() const
