@@ -4,6 +4,7 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
+#include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableContext.h"
 
 void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext)
@@ -13,8 +14,11 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 	Asset = InAsset;
 	Owner = InOwner;
 
-	// Keep the runner alive until the graph finishes or is cancelled.
-	SelfReference = this;
+	// Register with the world subsystem: it owns the live-runner set (keeping us alive while we run)
+	// and cancels us on world teardown. No subsystem means the owner has no world (CDO/transient) -> abort.
+	UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(InOwner);
+	if (!Subsystem) return;
+	Subsystem->RegisterRunner(this);
 
 	// Populate the runtime context bag with the values from the external context.
 	Context.MigrateToNewBagInstance(InContext.GetBag());
@@ -226,8 +230,12 @@ void UScriptableGraphInstance::Finish()
 
 	OnGraphFinishedNative.Broadcast();
 
-	// Release the GC anchor. Next GC sweep collects us.
-	SelfReference = nullptr;
+	// Unregister from the subsystem; once it drops its strong ref we become collectible. If the world
+	// is already tearing down the subsystem may be gone — that's fine, it already cancelled us.
+	if (UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(Owner))
+	{
+		Subsystem->UnregisterRunner(this);
+	}
 }
 
 void UScriptableGraphInstance::BeginDestroy()
@@ -238,6 +246,12 @@ void UScriptableGraphInstance::BeginDestroy()
 		bCancelled = true;
 		Pending.Empty();
 		TeardownNodes();
+	}
+
+	// Defensive: drop ourselves from the subsystem if we somehow reach GC still registered.
+	if (UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(Owner))
+	{
+		Subsystem->UnregisterRunner(this);
 	}
 
 	Super::BeginDestroy();

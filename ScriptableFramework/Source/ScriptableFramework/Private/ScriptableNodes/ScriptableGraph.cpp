@@ -2,6 +2,7 @@
 
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "Core/KzBagOps.h"
@@ -14,11 +15,8 @@ UScriptableGraphInstance* UScriptableGraph::Run(UScriptableGraph* Graph, UObject
 {
 	if (!Graph || !Owner) return nullptr;
 
-	UScriptableGraphInstance* Instance = NewObject<UScriptableGraphInstance>(Owner);
-	if (!Instance) return nullptr;
-
-	Instance->Launch(Graph, Owner, InContext);
-	return Instance;
+	// Owner doubles as both the world context (to resolve the subsystem) and the graph's runtime owner.
+	return UScriptableGraphSubsystem::RunGraph(Owner, Graph, Owner, InContext);
 }
 
 void UScriptableGraph::PostInitProperties()

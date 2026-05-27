@@ -10,6 +10,7 @@
 #include "ScriptableGraphInstance.generated.h"
 
 class UScriptableNode;
+class UScriptableGraphSubsystem;
 struct FScriptableContext;
 
 DECLARE_MULTICAST_DELEGATE(FScriptableGraphFinishedNative);
@@ -32,7 +33,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void FireEvent(FName EventName);
 
-	/** Hard-cancels the graph: tears down active nodes in-place, drops queued activations, releases self. */
+	/** Hard-cancels the graph: tears down active nodes in-place, drops queued activations, unregisters from the subsystem. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void Cancel();
 
@@ -113,11 +114,10 @@ private:
 	/** FIFO of pending input activations. Drained by ProcessQueue. */
 	TArray<FPendingActivation> Pending;
 
-	/** Self-reference: keeps this runner alive across GC while execution is in flight. */
-	UPROPERTY()
-	TObjectPtr<UScriptableGraphInstance> SelfReference;
-
 	bool bProcessing = false;
 	bool bCancelled = false;
 	bool bFinished = false;
+
+	/** The subsystem owns the live-runner registry and calls Register/Unregister on us. */
+	friend class UScriptableGraphSubsystem;
 };
