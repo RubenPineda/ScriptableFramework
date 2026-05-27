@@ -1260,6 +1260,14 @@ void FScriptableObjectCustomization::CustomizeChildren(TSharedRef<IPropertyHandl
 
 UClass* FScriptableObjectCustomization::GetBaseClass() const
 {
+	// Guard against a stale handle: a deferred menu (e.g. the type picker) can be generated after the
+	// details panel rebuilt, at which point GetProperty() would hand back a dangling FProperty whose
+	// PropertyClass reads as garbage and crashes downstream.
+	if (!PropertyHandle.IsValid() || !PropertyHandle->IsValidHandle())
+	{
+		return nullptr;
+	}
+
 	UClass* MyClass = nullptr;
 	if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(PropertyHandle->GetProperty()))
 	{
@@ -1447,14 +1455,17 @@ TSharedRef<SWidget> FScriptableObjectCustomization::GenerateOptionsMenu()
 
 void FScriptableObjectCustomization::GeneratePickerMenu(class FMenuBuilder& InMenuBuilder)
 {
+	UClass* BaseClass = GetBaseClass();
+	if (!BaseClass) return;   // stale/invalid handle: nothing to pick
+
 	FName ClassCategory; FName PropCategory;
-	ScriptableFrameworkEditor::GetScriptableCategory(GetBaseClass(), ClassCategory, PropCategory);
+	ScriptableFrameworkEditor::GetScriptableCategory(BaseClass, ClassCategory, PropCategory);
 
 	TSharedRef<SWidget> Widget = SNew(SBox)
 		.Padding(2)
 		[
 			SNew(SScriptableTypeSelector)
-				.BaseClass(GetBaseClass())
+				.BaseClass(BaseClass)
 				.ClassCategoryMeta(ClassCategory)
 				.FilterCategoryMeta(PropCategory)
 				.Filter(ScriptableFrameworkEditor::GetPropertyMetaData(PropertyHandle, PropCategory))

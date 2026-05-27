@@ -52,6 +52,8 @@ namespace ScriptableFrameworkEditor
 
 	void GetScriptableCategory(const UClass* ScriptableClass, FName& ClassCategoryMeta, FName& PropertyCategoryMeta)
 	{
+		if (!ScriptableClass) return;
+
 		if (ScriptableClass->IsChildOf(UScriptableTask::StaticClass()))
 		{
 			ClassCategoryMeta = MD_TaskCategory;
