@@ -1,0 +1,31 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Scriptable Framework - UI",
+	"Description": "Adds UMG tasks (create widget, etc.) to the Scriptable Framework. Requires the UMG module.",
+	"Category": "Scripting",
+	"CreatedBy": "kirzo",
+	"CreatedByURL": "https://kirzo.dev",
+	"DocsURL": "https://github.com/kirzo/ScriptableFramework",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EnabledByDefault": false,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ScriptableFrameworkUI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ScriptableFramework",
+			"Enabled": true
+		}
+	]
+}
