@@ -11,6 +11,7 @@
 class UScriptableNode;
 class UScriptableGraphInstance;
 class UEdGraph;
+struct FScriptableContext;
 
 /**
  * Asset defining a reusable scriptable graph: a network of UScriptableNode.
@@ -25,10 +26,9 @@ public:
 	UScriptableGraph();
 
 	/**
-	 * Fire-and-forget execution of this graph using values from the supplied context.
-	 * Constructs a runtime instance under the hood and lets it run until completion or owner death.
+	 * Launches a runtime instance of this graph and returns it. Plain C++ entry point used by the
+	 * async "Run Scriptable Graph" node (UAsyncRunScriptableGraph); not exposed to Blueprint directly.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner", DisplayName = "Run Scriptable Graph"))
 	static UScriptableGraphInstance* Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext);
 
 	/** All nodes living in this graph. Instanced so editor-created nodes are owned by the asset. */

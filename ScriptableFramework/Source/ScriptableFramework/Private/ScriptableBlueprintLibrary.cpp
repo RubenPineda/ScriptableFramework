@@ -172,7 +172,8 @@ static void AssignContextParameterToContainer(FFrame& Stack, const UScriptStruct
 }
 
 // Resolves the scriptable context from the BP stack and assigns the wildcard value into its bag.
-static void AssignContextParameterToContext(FFrame& Stack, const FString& FunctionName)
+// Returns the resolved context so the thunk can echo it as the return value (for chaining), or null on abort.
+static FScriptableContext* AssignContextParameterToContext(FFrame& Stack, const FString& FunctionName)
 {
 	// 1. Retrieve the context struct.
 	Stack.StepCompiledIn<FStructProperty>(nullptr);
@@ -186,19 +187,46 @@ static void AssignContextParameterToContext(FFrame& Stack, const FString& Functi
 	{
 		Stack.StepCompiledIn<FProperty>(nullptr);
 		P_FINISH;
-		return;
+		return nullptr;
 	}
 
 	FScriptableContext* Context = static_cast<FScriptableContext*>(ContextPtr);
 
 	// A context carries its own shape, so define the property on the fly if it isn't there yet.
 	AssignStackValueToBag(Stack, Context->GetBag(), ParameterName, true, FunctionName);
+	return Context;
 }
 
 // --- Thunk Implementations ---
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetScriptableContextProperty)
 {
-	AssignContextParameterToContext(Stack, TEXT("SetScriptableContextProperty"));
+	// Note: 'Context' is DEFINE_FUNCTION's implicit UObject* parameter, so name the local differently.
+	FScriptableContext* ResolvedContext = AssignContextParameterToContext(Stack, TEXT("SetScriptableContextProperty"));
+
+	// Echo the same context as the return value so multiple setters can be chained together.
+	if (RESULT_PARAM)
+	{
+		FScriptableContext& Result = *static_cast<FScriptableContext*>(RESULT_PARAM);
+		if (ResolvedContext)
+		{
+			Result = *ResolvedContext;
+		}
+	}
+}
+
+DEFINE_FUNCTION(UScriptableBlueprintLibrary::execMakeScriptableContext)
+{
+	// 1. Retrieve the parameter name.
+	P_GET_PROPERTY(FNameProperty, ParameterName);
+
+	// 2. Build a fresh context and define/assign the single parameter from the wildcard value.
+	FScriptableContext NewContext;
+	AssignStackValueToBag(Stack, NewContext.GetBag(), ParameterName, /*bAddIfMissing=*/true, TEXT("MakeScriptableContext"));
+
+	if (RESULT_PARAM)
+	{
+		*static_cast<FScriptableContext*>(RESULT_PARAM) = NewContext;
+	}
 }
 
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetActionContextParameter)
@@ -234,9 +262,10 @@ DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetGraphInstanceContextProperty
 	AssignStackValueToBag(Stack, Runner->GetMutableContextBag(), ParameterName, /*bAddIfMissing=*/true, FunctionName);
 }
 
-void UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
+FScriptableContext UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
 {
 	KzBagOps::AddProperty(Context.GetBag(), FKzParamDef(ParameterName, Type));
+	return Context;
 }
 
 void UScriptableBlueprintLibrary::SetActionContext(UPARAM(Ref) FScriptableAction& Action, const FScriptableContext& Context)
