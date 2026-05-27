@@ -45,6 +45,9 @@
 #include "Validation/KzAssetValidationUtils.h"
 #include "Core/KzValidationTypes.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
+#include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
+#include "Widgets/Input/SSearchBox.h"
+#include "Widgets/SBoxPanel.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditor"
 
@@ -209,6 +212,7 @@ const FName FScriptableGraphEditor::AssetDetailsTabId(TEXT("ScriptableGraphEdito
 const FName FScriptableGraphEditor::NodeDetailsTabId(TEXT("ScriptableGraphEditor_NodeDetails"));
 const FName FScriptableGraphEditor::PaletteTabId(TEXT("ScriptableGraphEditor_Palette"));
 const FName FScriptableGraphEditor::ValidationTabId(TEXT("ScriptableGraphEditor_Validation"));
+const FName FScriptableGraphEditor::SearchTabId(TEXT("ScriptableGraphEditor_Search"));
 
 static const FName ScriptableGraphEditorAppId(TEXT("ScriptableGraphEditorApp"));
 
@@ -270,7 +274,7 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	ReconstructEdGraphFromAsset();
 
 	// Default three-pane layout: details left | graph center | node details right.
-	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v3")
+	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v4")
 		->AddArea
 		(
 			FTabManager::NewPrimaryArea()
@@ -296,9 +300,21 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 			)
 			->Split
 			(
-				FTabManager::NewStack()
+				FTabManager::NewSplitter()
 				->SetSizeCoefficient(0.6f)
-				->AddTab(GraphTabId, ETabState::OpenedTab)
+				->SetOrientation(Orient_Vertical)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.75f)
+					->AddTab(GraphTabId, ETabState::OpenedTab)
+				)
+				->Split
+				(
+					FTabManager::NewStack()
+					->SetSizeCoefficient(0.25f)
+					->AddTab(SearchTabId, ETabState::ClosedTab)
+				)
 			)
 			->Split
 			(
@@ -378,6 +394,11 @@ void FScriptableGraphEditor::RegisterTabSpawners(const TSharedRef<FTabManager>& 
 		.SetDisplayName(LOCTEXT("ValidationTabLabel", "Validation"))
 		.SetGroup(Category)
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.WarningWithColor"));
+
+	InTabManager->RegisterTabSpawner(SearchTabId, FOnSpawnTab::CreateSP(this, &FScriptableGraphEditor::SpawnTab_Search))
+		.SetDisplayName(LOCTEXT("SearchTabLabel", "Search"))
+		.SetGroup(Category)
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Search"));
 }
 
 void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>& InTabManager)
@@ -389,6 +410,7 @@ void FScriptableGraphEditor::UnregisterTabSpawners(const TSharedRef<FTabManager>
 	InTabManager->UnregisterTabSpawner(NodeDetailsTabId);
 	InTabManager->UnregisterTabSpawner(PaletteTabId);
 	InTabManager->UnregisterTabSpawner(ValidationTabId);
+	InTabManager->UnregisterTabSpawner(SearchTabId);
 }
 
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Graph(const FSpawnTabArgs& Args)
@@ -1322,6 +1344,31 @@ void FScriptableGraphEditor::ExtendToolbar()
 						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Refresh"));
 				}
 				ToolbarBuilder.EndSection();
+
+				ToolbarBuilder.BeginSection("GraphTools");
+				{
+					ToolbarBuilder.AddToolBarButton(
+						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnGoHome)),
+						NAME_None,
+						LOCTEXT("HomeBtn", "Home"),
+						LOCTEXT("HomeBtnTip", "Center the view on the Entry node"),
+						FSlateIcon(FAppStyle::GetAppStyleSetName(), "MaterialEditor.CameraHome"));
+
+					ToolbarBuilder.AddToolBarButton(
+						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCleanGraph)),
+						NAME_None,
+						LOCTEXT("CleanBtn", "Clean Graph"),
+						LOCTEXT("CleanBtnTip", "Delete every node unreachable from Entry or any ReceiveEvent"),
+						FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.Clean"));
+
+					ToolbarBuilder.AddToolBarButton(
+						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnOpenSearch)),
+						NAME_None,
+						LOCTEXT("SearchBtn", "Search"),
+						LOCTEXT("SearchBtnTip", "Open the node search tab"),
+						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Search"));
+				}
+				ToolbarBuilder.EndSection();
 			}));
 
 	AddToolbarExtender(Extender);
@@ -1346,20 +1393,217 @@ TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()
 
 void FScriptableGraphEditor::HandleValidationIssueActivated(const FKzValidationIssue& Issue)
 {
-	if (!Issue.ContextId.IsValid()) return;
+	if (!Issue.ContextId.IsValid() || !GraphEditorWidget.IsValid()) return;
 
+	if (UEdGraphNode* EdNode = FindEdNodeByRuntimeId(Issue.ContextId))
+	{
+		GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
+	}
+}
+
+UEdGraphNode* FScriptableGraphEditor::FindEdNodeByRuntimeId(const FGuid& RuntimeId) const
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph || !RuntimeId.IsValid()) return nullptr;
+
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		const UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode);
+		if (SfEdNode && SfEdNode->GetRuntimeNode() && SfEdNode->GetRuntimeNode()->GetBindingID() == RuntimeId)
+		{
+			return EdNode;
+		}
+	}
+	return nullptr;
+}
+
+void FScriptableGraphEditor::OnGoHome()
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !GraphEditorWidget.IsValid()) return;
+
+	if (UEdGraphNode* EntryEdNode = FindEdNodeByRuntimeId(Graph->EntryNodeID))
+	{
+		GraphEditorWidget->JumpToNode(EntryEdNode, /*bRequestRename*/ false, /*bSelectNode*/ false);
+	}
+}
+
+void FScriptableGraphEditor::OnCleanGraph()
+{
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph || !Graph->EdGraph || !GraphEditorWidget.IsValid()) return;
 
-	// Find the ed-node wrapping the runtime node the issue points at, then pan to and select it.
+	// Reachability from Entry + every ReceiveEvent over forward connections (same rule as the validator).
+	TMultiMap<FGuid, FGuid> Adjacency;
+	for (const FScriptableGraphConnection& Conn : Graph->Connections)
+	{
+		Adjacency.Add(Conn.From.NodeID, Conn.To.NodeID);
+	}
+
+	TSet<FGuid> Reachable;
+	TArray<FGuid> Queue;
+	if (Graph->EntryNodeID.IsValid()) { Reachable.Add(Graph->EntryNodeID); Queue.Add(Graph->EntryNodeID); }
+	for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+	{
+		if (Node && Node->IsA<UScriptableNode_ReceiveEvent>())
+		{
+			bool bAlready = false;
+			Reachable.Add(Node->GetBindingID(), &bAlready);
+			if (!bAlready) Queue.Add(Node->GetBindingID());
+		}
+	}
+	for (int32 Head = 0; Head < Queue.Num(); ++Head)
+	{
+		TArray<FGuid> Targets;
+		Adjacency.MultiFind(Queue[Head], Targets);
+		for (const FGuid& Target : Targets)
+		{
+			bool bAlready = false;
+			Reachable.Add(Target, &bAlready);
+			if (!bAlready) Queue.Add(Target);
+		}
+	}
+
+	// Gather unreachable, user-deletable ed-nodes (Entry is exempt via CanUserDeleteNode).
+	TArray<UEdGraphNode*> ToDelete;
+	TSet<FGuid> DeletedIds;
 	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
 	{
 		const UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(EdNode);
 		if (!SfEdNode || !SfEdNode->GetRuntimeNode()) continue;
-		if (SfEdNode->GetRuntimeNode()->GetBindingID() != Issue.ContextId) continue;
 
+		const FGuid Id = SfEdNode->GetRuntimeNode()->GetBindingID();
+		if (!Id.IsValid() || Reachable.Contains(Id)) continue;
+		if (!EdNode->CanUserDeleteNode()) continue;
+
+		ToDelete.Add(EdNode);
+		DeletedIds.Add(Id);
+	}
+
+	if (ToDelete.IsEmpty()) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("CleanGraphTx", "Clean Graph"));
+	Graph->Modify();
+	Graph->EdGraph->Modify();
+
+	// Drop connections touching any node we're about to remove, then destroy the ed-nodes
+	// (which also strips their runtime nodes from the asset).
+	Graph->Connections.RemoveAll([&DeletedIds](const FScriptableGraphConnection& Conn)
+		{
+			return DeletedIds.Contains(Conn.From.NodeID) || DeletedIds.Contains(Conn.To.NodeID);
+		});
+
+	GraphEditorWidget->ClearSelectionSet();
+	for (UEdGraphNode* EdNode : ToDelete)
+	{
+		EdNode->Modify();
+		EdNode->DestroyNode();
+	}
+
+	GraphEditorWidget->NotifyGraphChanged();
+}
+
+void FScriptableGraphEditor::OnOpenSearch()
+{
+	if (const TSharedPtr<FTabManager> TabManagerPin = GetTabManager())
+	{
+		TabManagerPin->TryInvokeTab(SearchTabId);
+	}
+	if (SearchBox.IsValid())
+	{
+		FSlateApplication::Get().SetKeyboardFocus(SearchBox);
+	}
+}
+
+namespace
+{
+	/** Searchable label: ReceiveEvent shows its EventName, Task wrappers the inner task class, others the node class display name. */
+	FString GetNodeSearchLabel(const UScriptableNode* Node)
+	{
+		if (!Node) return FString();
+		if (const UScriptableNode_ReceiveEvent* Receive = Cast<UScriptableNode_ReceiveEvent>(Node))
+		{
+			return FString::Printf(TEXT("Event: %s"), Receive->EventName.IsNone() ? TEXT("(unnamed)") : *Receive->EventName.ToString());
+		}
+		if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(Node))
+		{
+			if (TaskNode->Task) return TaskNode->Task->GetClass()->GetDisplayNameText().ToString();
+		}
+		return Node->GetClass()->GetDisplayNameText().ToString();
+	}
+}
+
+TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Search(const FSpawnTabArgs& Args)
+{
+	TSharedRef<SWidget> Content =
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot()
+		.AutoHeight()
+		.Padding(4.f)
+		[
+			SAssignNew(SearchBox, SSearchBox)
+			.HintText(LOCTEXT("SearchHint", "Search nodes by name..."))
+			.OnTextChanged(this, &FScriptableGraphEditor::OnSearchTextChanged)
+		]
+		+ SVerticalBox::Slot()
+		.FillHeight(1.f)
+		[
+			SAssignNew(SearchListView, SListView<TWeakObjectPtr<UScriptableNode>>)
+			.ListItemsSource(&SearchResults)
+			.SelectionMode(ESelectionMode::Single)
+			.OnGenerateRow(this, &FScriptableGraphEditor::OnGenerateSearchRow)
+			.OnMouseButtonClick(this, &FScriptableGraphEditor::OnSearchResultClicked)
+		];
+
+	// Seed with every node so an empty query lists the whole graph.
+	OnSearchTextChanged(FText::GetEmpty());
+
+	return SNew(SDockTab)
+		.Label(LOCTEXT("SearchTab", "Search"))
+		[
+			Content
+		];
+}
+
+void FScriptableGraphEditor::OnSearchTextChanged(const FText& InText)
+{
+	SearchResults.Reset();
+
+	if (UScriptableGraph* Graph = EditedGraph.Get())
+	{
+		const FString Query = InText.ToString().TrimStartAndEnd();
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			if (Query.IsEmpty() || GetNodeSearchLabel(Node).Contains(Query))
+			{
+				SearchResults.Add(Node);
+			}
+		}
+	}
+
+	if (SearchListView.IsValid())
+	{
+		SearchListView->RequestListRefresh();
+	}
+}
+
+TSharedRef<ITableRow> FScriptableGraphEditor::OnGenerateSearchRow(TWeakObjectPtr<UScriptableNode> Item, const TSharedRef<STableViewBase>& OwnerTable)
+{
+	const FString Label = Item.IsValid() ? GetNodeSearchLabel(Item.Get()) : TEXT("<invalid>");
+	return SNew(STableRow<TWeakObjectPtr<UScriptableNode>>, OwnerTable)
+		[
+			SNew(STextBlock).Text(FText::FromString(Label))
+		];
+}
+
+void FScriptableGraphEditor::OnSearchResultClicked(TWeakObjectPtr<UScriptableNode> Item)
+{
+	if (!Item.IsValid() || !GraphEditorWidget.IsValid()) return;
+
+	if (UEdGraphNode* EdNode = FindEdNodeByRuntimeId(Item->GetBindingID()))
+	{
 		GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
-		return;
 	}
 }
 

@@ -5,12 +5,15 @@
 #include "CoreMinimal.h"
 #include "Toolkits/AssetEditorToolkit.h"
 #include "GraphEditor.h"
+#include "Widgets/Views/SListView.h"
 
 class UScriptableGraph;
+class UScriptableNode;
 class UEdGraph;
 class UEdGraphPin;
 class IDetailsView;
 class SGraphEditor;
+class SSearchBox;
 class SKzValidationPanel;
 struct FKzValidationIssue;
 
@@ -119,6 +122,31 @@ private:
 	/** Click-to-navigate: selects and pans to the ed-node whose runtime BindingID matches the issue's ContextId. */
 	void HandleValidationIssueActivated(const FKzValidationIssue& Issue);
 
+	// --- Graph tools ---
+	/** Toolbar handler: pans the graph view to the Entry node. */
+	void OnGoHome();
+
+	/** Toolbar handler: deletes every node unreachable from Entry or any ReceiveEvent. */
+	void OnCleanGraph();
+
+	/** Toolbar handler: opens the Search tab and focuses its search box. */
+	void OnOpenSearch();
+
+	/** Spawns the Search tab: a node filter list wired to click-to-navigate. */
+	TSharedRef<SDockTab> SpawnTab_Search(const FSpawnTabArgs& Args);
+
+	/** Rebuilds the search results from the current query and refreshes the list. */
+	void OnSearchTextChanged(const FText& InText);
+
+	/** Builds a search result row showing the node's label. */
+	TSharedRef<ITableRow> OnGenerateSearchRow(TWeakObjectPtr<UScriptableNode> Item, const TSharedRef<STableViewBase>& OwnerTable);
+
+	/** Click-to-navigate from a search result to its node. */
+	void OnSearchResultClicked(TWeakObjectPtr<UScriptableNode> Item);
+
+	/** Returns the ed-node wrapping the runtime node with the given BindingID, or null. */
+	UEdGraphNode* FindEdNodeByRuntimeId(const FGuid& RuntimeId) const;
+
 	/** The asset currently being edited. */
 	TWeakObjectPtr<UScriptableGraph> EditedGraph;
 
@@ -134,6 +162,11 @@ private:
 	/** Validation panel shown in the Validation tab. */
 	TSharedPtr<SKzValidationPanel> ValidationPanel;
 
+	/** Search tab widgets + current results (runtime nodes matching the query). */
+	TSharedPtr<SSearchBox> SearchBox;
+	TSharedPtr<SListView<TWeakObjectPtr<UScriptableNode>>> SearchListView;
+	TArray<TWeakObjectPtr<UScriptableNode>> SearchResults;
+
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
 	FDelegateHandle OnObjectTransactedHandle;
@@ -143,4 +176,5 @@ private:
 	static const FName NodeDetailsTabId;
 	static const FName PaletteTabId;
 	static const FName ValidationTabId;
+	static const FName SearchTabId;
 };
