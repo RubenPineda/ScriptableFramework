@@ -7,6 +7,20 @@ DEFINE_LOG_CATEGORY(LogScriptableTask);
 const FName UScriptableTask::CompletedOutputName = TEXT("Completed");
 const FName UScriptableTask::StoppedOutputName = TEXT("Stopped");
 
+TArray<FName> UScriptableTask::GetOutputPins() const
+{
+	// Completed is always present; append the author-defined extras (skip None, dedupe).
+	TArray<FName> Outputs = { CompletedOutputName };
+	for (const FName& Output : CustomOutputs)
+	{
+		if (!Output.IsNone())
+		{
+			Outputs.AddUnique(Output);
+		}
+	}
+	return Outputs;
+}
+
 void UScriptableTask::OnUnregister()
 {
 	Super::OnUnregister();

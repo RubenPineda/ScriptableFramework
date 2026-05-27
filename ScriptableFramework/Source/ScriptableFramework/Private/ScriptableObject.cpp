@@ -252,6 +252,15 @@ bool UScriptableObject::GetBindingDisplayText(FName PropertyName, FString& OutTe
 
 UWorld* UScriptableObject::GetWorld_Uncached() const
 {
+	// The CDO has no world. Return early WITHOUT delegating to any base GetWorld(): the editor's
+	// ImplementsGetWorld() (used to hide the BlueprintCallable WorldContext pin) runs on the CDO and
+	// detects our override by watching a thread-local flag that UObject::GetWorld() clears. Climbing
+	// to an outer here would hit that base implementation and make the editor think we lack a world.
+	if (HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return nullptr;
+	}
+
 	// 1. Attempt to get the world from the explicit Owner (if registered)
 	UObject* MyOwner = GetOwner();
 	if (MyOwner && !MyOwner->HasAnyFlags(RF_ClassDefaultObject))

@@ -91,19 +91,27 @@ public:
 	/** Returns the name of the output fired by the most recent Finish/Stop call. */
 	FName GetLastFiredOutput() const { return LastFiredOutput; }
 
+	/** Extra named outputs this task can fire, on top of Completed. Define them in the task's Class Defaults (mainly for Blueprint tasks) and fire one with FinishWithOutput. */
+	UPROPERTY(EditDefaultsOnly, Category = "Flow", meta = (NoBinding))
+	TArray<FName> CustomOutputs;
+
+	/** Whether this task supports cancellation via Stop(). Set in the task's Class Defaults (mainly for Blueprint tasks); native tasks may override IsStoppable() instead. */
+	UPROPERTY(EditDefaultsOnly, Category = "Flow", meta = (NoBinding))
+	bool bStoppable = true;
+
 	/**
 	 * Returns the set of named outputs this task can fire on completion.
-	 * Default: a single output named CompletedOutputName.
-	 * Tasks that expose multiple completion paths (e.g. Started, Completed) override this.
+	 * Default: CompletedOutputName plus any entries in CustomOutputs.
+	 * Native tasks with fixed completion paths (e.g. Started, Completed) override this instead.
 	 * The Stopped output is implicit when IsStoppable() returns true and is NOT included here.
 	 */
-	virtual TArray<FName> GetOutputPins() const { return { CompletedOutputName }; }
+	virtual TArray<FName> GetOutputPins() const;
 
 	/**
 	 * Returns true if this task supports cancellation via Stop().
-	 * Default: true. Override and return false for tasks where cancellation makes no sense.
+	 * Default: returns bStoppable. Native tasks may override this for fixed behavior.
 	 */
-	virtual bool IsStoppable() const { return true; }
+	virtual bool IsStoppable() const { return bStoppable; }
 
 	virtual bool IsReadyToTick() const override { return HasBegun(); }
 
@@ -146,11 +154,11 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FScriptableTaskDelegate OnTaskStopped;
 
-protected:
 	/**
 	 * Finish variant that fires a specific named output instead of the default CompletedOutputName.
-	 * Use this in tasks that declare multiple outputs in GetOutputPins().
+	 * Use this in tasks that declare multiple outputs (CustomOutputs or a GetOutputPins override).
 	 */
+	UFUNCTION(BlueprintCallable, Category = ScriptableTask)
 	void FinishWithOutput(FName OutputName);
 
 private:
