@@ -176,10 +176,10 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 	// =======================================================================================
 	// LAMBDA 1: Reflection Helper to find the FScriptableContainer holding a specific Node
 	// =======================================================================================
-	auto FindContainerForNode = [](const UObject* Node) -> const FScriptableContainer*
+	auto FindContainerForNode = [](const UObject* Node) -> FScriptableContainer*
 		{
 			if (!Node) return nullptr;
-			const UObject* Owner = Node->GetOuter();
+			UObject* Owner = const_cast<UObject*>(Node->GetOuter());
 			if (!Owner) return nullptr;
 
 			const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
@@ -192,7 +192,7 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 				{
 					if (StructProp->Struct->IsChildOf(BaseContainerStruct))
 					{
-						const FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Owner);
+						FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Owner);
 
 						// Reflect inside the container to see if it holds our Node
 						for (TFieldIterator<FProperty> InnerIt(StructProp->Struct); InnerIt; ++InnerIt)
@@ -225,7 +225,7 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 							FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Owner));
 							for (int32 Index = 0; Index < Helper.Num(); ++Index)
 							{
-								const FScriptableContainer* Container = reinterpret_cast<const FScriptableContainer*>(Helper.GetRawPtr(Index));
+								FScriptableContainer* Container = reinterpret_cast<FScriptableContainer*>(Helper.GetRawPtr(Index));
 
 								for (TFieldIterator<FProperty> InnerIt(InnerStructProp->Struct); InnerIt; ++InnerIt)
 								{
@@ -377,13 +377,17 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 	while (CurrentNode && !bFoundContext)
 	{
 		// Try to find the FScriptableContainer structurally wrapping the CurrentNode
-		if (const FScriptableContainer* Container = FindContainerForNode(CurrentNode))
+		if (FScriptableContainer* Container = FindContainerForNode(CurrentNode))
 		{
-			if (Container->HasContext() && Container->Context.GetNumPropertiesInBag() > 0)
+			// GetContext() rebuilds the transient bag from ContextDefinitions on the fly when needed
+			// (after load it's empty until something hydrates it); without this the bake at PreSave
+			// would see no context and wipe the task's auto-bindings.
+			FInstancedPropertyBag& Bag = Container->GetContext();
+			if (Bag.IsValid() && Bag.GetNumPropertiesInBag() > 0)
 			{
 				FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 				ContextDesc.Name = FName(TEXT("Context"));
-				ContextDesc.Struct = Container->Context.GetPropertyBagStruct();
+				ContextDesc.Struct = Bag.GetPropertyBagStruct();
 				ContextDesc.ID = FGuid(); // Use an empty GUID for Context, just like the UI
 
 				bFoundContext = true;

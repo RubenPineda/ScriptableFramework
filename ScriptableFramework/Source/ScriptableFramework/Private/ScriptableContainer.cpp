@@ -13,6 +13,22 @@ void FScriptableContainer::ConstructContext()
 	KzBagOps::AddProperties(Context, ContextDefinitions);
 }
 
+bool FScriptableContainer::IsContextBagOutOfSync() const
+{
+	const UPropertyBag* BagStruct = Context.GetPropertyBagStruct();
+	const int32 BagPropertyCount = BagStruct ? BagStruct->GetPropertyDescs().Num() : 0;
+	if (BagPropertyCount != ContextDefinitions.Num()) return true;
+
+	if (BagStruct)
+	{
+		for (const FKzParamDef& Def : ContextDefinitions)
+		{
+			if (!BagStruct->FindPropertyDescByName(Def.Name)) return true;
+		}
+	}
+	return false;
+}
+
 void FScriptableContainer::AddContext(const FScriptableContext& InContext)
 {
 	const UPropertyBag* BagStruct = InContext.GetBag().GetPropertyBagStruct();

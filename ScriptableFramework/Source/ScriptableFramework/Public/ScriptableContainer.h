@@ -38,8 +38,16 @@ private:
 public:
 	bool HasContext() const { return Context.IsValid(); }
 
-	FInstancedPropertyBag& GetContext() { return Context; }
+	/** Returns the bag, rebuilding it from ContextDefinitions if it is out of sync (transient bag empty after load). */
+	FInstancedPropertyBag& GetContext()
+	{
+		if (IsContextBagOutOfSync()) { ConstructContext(); }
+		return Context;
+	}
 	const FInstancedPropertyBag& GetContext() const { return Context; }
+
+	/** True when the transient bag does not match the persisted ContextDefinitions (e.g. just after load). */
+	bool IsContextBagOutOfSync() const;
 
 	bool HasContextProperty(const FName& Name) const
 	{

@@ -18,12 +18,21 @@ static void AssignStackValueToBag(FFrame& Stack, FInstancedPropertyBag& Bag, FNa
 	// If allowed, define the property from the incoming value's type, which also initializes the bag.
 	if (!BagProp && bAddIfMissing)
 	{
+		// R-values (self, literals, math results) have no addressable property in BP, so the VM needs
+		// a scratch buffer to write them into. We don't yet know the value's type, so over-allocate
+		// generously — 256 bytes covers every stock UE primitive, FName, FString, FVector, FTransform
+		// and most user structs. Zero-init produces a valid "empty" state for FString/TArray/etc.,
+		// which StepCompiledIn then overwrites with the actual value.
+		static constexpr int32 LocalBufferSize = 256;
+		void* LocalValue = FMemory_Alloca_Aligned(LocalBufferSize, 16);
+		FMemory::Memzero(LocalValue, LocalBufferSize);
+
 		Stack.MostRecentPropertyAddress = nullptr;
 		Stack.MostRecentProperty = nullptr;
-		Stack.StepCompiledIn<FProperty>(nullptr);
+		Stack.StepCompiledIn<FProperty>(LocalValue);
 
 		FProperty* ValueProp = Stack.MostRecentProperty;
-		void* ValuePtr = Stack.MostRecentPropertyAddress;
+		void* ValuePtr = (Stack.MostRecentPropertyAddress != nullptr) ? Stack.MostRecentPropertyAddress : LocalValue;
 
 		P_FINISH;
 
@@ -46,6 +55,13 @@ static void AssignStackValueToBag(FFrame& Stack, FInstancedPropertyBag& Bag, FNa
 		{
 			uint8* DestPtr = NewBagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
 			NewBagProp->CopyCompleteValue(DestPtr, ValuePtr);
+		}
+
+		// If the VM landed the r-value in our scratch buffer, destruct it so non-trivial types
+		// (FString, TArray) don't leak. CopyCompleteValue above made an independent copy in the bag.
+		if (ValuePtr == LocalValue)
+		{
+			ValueProp->DestroyValue(LocalValue);
 		}
 		return;
 	}
