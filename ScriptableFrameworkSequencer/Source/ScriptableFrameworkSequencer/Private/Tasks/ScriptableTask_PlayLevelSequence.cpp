@@ -36,6 +36,16 @@ void UScriptableTask_PlayLevelSequence::FinishTask()
 	}
 }
 
+void UScriptableTask_PlayLevelSequence::StopTask()
+{
+	if (Player)
+	{
+		// Unbind first so the Stop-triggered OnFinished can't try to Finish() this already-stopped task.
+		Player->OnFinished.RemoveDynamic(this, &UScriptableTask_PlayLevelSequence::HandleSequenceFinished);
+		Player->Stop();
+	}
+}
+
 void UScriptableTask_PlayLevelSequence::HandleSequenceFinished()
 {
 	Finish();

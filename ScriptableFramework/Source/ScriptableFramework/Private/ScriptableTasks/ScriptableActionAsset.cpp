@@ -50,6 +50,16 @@ void UScriptableTask_RunAsset::FinishTask()
 	RuntimeAction.Unregister();
 }
 
+void UScriptableTask_RunAsset::StopTask()
+{
+	// Cancel mid-action: stop the inner action's in-flight tasks immediately. OnUnregister will
+	// run later via the node teardown path and finish the cleanup (Empty Tasks etc.).
+	if (RuntimeAction.IsRunning())
+	{
+		RuntimeAction.Finish();
+	}
+}
+
 void UScriptableTask_RunAsset::InstantiateRuntimeAction()
 {
 	TeardownRuntimeAction();

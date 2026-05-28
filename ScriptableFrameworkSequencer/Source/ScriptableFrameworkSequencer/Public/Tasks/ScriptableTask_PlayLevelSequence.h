@@ -26,6 +26,7 @@ public:
 protected:
 	virtual void BeginTask() override;
 	virtual void FinishTask() override;
+	virtual void StopTask() override;
 
 #if WITH_EDITOR
 	virtual FText GetDisplayTitle() const override;

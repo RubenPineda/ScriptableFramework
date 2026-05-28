@@ -22,6 +22,15 @@ void UScriptableTask_WaitForLevelSequenceFinish::FinishTask()
 	}
 }
 
+void UScriptableTask_WaitForLevelSequenceFinish::StopTask()
+{
+	// Cancel mid-wait: just stop listening. This task doesn't own the player, so we don't touch playback.
+	if (Player)
+	{
+		Player->OnFinished.RemoveDynamic(this, &UScriptableTask_WaitForLevelSequenceFinish::HandleSequenceFinished);
+	}
+}
+
 void UScriptableTask_WaitForLevelSequenceFinish::HandleSequenceFinished()
 {
 	Finish();

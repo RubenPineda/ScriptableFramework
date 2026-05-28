@@ -54,6 +54,7 @@ public:
 protected:
 	virtual void BeginTask() override;
 	virtual void FinishTask() override;
+	virtual void StopTask() override;
 	virtual void ResetTask() override;
 
 #if WITH_EDITOR
