@@ -1556,7 +1556,9 @@ void FScriptableGraphEditor::OnCleanGraph()
 	if (Graph->EntryNodeID.IsValid()) { Reachable.Add(Graph->EntryNodeID); Queue.Add(Graph->EntryNodeID); }
 	for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
 	{
-		if (Node && Node->IsA<UScriptableNode_ReceiveEvent>())
+		// ReceiveEvent: woken by FireEvent. Exit: fired directly by the runner at finish/cancel.
+		// Seed both so they and their downstream sub-flows are kept by Clean Graph.
+		if (Node && (Node->IsA<UScriptableNode_ReceiveEvent>() || Node->IsA<UScriptableNode_Exit>()))
 		{
 			bool bAlready = false;
 			Reachable.Add(Node->GetBindingID(), &bAlready);
