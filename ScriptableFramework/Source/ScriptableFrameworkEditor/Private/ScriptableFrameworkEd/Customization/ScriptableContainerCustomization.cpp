@@ -6,8 +6,10 @@
 #include "Widgets/SScriptableTypePicker.h"
 
 #include "ScriptableContainer.h"
+#include "ScriptableObject.h"
 #include "ScriptableObjectAsset.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "UObject/UObjectIterator.h"
 
 #include "DetailLayoutBuilder.h"
 #include "DetailWidgetRow.h"
@@ -349,18 +351,37 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 				return PropertyAndParent.Property.GetFName() == GET_MEMBER_NAME_CHECKED(FScriptableContainer, ContextDefinitions);
 			}));
 
-		// Callback: Reconstruct Bag on Change
+		// Callback: Reconstruct Bag on Change + cascade re-bake to nested tasks.
 		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda([ContainerInstance, this](const FPropertyChangedEvent& Event)
 			{
-				if (ContainerInstance)
+				if (!ContainerInstance) return;
+
+				StructHandle->NotifyPreChange();
+
+				ContainerInstance->ConstructContext();
+
+				if (StructHandle.IsValid())
 				{
-					StructHandle->NotifyPreChange();
+					StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+				}
 
-					ContainerInstance->ConstructContext();
+				// NotifyPostChange only fires PostEditChange on the owning UObject (often not a
+				// UScriptableObject), so the nested tasks never get their auto-bindings re-baked.
+				// Walk every UScriptableObject under the owning UObject(s) and re-bake explicitly.
+				TArray<UObject*> OuterObjects;
+				StructHandle->GetOuterObjects(OuterObjects);
+				for (UObject* OuterObj : OuterObjects)
+				{
+					if (!OuterObj) continue;
 
-					if (StructHandle.IsValid())
+					TArray<UObject*> NestedObjects;
+					GetObjectsWithOuter(OuterObj, NestedObjects, /*bIncludeNestedObjects*/ true);
+					for (UObject* NestedObj : NestedObjects)
 					{
-						StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+						if (UScriptableObject* SO = Cast<UScriptableObject>(NestedObj))
+						{
+							SO->BakeAutoBindings();
+						}
 					}
 				}
 			});

@@ -36,11 +36,10 @@ public:
 	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
 	virtual void PostDuplicate(bool bDuplicateForPIE) override;
 
-protected:
-	/** Centralized function to bake automatic bindings into memory. */
+public:
+	/** Re-bakes the auto-bindings on this object. Normally invoked via PreSave / PostEditChange / PostDuplicate; expose it so editor code that mutates context shape externally (e.g. the Context popup on FScriptableContainer) can trigger the refresh without going through those hooks. */
 	void BakeAutoBindings();
 
-public:
 	/**
 	 * Returns a user-friendly title of this condition.
 	 * Used by the Editor to display the condition in lists (e.g. "Health > 0").
