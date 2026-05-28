@@ -4,12 +4,12 @@
 #include "ScriptableTasks/ScriptableActionRunner.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
-UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction Action, const FScriptableContext& Context)
+UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction& Action, const FScriptableContext& Context)
 {
 	UAsyncRunScriptableAction* Node = NewObject<UAsyncRunScriptableAction>(Owner);
 
 	Node->ActionOwner = Owner;
-	Node->LaunchAction = MoveTemp(Action);
+	Node->SourceAction = &Action;
 	Node->LaunchContext = Context;
 
 	if (Owner)
@@ -24,25 +24,32 @@ void UAsyncRunScriptableAction::Activate()
 {
 	Super::Activate();
 
-	if (!ActionOwner)
+	if (!ActionOwner || !SourceAction)
 	{
 		SetReadyToDestroy();
 		return;
 	}
 
-	// FScriptableAction::Run creates a UScriptableActionRunner that owns the action and its tasks,
-	// applies the context, and starts execution. The runner survives until the action finishes.
-	Runner = FScriptableAction::Run(MoveTemp(LaunchAction), ActionOwner, LaunchContext);
+	// Spawn the runner and deep-copy the source action's tasks into it. Clone owns the new tasks via
+	// the Runner so the source BP variable is never mutated and concurrent runs don't share state.
+	Runner = NewObject<UScriptableActionRunner>(ActionOwner);
 	if (!Runner)
 	{
 		SetReadyToDestroy();
 		return;
 	}
 
+	FScriptableAction ClonedAction = SourceAction->Clone(Runner);
+	ClonedAction.SetContext(LaunchContext);
+	Runner->Launch(MoveTemp(ClonedAction), ActionOwner);
+
+	// Source pointer is consumed; the BP variable's lifetime is not ours.
+	SourceAction = nullptr;
+
 	// Hand the runner out immediately so callers can drive it (Cancel, IsRunning) while it runs.
 	Started.Broadcast(Runner);
 
-	// An empty-Tasks action finishes synchronously inside Run, before we could subscribe.
+	// An empty-Tasks action finishes synchronously inside Launch, before we could subscribe.
 	if (!Runner->IsRunning())
 	{
 		HandleActionFinished();
@@ -72,6 +79,7 @@ void UAsyncRunScriptableAction::SetReadyToDestroy()
 
 	Runner = nullptr;
 	ActionOwner = nullptr;
+	SourceAction = nullptr;
 
 	Super::SetReadyToDestroy();
 }
