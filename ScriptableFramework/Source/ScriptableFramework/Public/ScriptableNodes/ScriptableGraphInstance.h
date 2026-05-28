@@ -81,6 +81,7 @@ private:
 
 	void HandleNodePinFired(UScriptableNode* Node, FName OutputName);
 	void HandleNodeInactive(UScriptableNode* Node);
+	void HandleNodeRequestEvent(FName EventName);
 
 	void ProcessQueue();
 	void CheckCompletion();

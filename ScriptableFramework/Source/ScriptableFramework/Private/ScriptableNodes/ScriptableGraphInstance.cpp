@@ -63,6 +63,7 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 
 		Node->OnPinFiredNative.AddUObject(this, &UScriptableGraphInstance::HandleNodePinFired);
 		Node->OnNodeInactiveNative.AddUObject(this, &UScriptableGraphInstance::HandleNodeInactive);
+		Node->OnRequestEventNative.AddUObject(this, &UScriptableGraphInstance::HandleNodeRequestEvent);
 	}
 
 	// Activate the Entry node. Its synchronous Activate() will mark Out, fire it, and propagate.
@@ -170,6 +171,15 @@ void UScriptableGraphInstance::HandleNodeInactive(UScriptableNode* Node)
 	}
 }
 
+void UScriptableGraphInstance::HandleNodeRequestEvent(FName EventName)
+{
+	if (bCancelled || bFinished) return;
+
+	// A Go To node asked us to jump. FireEvent is re-entrant: inside the drain it just enqueues the
+	// target ReceiveEvent's downstream activations, which the running ProcessQueue then picks up.
+	FireEvent(EventName);
+}
+
 void UScriptableGraphInstance::ProcessQueue()
 {
 	if (bProcessing || bCancelled) return;
@@ -214,6 +224,7 @@ void UScriptableGraphInstance::TeardownNodes()
 		// Unsubscribe before tearing down so downstream notifications stay quiet.
 		Node->OnPinFiredNative.RemoveAll(this);
 		Node->OnNodeInactiveNative.RemoveAll(this);
+		Node->OnRequestEventNative.RemoveAll(this);
 
 		Node->Teardown();
 		Node->Unregister();
@@ -234,6 +245,7 @@ void UScriptableGraphInstance::Finish()
 		if (!Node) continue;
 		Node->OnPinFiredNative.RemoveAll(this);
 		Node->OnNodeInactiveNative.RemoveAll(this);
+		Node->OnRequestEventNative.RemoveAll(this);
 	}
 
 	OnGraphFinishedNative.Broadcast();
