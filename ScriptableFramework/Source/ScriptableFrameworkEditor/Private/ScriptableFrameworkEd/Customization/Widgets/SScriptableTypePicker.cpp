@@ -80,6 +80,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 		.OnGenerateRow(this, &SScriptableTypeSelector::GenerateNodeTypeRow)
 		.OnGetChildren(this, &SScriptableTypeSelector::GetNodeTypeChildren)
 		.OnSelectionChanged(this, &SScriptableTypeSelector::OnNodeTypeSelected)
+		.OnKeyDownHandler(this, &SScriptableTypeSelector::OnTreeKeyDown)
 		.OnExpansionChanged(this, &SScriptableTypeSelector::OnNodeTypeExpansionChanged);
 
 	// Restore category expansion state from previous use.
@@ -739,8 +740,9 @@ void SScriptableTypeSelector::GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem
 
 void SScriptableTypeSelector::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type Type)
 {
-	// Skip selection set via code, or if Selected Item is invalid
-	if (Type == ESelectInfo::Direct || !SelectedItem.IsValid())
+	// Only a mouse click commits. Keyboard navigation (OnNavigation) just moves the highlight — Enter
+	// commits via OnTreeKeyDown. Direct (code-driven) selection never commits.
+	if (Type != ESelectInfo::OnMouseClick || !SelectedItem.IsValid())
 	{
 		return;
 	}
@@ -749,6 +751,33 @@ void SScriptableTypeSelector::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem>
 	{
 		OnNodeTypePicked.Execute(SelectedItem->Struct, SelectedItem->AssetData);
 	}
+}
+
+void SScriptableTypeSelector::CommitSelection()
+{
+	if (!NodeTypeTree.IsValid()) return;
+
+	const TArray<TSharedPtr<FScriptableTypeItem>> Selected = NodeTypeTree->GetSelectedItems();
+	if (Selected.Num() == 1 && Selected[0].IsValid() && !Selected[0]->IsCategory() && OnNodeTypePicked.IsBound())
+	{
+		OnNodeTypePicked.Execute(Selected[0]->Struct, Selected[0]->AssetData);
+	}
+}
+
+FReply SScriptableTypeSelector::OnTreeKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::Enter && NodeTypeTree.IsValid())
+	{
+		const TArray<TSharedPtr<FScriptableTypeItem>> Selected = NodeTypeTree->GetSelectedItems();
+		if (Selected.Num() == 1 && Selected[0].IsValid() && !Selected[0]->IsCategory())
+		{
+			CommitSelection();
+			return FReply::Handled();
+		}
+	}
+
+	// Let the tree handle navigation keys (arrows, Home/End) and category Enter (expand/collapse).
+	return FReply::Unhandled();
 }
 
 void SScriptableTypeSelector::OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTypeItem> ExpandedItem, bool bInExpanded)

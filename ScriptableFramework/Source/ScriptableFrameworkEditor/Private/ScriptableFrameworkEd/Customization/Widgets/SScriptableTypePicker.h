@@ -125,6 +125,12 @@ private:
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const;
 	void OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type);
+
+	/** Commits the currently-selected (non-category) item via OnNodeTypePicked, if any. */
+	void CommitSelection();
+
+	/** Tree key handler: Enter commits the highlighted item; everything else falls through to navigation. */
+	FReply OnTreeKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent);
 	void OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTypeItem> ExpandedItem, bool bInExpanded);
 	void OnSearchBoxTextChanged(const FText& NewText);
 	int32 FilterNodeTypesChildren(const TArray<FString>& FilterStrings, const bool bParentMatches, const TArray<TSharedPtr<FScriptableTypeItem>>& SourceArray, TArray<TSharedPtr<FScriptableTypeItem>>& OutDestArray);
