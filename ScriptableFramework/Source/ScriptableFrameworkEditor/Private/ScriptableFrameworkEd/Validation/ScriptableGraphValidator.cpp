@@ -5,6 +5,7 @@
 #include "ScriptableNodes/ScriptableGraphConnection.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
+#include "ScriptableNodes/ScriptableNode_GoTo.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
@@ -294,6 +295,42 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
 				FText::Format(LOCTEXT("RunGraphIndirect", "RunGraph node '{0}' may form indirect cycle: {1}."), FText::FromString(GetNodeLabel(Node)), FText::FromString(PathStr)),
 				GValidatorId, Id));
+		}
+	}
+
+	// --- Go To targets: every Go To must point at an event some ReceiveEvent declares. ---
+	{
+		// Collect the named events declared in this graph.
+		TSet<FName> DeclaredEvents;
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			const UScriptableNode_ReceiveEvent* Receive = Cast<UScriptableNode_ReceiveEvent>(Node);
+			if (Receive && !Receive->EventName.IsNone())
+			{
+				DeclaredEvents.Add(Receive->EventName);
+			}
+		}
+
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			const UScriptableNode_GoTo* GoTo = Cast<UScriptableNode_GoTo>(Node);
+			if (!GoTo) continue;
+
+			const FGuid Id = Node->GetBindingID();
+
+			if (GoTo->TargetEvent.IsNone())
+			{
+				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
+					FText::Format(LOCTEXT("GoToUnset", "Go To node '{0}' has no target event set."), FText::FromString(GetNodeLabel(Node))),
+					GValidatorId, Id));
+			}
+			else if (!DeclaredEvents.Contains(GoTo->TargetEvent))
+			{
+				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("GoToMissing", "Go To node '{0}' targets event '{1}', which no ReceiveEvent node declares."),
+						FText::FromString(GetNodeLabel(Node)), FText::FromName(GoTo->TargetEvent)),
+					GValidatorId, Id));
+			}
 		}
 	}
 
