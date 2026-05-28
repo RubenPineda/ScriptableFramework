@@ -23,7 +23,7 @@ public:
 	 * Runs a UScriptableGraph asset. Started fires immediately with the live runner (use it to send
 	 * events or mutate context while it runs); Finished fires when the graph completes, with the same runner.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Graph"))
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Graph", AutoCreateRefTerm = "Context"))
 	static UAsyncRunScriptableGraph* RunScriptableGraph(UObject* Owner, UScriptableGraph* Graph, const FScriptableContext& Context);
 
 	/** Fired right after the graph launches. Carries the live runner. */

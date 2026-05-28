@@ -26,7 +26,7 @@ public:
 	 * Takes the action by ref because BP's by-value UFUNCTION copy does not preserve Instanced
 	 * subobjects (Tasks) inside a struct; we deep-copy it into the runner at Activate via Clone.
 	 */
-	UFUNCTION(BlueprintCallable, Category = ScriptableAction, meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Action"))
+	UFUNCTION(BlueprintCallable, Category = ScriptableAction, meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Action", AutoCreateRefTerm = "Context"))
 	static UAsyncRunScriptableAction* RunScriptableAction(UObject* Owner, UPARAM(ref) FScriptableAction& Action, const FScriptableContext& Context);
 
 	/** Fired right after the action launches. Carries the live runner. */
