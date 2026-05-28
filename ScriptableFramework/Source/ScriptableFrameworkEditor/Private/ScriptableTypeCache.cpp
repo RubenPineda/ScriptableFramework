@@ -144,7 +144,7 @@ FScriptableTypeCache::~FScriptableTypeCache()
 
 void FScriptableTypeCache::AddRootStruct(UStruct* RootStruct)
 {
-	if (RootClasses.ContainsByPredicate([RootStruct](const FRootClassContainer& RootClass){ return RootClass.BaseStruct == RootStruct; }))
+	if (RootClasses.ContainsByPredicate([RootStruct](const FRootClassContainer& RootClass){ return RootClass.BaseStruct.Get() == RootStruct; }))
 	{
 		return;
 	}
@@ -158,7 +158,11 @@ void FScriptableTypeCache::GetStructs(const UStruct* BaseStruct, TArray<TSharedP
 {
 	AvailableClasses.Reset();
 	
-	const int32 RootClassIndex = RootClasses.IndexOfByPredicate([BaseStruct](const FRootClassContainer& RootClass){ return RootClass.BaseStruct == BaseStruct; });
+	// Compare the resolved struct against the raw pointer. Using the weak-ptr's operator==(raw) would
+	// construct a FWeakObjectPtr from BaseStruct and dereference it, crashing if a stale/garbage class
+	// reaches here (e.g. a picker opened from a customization whose handle outlived its data). A stale
+	// BaseStruct simply fails to match and yields an empty list instead of an access violation.
+	const int32 RootClassIndex = RootClasses.IndexOfByPredicate([BaseStruct](const FRootClassContainer& RootClass){ return RootClass.BaseStruct.Get() == BaseStruct; });
 	if (RootClassIndex != INDEX_NONE)
 	{
 		const FRootClassContainer& RootClass = RootClasses[RootClassIndex];
