@@ -170,25 +170,30 @@ void FScriptableAction::Finish(bool bForce)
 {
 	if (!bIsRunning && !bForce) return;
 
-	for (UScriptableTask* Task : Tasks)
-	{
-		if (Task)
-		{
-			Task->OnTaskFinishNative.RemoveAll(this);
-			Task->OnTaskStoppedNative.RemoveAll(this);
-			if (bForce)
-			{
-				Task->Stop();
-			}
-			else
-			{
-				Task->Finish();
-			}
-		}
-	}
-
+	// Clear running state up-front so any cascade (a Stop-triggered broadcast, a re-entrant Finish via
+	// a sub-task's handler, etc.) sees us as already finishing and bails early.
 	bIsRunning = false;
 	CurrentTaskIndex = 0;
+
+	// Snapshot the tasks: handlers fired during teardown could mutate the array under us.
+	const TArray<TObjectPtr<UScriptableTask>> TasksSnapshot = Tasks;
+	for (UScriptableTask* Task : TasksSnapshot)
+	{
+		// IsValid guards against a task whose outer was destroyed (e.g. PIE end while still running) and
+		// whose delegates would be in an invalid state if touched.
+		if (!IsValid(Task)) continue;
+
+		Task->OnTaskFinishNative.RemoveAll(this);
+		Task->OnTaskStoppedNative.RemoveAll(this);
+		if (bForce)
+		{
+			Task->Stop();
+		}
+		else
+		{
+			Task->Finish();
+		}
+	}
 
 	OnActionFinish.Broadcast();
 }

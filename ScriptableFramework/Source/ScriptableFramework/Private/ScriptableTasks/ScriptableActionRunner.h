@@ -29,7 +29,9 @@ private:
 	/** Force-finishes the action. Called by the subsystem on world teardown (before GC), where task Stop events are safe. */
 	void CancelFromSubsystem();
 
-	/** The action lives here. Stable address for the duration of this UObject. */
+	/** The action lives here. UPROPERTY so reflection roots its Tasks via this runner — without it the
+	 * tasks rely on their original outers and can be GC'd at PIE end while the subsystem still holds us. */
+	UPROPERTY()
 	FScriptableAction Action;
 
 	/** Launch owner; world context used to resolve the subsystem for register/unregister. */
