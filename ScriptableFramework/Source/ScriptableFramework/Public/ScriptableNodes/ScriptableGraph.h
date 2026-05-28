@@ -53,7 +53,12 @@ public:
 
 protected:
 	//~ UScriptableObjectAsset interface
-	virtual FInstancedPropertyBag* GetContext() override { return &ContextBag; }
+	/** Keeps the transient bag in sync with the declared shape so binding discovery always sees the context (e.g. during a save re-bake), then returns it. */
+	virtual FInstancedPropertyBag* GetContext() override
+	{
+		if (IsContextBagOutOfSync()) { RebuildContextBag(); }
+		return &ContextBag;
+	}
 
 #if WITH_EDITOR
 	virtual FName GetContainerName() const override { return NAME_None; }

@@ -515,6 +515,14 @@ bool FScriptablePropertyUtilities::FindAutoBindingPath(const FProperty* TargetPr
 	// Search through all available contexts (Global, Local, Owner, etc.)
 	for (const FPropertyBindingBindableStructDescriptor& ContextDesc : AccessibleStructs)
 	{
+		// Auto-binding only ever targets the Context (empty ID). Sibling/cross-node sources carry a
+		// valid ID and must be wired manually; auto-matching them by name/type would silently re-route
+		// a context binding to another node, which then fails to resolve at runtime.
+		if (ContextDesc.ID.IsValid())
+		{
+			continue;
+		}
+
 		const UStruct* Struct = ContextDesc.Struct.Get();
 		if (!Struct)
 		{
