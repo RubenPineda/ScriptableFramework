@@ -22,8 +22,8 @@ DECLARE_MULTICAST_DELEGATE(FScriptableGraphFinishedNative);
  * Deep-copies the asset's nodes, reads its connections as immutable lookup data, pumps activations
  * through the pin-based model, and tears itself down when no active work remains.
  */
-UCLASS()
-class UScriptableGraphInstance : public UObject
+UCLASS(BlueprintType)
+class SCRIPTABLEFRAMEWORK_API UScriptableGraphInstance : public UObject
 {
 	GENERATED_BODY()
 
