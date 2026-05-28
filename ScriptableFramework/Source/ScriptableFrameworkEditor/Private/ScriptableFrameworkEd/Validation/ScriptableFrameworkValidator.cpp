@@ -52,8 +52,9 @@ EDataValidationResult UScriptableFrameworkValidator::ValidateLoadedAsset_Impleme
 		UScriptableObject* Obj = Cast<UScriptableObject>(RawObj);
 		if (!Obj) continue;
 
-		// Sanitize
-		Obj->GetPropertyBindings().SanitizeObsoleteBindings(Obj);
+		// NOTE: validation must be read-only. We deliberately do NOT call SanitizeObsoleteBindings here:
+		// it clears all auto-bindings (without re-baking), so running it on save wiped valid bindings
+		// from the asset. Stale-binding cleanup belongs to BakeAutoBindings (PreSave / edit), not here.
 
 		// Rebuild available contexts without relying on UI Handles
 		TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
