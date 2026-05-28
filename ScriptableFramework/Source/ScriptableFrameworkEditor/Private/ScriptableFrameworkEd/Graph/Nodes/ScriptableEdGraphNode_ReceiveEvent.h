@@ -19,8 +19,13 @@ public:
 	UScriptableEdGraphNode_ReceiveEvent();
 
 	//~ UEdGraphNode interface
+	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
 	virtual FLinearColor GetNodeTitleColor() const override;
 	virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
 	virtual bool ShowPaletteIconOnNode() const override { return true; }
+
+	/** F2 / inline rename edits the event's name directly on the node. */
+	virtual bool GetCanRenameNode() const override { return true; }
+	virtual void OnRenameNode(const FString& NewName) override;
 	//~ End of UEdGraphNode interface
 };

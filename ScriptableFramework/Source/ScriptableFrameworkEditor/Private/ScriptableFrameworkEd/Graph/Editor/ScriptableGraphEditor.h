@@ -68,6 +68,10 @@ private:
 	/** Opens the asset a node points to (a Blueprint task, an Action asset, or a sub-graph). No-op for nodes with no associated asset. */
 	void OnNodeDoubleClicked(class UEdGraphNode* Node);
 
+	/** Rename command (F2): requests inline title editing on the selected renameable node (e.g. an Event node). */
+	void OnRenameSelectedNode();
+	bool CanRenameSelectedNode() const;
+
 	/** Reconstructs the ed-node whose runtime node changed, keeping dynamic titles/pins in sync with details-panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
 

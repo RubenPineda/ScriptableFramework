@@ -714,6 +714,11 @@ void FScriptableGraphEditor::BindGraphCommands()
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnSelectAllNodes),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanSelectAll));
 
+	// Rename (F2): inline-edit the selected node's title (e.g. an Event node's name).
+	Commands->MapAction(Generic.Rename,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRenameSelectedNode),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRenameSelectedNode));
+
 	Commands->MapAction(FGraphEditorCommands::Get().CreateComment,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCreateComment));
 
@@ -1205,6 +1210,37 @@ void FScriptableGraphEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
 	{
 		GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(AssetToOpen);
 	}
+}
+
+void FScriptableGraphEditor::OnRenameSelectedNode()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	for (UObject* Obj : GraphEditorWidget->GetSelectedNodes())
+	{
+		UEdGraphNode* Node = Cast<UEdGraphNode>(Obj);
+		if (Node && Node->GetCanRenameNode())
+		{
+			// Requesting title visibility with bRequestRename triggers the node's inline edit field.
+			GraphEditorWidget->IsNodeTitleVisible(Node, /*bRequestRename*/ true);
+			break;
+		}
+	}
+}
+
+bool FScriptableGraphEditor::CanRenameSelectedNode() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+
+	const FGraphPanelSelectionSet Selected = GraphEditorWidget->GetSelectedNodes();
+	if (Selected.Num() != 1) return false;
+
+	for (UObject* Obj : Selected)
+	{
+		const UEdGraphNode* Node = Cast<UEdGraphNode>(Obj);
+		if (Node && Node->GetCanRenameNode()) return true;
+	}
+	return false;
 }
 
 void FScriptableGraphEditor::OnRemoveSequencePin()
