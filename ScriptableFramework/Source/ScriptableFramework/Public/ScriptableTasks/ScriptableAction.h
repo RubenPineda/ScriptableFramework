@@ -8,6 +8,7 @@
 
 class UScriptableObject;
 class UScriptableTask;
+class UScriptableActionRunner;
 struct FScriptableContext;
 
 DECLARE_MULTICAST_DELEGATE(FScriptableActionNativeDelegate);
@@ -82,20 +83,17 @@ public:
 	void Run(UObject* Owner);
 
 	/**
-	 * Fire-and-forget overload. Takes ownership of the action: the caller's value
-	 * is moved into a runtime owner that keeps it alive until OnActionFinish.
-	 *
-	 * Use this when you don't need to query or control the action after starting it.
-	 * If you want to keep a reference (to call Reset, IsRunning, etc.), store the
-	 * action as a member and call the instance Run() instead.
+	 * Takes ownership of the action: the caller's value is moved into a runtime UScriptableActionRunner
+	 * that keeps it (and its tasks) alive until OnActionFinish. Returns the runner so callers can cancel
+	 * or query state; ignore the return for fire-and-forget.
 	 */
-	static void Run(FScriptableAction&& Action, UObject* Owner);
+	static UScriptableActionRunner* Run(FScriptableAction&& Action, UObject* Owner);
 
 	/** Executes the action using values from an external context. The external context's values replace the internal bag values for this execution. */
 	void Run(UObject* Owner, const FScriptableContext& Context);
 
-	/** Fire-and-forget overload with external context. */
-	static void Run(FScriptableAction&& Action, UObject* Owner, const FScriptableContext& Context);
+	/** As above, with external context applied before launch. */
+	static UScriptableActionRunner* Run(FScriptableAction&& Action, UObject* Owner, const FScriptableContext& Context);
 
 	/**
 	 * Reverts the action's effects and cleans up memory.

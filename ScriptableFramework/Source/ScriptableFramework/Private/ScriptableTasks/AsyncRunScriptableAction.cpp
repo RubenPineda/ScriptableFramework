@@ -1,14 +1,16 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableTasks/AsyncRunScriptableAction.h"
+#include "ScriptableTasks/ScriptableActionRunner.h"
 #include "ScriptableTasks/ScriptableTask.h"
 
-UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction& Action)
+UAsyncRunScriptableAction* UAsyncRunScriptableAction::RunScriptableAction(UObject* Owner, FScriptableAction Action, const FScriptableContext& Context)
 {
 	UAsyncRunScriptableAction* Node = NewObject<UAsyncRunScriptableAction>(Owner);
 
 	Node->ActionOwner = Owner;
-	Node->TargetAction = &Action;
+	Node->LaunchAction = MoveTemp(Action);
+	Node->LaunchContext = Context;
 
 	if (Owner)
 	{
@@ -22,33 +24,53 @@ void UAsyncRunScriptableAction::Activate()
 {
 	Super::Activate();
 
-	if (!ActionOwner || !TargetAction)
+	if (!ActionOwner)
 	{
 		SetReadyToDestroy();
 		return;
 	}
 
-	TargetAction->OnActionFinish.RemoveAll(this);
-	TargetAction->OnActionFinish.AddUObject(this, &UAsyncRunScriptableAction::HandleActionFinished);
+	// FScriptableAction::Run creates a UScriptableActionRunner that owns the action and its tasks,
+	// applies the context, and starts execution. The runner survives until the action finishes.
+	Runner = FScriptableAction::Run(MoveTemp(LaunchAction), ActionOwner, LaunchContext);
+	if (!Runner)
+	{
+		SetReadyToDestroy();
+		return;
+	}
 
-	TargetAction->Run(ActionOwner);
+	// Hand the runner out immediately so callers can drive it (Cancel, IsRunning) while it runs.
+	Started.Broadcast(Runner);
+
+	// An empty-Tasks action finishes synchronously inside Run, before we could subscribe.
+	if (!Runner->IsRunning())
+	{
+		HandleActionFinished();
+		return;
+	}
+
+	Runner->OnFinishedNative.AddUObject(this, &UAsyncRunScriptableAction::HandleActionFinished);
 }
 
 void UAsyncRunScriptableAction::HandleActionFinished()
 {
-	if (TargetAction)
+	if (Runner)
 	{
-		TargetAction->OnActionFinish.RemoveAll(this);
-		TargetAction->Reset();
+		Runner->OnFinishedNative.RemoveAll(this);
 	}
 
-	OnFinish.Broadcast();
+	Finished.Broadcast(Runner);
 	SetReadyToDestroy();
 }
 
 void UAsyncRunScriptableAction::SetReadyToDestroy()
 {
-	TargetAction = nullptr;
+	if (Runner)
+	{
+		Runner->OnFinishedNative.RemoveAll(this);
+	}
+
+	Runner = nullptr;
 	ActionOwner = nullptr;
 
 	Super::SetReadyToDestroy();

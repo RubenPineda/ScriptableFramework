@@ -1,6 +1,6 @@
 // Copyright 2026 kirzo
 
-#include "ScriptableActionRunner.h"
+#include "ScriptableTasks/ScriptableActionRunner.h"
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 
 void UScriptableActionRunner::Launch(FScriptableAction&& InAction, UObject* InOwner)
@@ -22,6 +22,9 @@ void UScriptableActionRunner::Launch(FScriptableAction&& InAction, UObject* InOw
 
 void UScriptableActionRunner::HandleActionFinished()
 {
+	// Notify external subscribers (e.g. the async BP node) before we detach from the subsystem.
+	OnFinishedNative.Broadcast();
+
 	// Unregister; once the subsystem drops its strong ref we become collectible. The action's own
 	// cleanup happened inside Finish() already.
 	if (UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(Owner))
@@ -30,10 +33,11 @@ void UScriptableActionRunner::HandleActionFinished()
 	}
 }
 
-void UScriptableActionRunner::CancelFromSubsystem()
+void UScriptableActionRunner::Cancel()
 {
-	// Called from world teardown, before GC — safe to fire task Stop events. The finish callback
-	// (HandleActionFinished) unregisters us.
+	// Force-finish the action. OnActionFinish -> HandleActionFinished unregisters us. Used both by
+	// user code (manual cancel) and by the subsystem on world teardown — task Stop events are safe
+	// in either context (world teardown calls this before GC).
 	if (Action.IsRunning())
 	{
 		Action.Finish(/*bForce=*/true);

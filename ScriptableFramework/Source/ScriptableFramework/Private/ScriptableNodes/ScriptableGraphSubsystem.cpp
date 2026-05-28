@@ -102,7 +102,7 @@ void UScriptableGraphSubsystem::CancelAllActionRunners()
 	{
 		if (Runner)
 		{
-			Runner->CancelFromSubsystem();
+			Runner->Cancel();
 		}
 	}
 
