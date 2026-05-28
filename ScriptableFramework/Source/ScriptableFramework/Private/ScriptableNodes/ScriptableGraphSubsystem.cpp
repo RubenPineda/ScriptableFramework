@@ -36,13 +36,15 @@ UScriptableGraphInstance* UScriptableGraphSubsystem::RunGraph(const UObject* Wor
 
 void UScriptableGraphSubsystem::CancelAllRunners()
 {
-	// Iterate a copy: each Cancel() routes through Finish(), which unregisters from ActiveRunners.
+	// Iterate a copy: each cancel routes through Finish(), which unregisters from ActiveRunners.
+	// Use CancelImmediate (not Cancel): during world teardown we must skip the Exit cleanup sub-flow,
+	// since the world and any actors it would touch are being destroyed.
 	const TArray<TObjectPtr<UScriptableGraphInstance>> RunnersCopy = ActiveRunners;
 	for (const TObjectPtr<UScriptableGraphInstance>& Runner : RunnersCopy)
 	{
 		if (Runner)
 		{
-			Runner->Cancel();
+			Runner->CancelImmediate();
 		}
 	}
 

@@ -3,6 +3,7 @@
 #include "ScriptableNodes/ScriptableGraphInstance.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableContext.h"
@@ -41,6 +42,16 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 		if (UScriptableObject* Proxy = NodeCopy->GetBindingProxy())
 		{
 			NodeBindingMap.Add(Proxy->GetBindingID(), Proxy);
+		}
+	}
+
+	// Cache the Exit node, if any. First one wins; the validator flags graphs with more than one.
+	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
+	{
+		if (UScriptableNode_Exit* Exit = Cast<UScriptableNode_Exit>(Node))
+		{
+			ExitNode = Exit;
+			break;
 		}
 	}
 
@@ -114,11 +125,35 @@ void UScriptableGraphInstance::Cancel()
 {
 	if (bCancelled || bFinished) return;
 
+	// With an unfired Exit node: run only its Cancelled cleanup sub-flow. Abort the in-flight normal
+	// nodes and drop their pending activations first so the cancel takes effect immediately, then fire
+	// "Cancelled". We intentionally do NOT set bCancelled here — that would block ProcessQueue from
+	// draining the cleanup. Once the cleanup empties, CheckCompletion runs Finish (bExitTriggered is set,
+	// so it won't re-fire the Exit).
+	if (!bExitTriggered && ExitNode)
+	{
+		bExitTriggered = true;
+		Pending.Empty();
+		TeardownNodes();
+		HandleNodePinFired(ExitNode, UScriptableNode_Exit::CancelledOutputName);
+		return;
+	}
+
+	// No Exit (or it already fired): cancelled graphs never propagate further — tear down now.
 	bCancelled = true;
-
-	// Drop anything queued; cancelled graphs never propagate further.
 	Pending.Empty();
+	TeardownNodes();
+	Finish();
+}
 
+void UScriptableGraphInstance::CancelImmediate()
+{
+	if (bCancelled || bFinished) return;
+
+	// World teardown path: the world and any actors the Exit sub-flow might touch are being destroyed,
+	// so skip the Exit entirely and tear down aggressively (this is the pre-Exit Cancel behavior).
+	bCancelled = true;
+	Pending.Empty();
 	TeardownNodes();
 	Finish();
 }
@@ -211,6 +246,15 @@ void UScriptableGraphInstance::CheckCompletion()
 	if (bFinished || bCancelled) return;
 	if (!ActiveNodes.IsEmpty()) return;
 	if (!Pending.IsEmpty()) return;
+
+	// Natural completion: run the Exit's cleanup sub-flow once before finishing. Firing "Finished"
+	// enqueues its downstream; the queue drains and we return here with bExitTriggered set, then Finish.
+	if (!bExitTriggered && ExitNode)
+	{
+		bExitTriggered = true;
+		HandleNodePinFired(ExitNode, UScriptableNode_Exit::FinishedOutputName);
+		return;
+	}
 
 	Finish();
 }

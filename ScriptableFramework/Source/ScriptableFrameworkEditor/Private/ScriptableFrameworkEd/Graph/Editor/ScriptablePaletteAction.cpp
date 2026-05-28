@@ -5,6 +5,10 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
+#include "EdGraph/EdGraph.h"
+#include "Framework/Notifications/NotificationManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
@@ -67,6 +71,22 @@ UEdGraphNode* FScriptablePaletteAction::PerformAction(UEdGraph* ParentGraph, TAr
 	}
 	if (Class->IsChildOf(UScriptableNode::StaticClass()))
 	{
+		// Exit is unique per graph: refuse a second one (the validator also enforces this).
+		if (Class->IsChildOf(UScriptableNode_Exit::StaticClass()))
+		{
+			for (const UEdGraphNode* EdNode : ParentGraph->Nodes)
+			{
+				const UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+				if (SfEd && SfEd->GetRuntimeNode() && SfEd->GetRuntimeNode()->IsA<UScriptableNode_Exit>())
+				{
+					FNotificationInfo Info(NSLOCTEXT("ScriptablePaletteAction", "OneExit", "A graph can only have one Exit node."));
+					Info.ExpireDuration = 3.0f;
+					FSlateNotificationManager::Get().AddNotification(Info);
+					return nullptr;
+				}
+			}
+		}
+
 		return ScriptableGraphEditorHelpers::SpawnNativeNode(ParentGraph, const_cast<UClass*>(Class), Location, FromPin, bSelectNewNode);
 	}
 

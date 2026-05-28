@@ -12,6 +12,7 @@ FLinearColor FScriptableFrameworkEditorStyle::NegateColor = FLinearColor(0.8f, 0
 FLinearColor FScriptableFrameworkEditorStyle::ContextColor = FLinearColor(0.32f, 0.65f, 0.52f);
 
 FLinearColor FScriptableFrameworkEditorStyle::ScriptableEntryNodeColor = FLinearColor(0.35f, 0.95f, 0.05f);
+FLinearColor FScriptableFrameworkEditorStyle::ScriptableExitNodeColor = FLinearColor(0.8f, 0.08f, 0.08f);
 FLinearColor FScriptableFrameworkEditorStyle::ScriptableSystemNodeColor = FLinearColor(0.12f, 0.12f, 0.14f);
 
 FScriptableFrameworkEditorStyle::FScriptableFrameworkEditorStyle()

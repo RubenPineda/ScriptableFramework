@@ -20,5 +20,6 @@ public:
 	static FLinearColor ContextColor;
 
 	static FLinearColor ScriptableEntryNodeColor;
+	static FLinearColor ScriptableExitNodeColor;
 	static FLinearColor ScriptableSystemNodeColor;
 };

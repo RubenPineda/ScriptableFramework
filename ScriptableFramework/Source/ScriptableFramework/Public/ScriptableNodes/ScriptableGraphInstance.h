@@ -11,6 +11,7 @@
 
 class UScriptableObject;
 class UScriptableNode;
+class UScriptableNode_Exit;
 class UScriptableGraphSubsystem;
 struct FScriptableContext;
 
@@ -88,6 +89,9 @@ private:
 	void TeardownNodes();
 	void Finish();
 
+	/** Subsystem-driven cancel during world teardown: skips the Exit cleanup sub-flow and tears down immediately. */
+	void CancelImmediate();
+
 	/** Source asset. Connections are read directly from here, not copied. */
 	UPROPERTY()
 	TObjectPtr<UScriptableGraph> Asset;
@@ -116,6 +120,13 @@ private:
 
 	/** Nodes with at least one active pin. */
 	TSet<TObjectPtr<UScriptableNode>> ActiveNodes;
+
+	/** Cached Exit node if the asset declares one. Null when the graph has no Exit. */
+	UPROPERTY(Transient)
+	TObjectPtr<UScriptableNode_Exit> ExitNode;
+
+	/** True once the Exit's Finished/Cancelled output has been fired. Prevents re-triggering it. */
+	bool bExitTriggered = false;
 
 	/** FIFO of pending input activations. Drained by ProcessQueue. */
 	TArray<FPendingActivation> Pending;

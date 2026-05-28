@@ -6,6 +6,7 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableNode_GoTo.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
@@ -161,6 +162,17 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 		}
 	}
 
+	// The Exit node is an internal entry point (the runner fires its outputs directly), so seed it too.
+	// This keeps the Exit and its cleanup sub-flow out of the orphan/reachability check below.
+	for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+	{
+		if (Cast<UScriptableNode_Exit>(Node))
+		{
+			const FGuid Id = Node->GetBindingID();
+			if (Id.IsValid()) Seeds.AddUnique(Id);
+		}
+	}
+
 	// --- Connection validation + forward adjacency (From -> To) used by reachability and cycle checks. ---
 	TMultiMap<FGuid, FGuid> Adjacency;
 	for (const FScriptableGraphConnection& Conn : Graph->Connections)
@@ -295,6 +307,23 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
 				FText::Format(LOCTEXT("RunGraphIndirect", "RunGraph node '{0}' may form indirect cycle: {1}."), FText::FromString(GetNodeLabel(Node)), FText::FromString(PathStr)),
 				GValidatorId, Id));
+		}
+	}
+
+	// --- Exit nodes: at most one per graph. Flag every Exit past the first. ---
+	{
+		bool bSeenExit = false;
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (!Cast<UScriptableNode_Exit>(Node)) continue;
+
+			if (bSeenExit)
+			{
+				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+					LOCTEXT("MultipleExit", "Graph has multiple Exit nodes; only one is allowed."),
+					GValidatorId, Node->GetBindingID()));
+			}
+			bSeenExit = true;
 		}
 	}
 

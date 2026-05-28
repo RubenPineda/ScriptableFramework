@@ -12,6 +12,7 @@
 #include "ScriptableNodes/ScriptableNode_AND.h"
 #include "ScriptableNodes/ScriptableNode_Branch.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
 #include "ScriptableFrameworkEditorHelpers.h"
@@ -647,7 +648,28 @@ void FScriptableGraphEditor::OnNodeMenuTypePicked(const UStruct* InStruct, const
 			}
 			else if (PickedClass->IsChildOf(UScriptableNode::StaticClass()))
 			{
-				SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+				// Exit is unique per graph: refuse a second one (the validator also enforces this).
+				bool bBlockedExit = false;
+				if (PickedClass->IsChildOf(UScriptableNode_Exit::StaticClass()) && InGraph)
+				{
+					for (const UEdGraphNode* EdNode : InGraph->Nodes)
+					{
+						const UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+						if (SfEd && SfEd->GetRuntimeNode() && SfEd->GetRuntimeNode()->IsA<UScriptableNode_Exit>())
+						{
+							FNotificationInfo Info(LOCTEXT("OneExit", "A graph can only have one Exit node."));
+							Info.ExpireDuration = 3.0f;
+							FSlateNotificationManager::Get().AddNotification(Info);
+							bBlockedExit = true;
+							break;
+						}
+					}
+				}
+
+				if (!bBlockedExit)
+				{
+					SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(InGraph, const_cast<UClass*>(PickedClass), InLocation, FromPin, /*bSelectNewNode*/ true);
+				}
 			}
 		}
 	}
