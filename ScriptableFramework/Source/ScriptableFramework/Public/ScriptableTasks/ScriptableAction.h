@@ -34,6 +34,7 @@ struct SCRIPTABLEFRAMEWORK_API FScriptableAction : public FScriptableContainer
 	GENERATED_BODY()
 
 	friend class UScriptableTask_RunAsset;
+	friend class UScriptableTask_NestedAction;
 	friend class UScriptableActionRunner;
 
 public:

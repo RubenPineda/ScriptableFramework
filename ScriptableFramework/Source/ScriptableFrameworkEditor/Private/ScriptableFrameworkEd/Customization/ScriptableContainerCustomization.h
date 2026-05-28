@@ -57,6 +57,12 @@ protected:
 	virtual FSlateColor GetModeColor() const = 0;
 	virtual FText GetModeTooltip() const = 0;
 
+public:
+	/** When false, the Context (parameters) button stays hidden. Wrapper customizations such as
+	 * NestedRequirement / NestedAction flip this off on the inner customization so the inner unit
+	 * inherits its parent scope instead of carrying its own context. */
+	bool bShowContextButton = true;
+
 protected:
 	TSharedPtr<IPropertyHandle> StructHandle;
 	TSharedPtr<IPropertyHandle> ListHandle;

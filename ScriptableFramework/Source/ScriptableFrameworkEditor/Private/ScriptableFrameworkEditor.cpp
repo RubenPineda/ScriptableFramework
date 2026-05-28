@@ -20,8 +20,11 @@
 #include "ScriptableFrameworkEd/Customization/ScriptableRequirementCustomization.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableConditionCustomization.h"
 
-#include "ScriptableConditions/ScriptableCondition_Group.h"
-#include "ScriptableFrameworkEd/Customization/ScriptableConditionGroupCustomization.h"
+#include "ScriptableConditions/ScriptableCondition_NestedRequirement.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableConditionNestedRequirementCustomization.h"
+
+#include "ScriptableTasks/ScriptableTask_NestedAction.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableTaskNestedActionCustomization.h"
 
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
@@ -51,7 +54,8 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	RegisterPropertyLayout<UScriptableCondition, FScriptableConditionCustomization>();
 	RegisterPropertyLayout<FScriptableAction, FScriptableActionCustomization>();
 	RegisterPropertyLayout<FScriptableRequirement, FScriptableRequirementCustomization>();
-	RegisterPropertyLayout<UScriptableCondition_Group, FScriptableConditionGroupCustomization>();
+	RegisterPropertyLayout<UScriptableCondition_NestedRequirement, FScriptableConditionNestedRequirementCustomization>();
+	RegisterPropertyLayout<UScriptableTask_NestedAction, FScriptableTaskNestedActionCustomization>();
 
 	RegisterPinFactory<FScriptableGraphPinFactory>();
 	RegisterNodeFactory<FScriptableGraphNodeFactory>();

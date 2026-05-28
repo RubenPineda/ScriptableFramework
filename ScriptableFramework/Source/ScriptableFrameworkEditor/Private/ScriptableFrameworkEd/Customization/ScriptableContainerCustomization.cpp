@@ -241,6 +241,12 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 
 EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() const
 {
+	// Explicit opt-out from the wrapping customization (e.g. NestedRequirement / NestedAction).
+	if (!bShowContextButton)
+	{
+		return EVisibility::Collapsed;
+	}
+
 	// Hide button if wrapped or if multiple items are selected
 	if (StructHandle->GetNumPerObjectValues() > 1)
 	{

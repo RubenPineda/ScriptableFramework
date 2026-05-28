@@ -8,13 +8,14 @@
 class SComboButton;
 
 /**
- * Customization for UScriptableCondition_Group.
- * Merges the Group Object UI with the Inner Requirement UI.
+ * Customization for UScriptableCondition_NestedRequirement. Merges the wrapper condition's header
+ * (checkbox, mode toggle, rename field) with the inner FScriptableRequirement's UI, and hides the
+ * inner Context button so the nested unit inherits the parent scope instead of declaring its own.
  */
-class FScriptableConditionGroupCustomization : public FScriptableConditionCustomization
+class FScriptableConditionNestedRequirementCustomization : public FScriptableConditionCustomization
 {
 public:
-	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableConditionGroupCustomization); }
+	static TSharedRef<IPropertyTypeCustomization> MakeInstance() { return MakeShareable(new FScriptableConditionNestedRequirementCustomization); }
 
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 
@@ -26,7 +27,7 @@ private:
 	/** Helper instance to handle the inner requirement logic */
 	TSharedPtr<class FScriptableRequirementCustomization> RequirementCustomization;
 
-	FText GetGroupName() const;
-	void OnGroupNameCommitted(const FText& NewText, ETextCommit::Type CommitInfo);
-	bool VerifyGroupNameChanged(const FText& NewText, FText& OutErrorMessage);
+	FText GetRequirementName() const;
+	void OnRequirementNameCommitted(const FText& NewText, ETextCommit::Type CommitInfo);
+	bool VerifyRequirementNameChanged(const FText& NewText, FText& OutErrorMessage);
 };

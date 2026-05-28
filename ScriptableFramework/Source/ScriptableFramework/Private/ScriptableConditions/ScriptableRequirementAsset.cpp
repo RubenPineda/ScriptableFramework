@@ -2,7 +2,7 @@
 
 #include "ScriptableConditions/ScriptableRequirementAsset.h"
 #include "ScriptableConditions/ScriptableCondition.h"
-#include "ScriptableConditions/ScriptableCondition_Group.h"
+#include "ScriptableConditions/ScriptableCondition_NestedRequirement.h"
 
 void UScriptableCondition_Asset::OnRegister()
 {
@@ -12,7 +12,7 @@ void UScriptableCondition_Asset::OnRegister()
 	{
 		// 1. Create a transient Group to act as the runtime container.
 		// We use a Group because it already encapsulates the logic for FScriptableRequirement (Evaluation + Bindings).
-		UScriptableCondition_Group* Group = NewObject<UScriptableCondition_Group>(this, NAME_None, RF_Transient);
+		UScriptableCondition_NestedRequirement* Group = NewObject<UScriptableCondition_NestedRequirement>(this, NAME_None, RF_Transient);
 
 		if (Group)
 		{
