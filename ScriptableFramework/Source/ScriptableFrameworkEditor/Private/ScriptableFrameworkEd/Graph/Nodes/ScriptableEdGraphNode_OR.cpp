@@ -18,9 +18,10 @@ UScriptableEdGraphNode_OR::UScriptableEdGraphNode_OR()
 
 FSlateIcon UScriptableEdGraphNode_OR::GetIconAndTint(FLinearColor& OutColor) const
 {
-	// Reuse the same compact macro glyph AND uses; visually the two nodes belong to the same family.
+	// K2's UK2Node_Select uses this glyph — same "pick one of many" semantic as OR's
+	// "first-input-wins" gate.
 	OutColor = FLinearColor::White;
-	return FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.Macro.Loop_16x");
+	return FSlateIcon(FAppStyle::GetAppStyleSetName(), "GraphEditor.Select_16x");
 }
 
 void UScriptableEdGraphNode_OR::AppendPinContextActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
