@@ -11,8 +11,13 @@
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
 #include "ScriptableNodes/ScriptableNode_AND.h"
 #include "ScriptableNodes/ScriptableNode_Branch.h"
+#include "ScriptableNodes/ScriptableNode_GoTo.h"
+#include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableNodes/ScriptableNode_Exit.h"
+#include "SGraphPanel.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/IInputProcessor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Customization/Widgets/SScriptableTypePicker.h"
 #include "ScriptableFrameworkEditorHelpers.h"
@@ -55,6 +60,88 @@
 #include "Widgets/SBoxPanel.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphEditor"
+
+// ---------------------------------------------------------------------------------------------
+// Spawn-by-shortcut input processor: tracks which letter keys (S/B/G/E/A) are held, and on
+// LMB-down over the graph editor, drops the matching node at the click position.
+// ---------------------------------------------------------------------------------------------
+
+class FScriptableGraphSpawnInputProcessor : public IInputProcessor
+{
+public:
+	explicit FScriptableGraphSpawnInputProcessor(FScriptableGraphEditor* InOwner)
+		: Owner(InOwner)
+	{
+		KeyToNodeClass.Add(EKeys::S, UScriptableNode_Sequence::StaticClass());
+		KeyToNodeClass.Add(EKeys::B, UScriptableNode_Branch::StaticClass());
+		KeyToNodeClass.Add(EKeys::G, UScriptableNode_GoTo::StaticClass());
+		KeyToNodeClass.Add(EKeys::E, UScriptableNode_ReceiveEvent::StaticClass());
+		KeyToNodeClass.Add(EKeys::A, UScriptableNode_AND::StaticClass());
+	}
+
+	virtual void Tick(const float, FSlateApplication&, TSharedRef<ICursor>) override {}
+
+	virtual bool HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& KeyEvent) override
+	{
+		// Only track keys we care about — and don't track when a text-input widget owns focus,
+		// otherwise typing in a rename / details field would arm the spawner.
+		if (!KeyToNodeClass.Contains(KeyEvent.GetKey())) return false;
+		if (IsTextInputFocused()) return false;
+
+		PressedKeys.Add(KeyEvent.GetKey());
+		return false; // Pre-processor must not consume; downstream widgets still receive the event.
+	}
+
+	virtual bool HandleKeyUpEvent(FSlateApplication&, const FKeyEvent& KeyEvent) override
+	{
+		PressedKeys.Remove(KeyEvent.GetKey());
+		return false;
+	}
+
+	virtual bool HandleMouseButtonDownEvent(FSlateApplication&, const FPointerEvent& MouseEvent) override
+	{
+		if (!Owner || MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton) return false;
+		if (PressedKeys.IsEmpty()) return false;
+
+		// Resolve which held key wins (first match by registration order).
+		UClass* NodeClass = nullptr;
+		for (const TPair<FKey, UClass*>& Pair : KeyToNodeClass)
+		{
+			if (PressedKeys.Contains(Pair.Key))
+			{
+				NodeClass = Pair.Value;
+				break;
+			}
+		}
+		if (!NodeClass) return false;
+
+		// Only intercept when the click landed on our graph editor. IsHovered() returns true while
+		// the pointer is over the SGraphEditor or any of its children (panel, nodes, pins).
+		TSharedPtr<SGraphEditor> GraphEditor = Owner->GetGraphEditorWidget();
+		if (!GraphEditor.IsValid() || !GraphEditor->IsHovered()) return false;
+
+		Owner->OnSpawnNativeNodeAtCursor(NodeClass);
+		return true; // Consume so the click doesn't also start a pan / box-select.
+	}
+
+	virtual const TCHAR* GetDebugName() const override { return TEXT("ScriptableGraphSpawn"); }
+
+private:
+	bool IsTextInputFocused() const
+	{
+		const TSharedPtr<SWidget> Focused = FSlateApplication::Get().GetKeyboardFocusedWidget();
+		if (!Focused.IsValid()) return false;
+
+		// Any standard editable text widget. Covers SEditableText, SMultiLineEditableText, and the
+		// inline rename block which forwards focus to its inner SEditableText.
+		const FName Type = Focused->GetType();
+		return Type == TEXT("SEditableText") || Type == TEXT("SMultiLineEditableText");
+	}
+
+	FScriptableGraphEditor* Owner = nullptr;
+	TMap<FKey, UClass*> KeyToNodeClass;
+	TSet<FKey> PressedKeys;
+};
 
 namespace
 {
@@ -237,6 +324,12 @@ FScriptableGraphEditor::~FScriptableGraphEditor()
 {
 	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
 	FCoreUObjectDelegates::OnObjectTransacted.Remove(OnObjectTransactedHandle);
+
+	if (SpawnInputProcessor.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(SpawnInputProcessor);
+	}
+	SpawnInputProcessor.Reset();
 }
 
 void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, UScriptableGraph* InGraph)
@@ -267,6 +360,13 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	}
 
 	BindGraphCommands();
+
+	// Quick-spawn shortcuts: hold S/B/G/E/A and left-click on the graph to drop a node at the cursor.
+	if (FSlateApplication::IsInitialized())
+	{
+		SpawnInputProcessor = MakeShared<FScriptableGraphSpawnInputProcessor>(this);
+		FSlateApplication::Get().RegisterInputPreProcessor(SpawnInputProcessor);
+	}
 
 	OnObjectPropertyChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &FScriptableGraphEditor::OnRuntimeNodePropertyChanged);
 
@@ -1188,6 +1288,44 @@ void FScriptableGraphEditor::OnCreateComment()
 	GraphEditorWidget->SetNodeSelection(CommentNode, true);
 
 	Graph->NotifyGraphChanged();
+}
+
+FVector2f FScriptableGraphEditor::GetCursorGraphPosition() const
+{
+	if (!GraphEditorWidget.IsValid()) return FVector2f::ZeroVector;
+
+	// Convert the live screen-space cursor into the graph panel's coordinate system. This is what
+	// makes the BP-style shortcut feel right: pressing S drops the node where the mouse currently
+	// hovers, not where the last context menu opened.
+	if (SGraphPanel* Panel = GraphEditorWidget->GetGraphPanel())
+	{
+		const FGeometry& PanelGeo = Panel->GetTickSpaceGeometry();
+		if (PanelGeo.GetLocalSize().X > 0.0f && PanelGeo.GetLocalSize().Y > 0.0f)
+		{
+			const FVector2D ScreenCursor = FSlateApplication::Get().GetCursorPos();
+			const FVector2D LocalCursor = PanelGeo.AbsoluteToLocal(ScreenCursor);
+			return FVector2f(Panel->PanelCoordToGraphCoord(LocalCursor));
+		}
+	}
+
+	return GraphEditorWidget->GetPasteLocation2f();
+}
+
+void FScriptableGraphEditor::OnSpawnNativeNodeAtCursor(UClass* RuntimeNodeClass)
+{
+	if (!GraphEditorWidget.IsValid() || !RuntimeNodeClass) return;
+
+	UEdGraph* Graph = GraphEditorWidget->GetCurrentGraph();
+	if (!Graph) return;
+
+	const FVector2f Location = GetCursorGraphPosition();
+
+	UEdGraphNode* Spawned = ScriptableGraphEditorHelpers::SpawnNativeNode(Graph, RuntimeNodeClass, Location, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
+	if (Spawned)
+	{
+		GraphEditorWidget->ClearSelectionSet();
+		GraphEditorWidget->SetNodeSelection(Spawned, true);
+	}
 }
 
 void FScriptableGraphEditor::OnNodeTitleCommitted(const FText& NewText, ETextCommit::Type CommitInfo, UEdGraphNode* NodeBeingChanged)

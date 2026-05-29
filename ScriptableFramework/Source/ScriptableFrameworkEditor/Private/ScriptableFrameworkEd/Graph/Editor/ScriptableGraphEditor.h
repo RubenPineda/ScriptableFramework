@@ -15,11 +15,14 @@ class IDetailsView;
 class SGraphEditor;
 class SSearchBox;
 class SKzValidationPanel;
+class FScriptableGraphSpawnInputProcessor;
 struct FKzValidationIssue;
 
 /** Asset editor for UScriptableGraph. */
 class FScriptableGraphEditor : public FAssetEditorToolkit
 {
+	friend class FScriptableGraphSpawnInputProcessor;
+
 public:
 	/** Entry point matched by TKzAssetTypeActions: opens the toolkit on the supplied assets. */
 	static void CreateEditor(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, const TArray<UObject*>& InObjects);
@@ -108,6 +111,17 @@ private:
 	void OnSelectAllNodes();
 	void OnCreateComment();
 
+	/** Spawns the given runtime UScriptableNode subclass at the current cursor position in graph space.
+	 * Called by FScriptableGraphSpawnInputProcessor when the user clicks while holding a shortcut key. */
+	void OnSpawnNativeNodeAtCursor(UClass* RuntimeNodeClass);
+
+	/** Returns the current mouse cursor in graph-space coordinates, falling back to the cached paste
+	 * location when the panel geometry is not yet resolved. */
+	FVector2f GetCursorGraphPosition() const;
+
+	/** Exposed to the input processor so it can test whether the click landed inside our graph editor. */
+	TSharedPtr<SGraphEditor> GetGraphEditorWidget() const { return GraphEditorWidget; }
+
 	bool CanDelete() const { return HasAnyDeletableSelected(); }
 	bool CanDeleteAndReconnectNodes() const;
 	bool CanCopy() const { return HasAnyCopyableSelected(); }
@@ -179,6 +193,9 @@ private:
 
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
+
+	/** Tracks held shortcut keys (S/B/G/E/A) and turns LMB-down over the graph into a node spawn. */
+	TSharedPtr<FScriptableGraphSpawnInputProcessor> SpawnInputProcessor;
 	FDelegateHandle OnObjectTransactedHandle;
 
 	static const FName GraphTabId;
