@@ -29,9 +29,16 @@ public:
 	/** Resolves the subsystem from any world context object, or null if there is no world. */
 	static UScriptableGraphSubsystem* Get(const UObject* WorldContext);
 
-	/** Cancels every live runner. Called on Deinitialize; also callable directly. */
+	/** User-invoked cancel of every live runner (graphs + actions). Graph runners run their Exit cleanup
+	 * sub-flow if they declare one; action runners force-finish. For world-teardown cancel (skip Exit),
+	 * the subsystem uses a private path in Deinitialize. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void CancelAllRunners();
+
+	/** Cancels every live runner whose Launch owner matches the supplied UObject. Same Cancel semantics
+	 * as CancelAllRunners: graphs run Exit cleanup if present, actions force-finish. No-op if Owner is null. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	void CancelRunnersForOwner(UObject* Owner);
 
 	/** Returns a copy of the currently live runners. Useful for debugging. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
@@ -54,8 +61,9 @@ private:
 	/** Removes an action runner from the live set. Called by the runner on finish (and defensively on destroy). */
 	void UnregisterActionRunner(UScriptableActionRunner* Runner);
 
-	/** Force-finishes every live action runner. Run from Deinitialize — before GC — so task Stop events fire in a safe context. */
-	void CancelAllActionRunners();
+	/** World-teardown variant: cancels graph runners with CancelImmediate (skips Exit cleanup, the world
+	 * and any actors it would touch are being destroyed) and action runners with Cancel. */
+	void CancelAllForTeardown();
 
 	/** Live graph runners. These strong refs keep runners alive while they execute. */
 	UPROPERTY()

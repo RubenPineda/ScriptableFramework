@@ -110,6 +110,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Context")
 	static void SetRequirementContext(UPARAM(Ref) FScriptableRequirement& Requirement, const FScriptableContext& Context);
 
+	/**
+	 * Cancels every live scriptable runner (graphs + actions) in the world. Graph runners run their Exit
+	 * cleanup sub-flow if they declare one; action runners force-finish. No-op if the world has no subsystem.
+	 * @param WorldContext  Any object resolvable to a world (auto-filled by Blueprint).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Runners", meta = (WorldContext = "WorldContext"))
+	static void CancelAllScriptableRunners(const UObject* WorldContext);
+
+	/**
+	 * Cancels every live scriptable runner (graphs + actions) whose Launch owner matches the supplied
+	 * UObject. Same Cancel semantics as CancelAllScriptableRunners. No-op if Owner is null.
+	 * @param WorldContext  Any object resolvable to a world (auto-filled by Blueprint).
+	 * @param Owner         The UObject the runners were launched with (defaults to Self in Blueprint).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Runners", meta = (WorldContext = "WorldContext", DefaultToSelf = "Owner"))
+	static void CancelScriptableRunnersForOwner(const UObject* WorldContext, UObject* Owner);
+
 private:
 	DECLARE_FUNCTION(execSetScriptableContextProperty);
 	DECLARE_FUNCTION(execMakeScriptableContext);

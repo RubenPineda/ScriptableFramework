@@ -36,19 +36,45 @@ UScriptableGraphInstance* UScriptableGraphSubsystem::RunGraph(const UObject* Wor
 
 void UScriptableGraphSubsystem::CancelAllRunners()
 {
-	// Iterate a copy: each cancel routes through Finish(), which unregisters from ActiveRunners.
-	// Use CancelImmediate (not Cancel): during world teardown we must skip the Exit cleanup sub-flow,
-	// since the world and any actors it would touch are being destroyed.
-	const TArray<TObjectPtr<UScriptableGraphInstance>> RunnersCopy = ActiveRunners;
-	for (const TObjectPtr<UScriptableGraphInstance>& Runner : RunnersCopy)
+	// Iterate copies: each cancel routes through Finish, which unregisters from the live array.
+	// Regular Cancel here (user-invoked path) — graph runners run their Exit cleanup if present,
+	// action runners force-finish.
 	{
-		if (Runner)
+		const TArray<TObjectPtr<UScriptableGraphInstance>> GraphsCopy = ActiveRunners;
+		for (const TObjectPtr<UScriptableGraphInstance>& Runner : GraphsCopy)
 		{
-			Runner->CancelImmediate();
+			if (Runner) Runner->Cancel();
 		}
 	}
+	{
+		const TArray<TObjectPtr<UScriptableActionRunner>> ActionsCopy = ActiveActionRunners;
+		for (const TObjectPtr<UScriptableActionRunner>& Runner : ActionsCopy)
+		{
+			if (Runner) Runner->Cancel();
+		}
+	}
+}
 
-	ActiveRunners.Reset();
+void UScriptableGraphSubsystem::CancelRunnersForOwner(UObject* Owner)
+{
+	if (!Owner) return;
+
+	// Snapshot first because Cancel → Finish → Unregister removes entries mid-iteration. Both runner
+	// types are filtered by their stored Launch owner (a private field; subsystem is friend of both).
+	{
+		const TArray<TObjectPtr<UScriptableGraphInstance>> GraphsCopy = ActiveRunners;
+		for (const TObjectPtr<UScriptableGraphInstance>& Runner : GraphsCopy)
+		{
+			if (Runner && Runner->Owner == Owner) Runner->Cancel();
+		}
+	}
+	{
+		const TArray<TObjectPtr<UScriptableActionRunner>> ActionsCopy = ActiveActionRunners;
+		for (const TObjectPtr<UScriptableActionRunner>& Runner : ActionsCopy)
+		{
+			if (Runner && Runner->Owner == Owner) Runner->Cancel();
+		}
+	}
 }
 
 TArray<UScriptableGraphInstance*> UScriptableGraphSubsystem::GetActiveRunners() const
@@ -94,24 +120,31 @@ void UScriptableGraphSubsystem::UnregisterActionRunner(UScriptableActionRunner* 
 	}
 }
 
-void UScriptableGraphSubsystem::CancelAllActionRunners()
+void UScriptableGraphSubsystem::CancelAllForTeardown()
 {
-	// Iterate a copy: each cancel force-finishes the action, whose finish callback unregisters it.
-	const TArray<TObjectPtr<UScriptableActionRunner>> RunnersCopy = ActiveActionRunners;
-	for (const TObjectPtr<UScriptableActionRunner>& Runner : RunnersCopy)
+	// World teardown: graphs use CancelImmediate (skip Exit cleanup, the world and any actors it
+	// would touch are being destroyed); actions still use Cancel since they have no equivalent
+	// world-touching cleanup hook.
 	{
-		if (Runner)
+		const TArray<TObjectPtr<UScriptableGraphInstance>> GraphsCopy = ActiveRunners;
+		for (const TObjectPtr<UScriptableGraphInstance>& Runner : GraphsCopy)
 		{
-			Runner->Cancel();
+			if (Runner) Runner->CancelImmediate();
 		}
+		ActiveRunners.Reset();
 	}
-
-	ActiveActionRunners.Reset();
+	{
+		const TArray<TObjectPtr<UScriptableActionRunner>> ActionsCopy = ActiveActionRunners;
+		for (const TObjectPtr<UScriptableActionRunner>& Runner : ActionsCopy)
+		{
+			if (Runner) Runner->Cancel();
+		}
+		ActiveActionRunners.Reset();
+	}
 }
 
 void UScriptableGraphSubsystem::Deinitialize()
 {
-	CancelAllRunners();
-	CancelAllActionRunners();
+	CancelAllForTeardown();
 	Super::Deinitialize();
 }

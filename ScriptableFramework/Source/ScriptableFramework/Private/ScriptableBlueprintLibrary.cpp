@@ -3,6 +3,7 @@
 #include "ScriptableBlueprintLibrary.h"
 #include "ScriptablePropertyUtilities.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "StructUtils/PropertyBag.h"
 #include "Core/KzBagOps.h"
 
@@ -302,4 +303,20 @@ bool UScriptableBlueprintLibrary::EvaluateRequirement(UObject* Owner, const FScr
 bool UScriptableBlueprintLibrary::EvaluateRequirementWithContext(UObject* Owner, const FScriptableRequirement& Requirement, const FScriptableContext& Context)
 {
 	return FScriptableRequirement::EvaluateRequirement(Owner, Requirement, Context);
+}
+
+void UScriptableBlueprintLibrary::CancelAllScriptableRunners(const UObject* WorldContext)
+{
+	if (UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(WorldContext))
+	{
+		Subsystem->CancelAllRunners();
+	}
+}
+
+void UScriptableBlueprintLibrary::CancelScriptableRunnersForOwner(const UObject* WorldContext, UObject* Owner)
+{
+	if (UScriptableGraphSubsystem* Subsystem = UScriptableGraphSubsystem::Get(WorldContext))
+	{
+		Subsystem->CancelRunnersForOwner(Owner);
+	}
 }
