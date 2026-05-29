@@ -45,17 +45,16 @@ void SScriptableGraphNode_Sequence::CreateOutputSideAddButton(TSharedPtr<SVertic
 FReply SScriptableGraphNode_Sequence::OnAddPin()
 {
 	UScriptableNode_Sequence* Sequence = GetRuntimeSequence();
-	if (!Sequence) return FReply::Handled();
+	if (!Sequence || !GraphNode) return FReply::Handled();
 
-	// SGraphNode invokes this via the AddPin button helper above. Mirror the K2 path: scoped
-	// transaction for undo, mutate the model, refresh the slate node, notify the graph.
+	// AddOutputPin only bumps the runtime counter; the ed-node's Pins array is unchanged.
+	// ReconstructNode re-runs AllocateDefaultPins (which queries the runtime's GetOutputPins) so the
+	// new pin lands on the ed-node, then NotifyGraphChanged inside ReconstructNode triggers SGraphPanel
+	// to redraw. Same fix as the AND widget.
 	const FScopedTransaction Transaction(LOCTEXT("AddSequencePin", "Add Sequence Pin"));
 	Sequence->AddOutputPin();
+	GraphNode->ReconstructNode();
 	UpdateGraphNode();
-	if (UEdGraph* OwningGraph = GraphNode ? GraphNode->GetGraph() : nullptr)
-	{
-		OwningGraph->NotifyNodeChanged(GraphNode);
-	}
 
 	return FReply::Handled();
 }

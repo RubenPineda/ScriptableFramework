@@ -26,4 +26,7 @@ public:
 
 	/** Removes the right-clicked input pin from an AND node, sliding higher inputs down. */
 	TSharedPtr<FUICommandInfo> RemoveANDPin;
+
+	/** Removes the right-clicked input pin from an OR node, sliding higher inputs down. */
+	TSharedPtr<FUICommandInfo> RemoveORPin;
 };

@@ -42,15 +42,15 @@ void SScriptableGraphNode_AND::CreateInputSideAddButton(TSharedPtr<SVerticalBox>
 FReply SScriptableGraphNode_AND::OnAddPin()
 {
 	UScriptableNode_AND* AND = GetRuntimeAND();
-	if (!AND) return FReply::Handled();
+	if (!AND || !GraphNode) return FReply::Handled();
 
 	const FScopedTransaction Transaction(LOCTEXT("AddANDPin", "Add AND Pin"));
 	AND->AddInputPin();
+	// AddInputPin only bumps the runtime counter; the ed-node's Pins array is unchanged. ReconstructNode
+	// re-runs AllocateDefaultPins (which queries the runtime's GetInputPins) so the new pin lands on
+	// the ed-node, then NotifyGraphChanged inside ReconstructNode triggers SGraphPanel to redraw.
+	GraphNode->ReconstructNode();
 	UpdateGraphNode();
-	if (UEdGraph* OwningGraph = GraphNode ? GraphNode->GetGraph() : nullptr)
-	{
-		OwningGraph->NotifyNodeChanged(GraphNode);
-	}
 
 	return FReply::Handled();
 }

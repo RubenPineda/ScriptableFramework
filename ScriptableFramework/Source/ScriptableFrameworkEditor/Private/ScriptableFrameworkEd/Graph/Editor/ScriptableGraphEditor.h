@@ -90,6 +90,12 @@ private:
 	/** Greys out the AND Remove-pin entry once the node would dip below MinInputCount. */
 	bool CanRemoveANDPin() const;
 
+	/** Pin-context executor: removes the right-clicked OR input pin. Mirrors OnRemoveANDPin. */
+	void OnRemoveORPin();
+
+	/** Greys out the OR Remove-pin entry once the node would dip below MinInputCount. */
+	bool CanRemoveORPin() const;
+
 	/** Fires after any undo/redo (FCoreUObjectDelegates::OnObjectTransacted); filters to the edited asset and rebuilds the ed-graph to match the restored Connections/Nodes. This is how pin-removal undo works. */
 	void OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event);
 

@@ -4,11 +4,13 @@
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_OR.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Reroute.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_GoTo.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_AND.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_OR.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_GoTo.h"
 #include "SGraphNodeKnot.h"
 
@@ -27,6 +29,11 @@ TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Nod
 	if (UScriptableEdGraphNode_AND* ANDNode = Cast<UScriptableEdGraphNode_AND>(Node))
 	{
 		return SNew(SScriptableGraphNode_AND, ANDNode);
+	}
+
+	if (UScriptableEdGraphNode_OR* ORNode = Cast<UScriptableEdGraphNode_OR>(Node))
+	{
+		return SNew(SScriptableGraphNode_OR, ORNode);
 	}
 
 	if (UScriptableEdGraphNode_Reroute* RerouteNode = Cast<UScriptableEdGraphNode_Reroute>(Node))

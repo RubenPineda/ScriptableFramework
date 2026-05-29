@@ -10,6 +10,7 @@
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Sequence.h"
 #include "ScriptableNodes/ScriptableNode_AND.h"
+#include "ScriptableNodes/ScriptableNode_OR.h"
 #include "ScriptableNodes/ScriptableNode_Branch.h"
 #include "ScriptableNodes/ScriptableNode_GoTo.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
@@ -77,9 +78,19 @@ public:
 		KeyToNodeClass.Add(EKeys::G, UScriptableNode_GoTo::StaticClass());
 		KeyToNodeClass.Add(EKeys::E, UScriptableNode_ReceiveEvent::StaticClass());
 		KeyToNodeClass.Add(EKeys::A, UScriptableNode_AND::StaticClass());
+		KeyToNodeClass.Add(EKeys::O, UScriptableNode_OR::StaticClass());
 	}
 
-	virtual void Tick(const float, FSlateApplication&, TSharedRef<ICursor>) override {}
+	virtual void Tick(const float, FSlateApplication& SlateApp, TSharedRef<ICursor>) override
+	{
+		// If the app loses focus while a tracked key is held, the OS keeps the keydown but the keyup
+		// is delivered to whichever window was focused on release — never to us. Without this purge
+		// the stale key would silently arm the spawner forever, swallowing every subsequent LMB.
+		if (!PressedKeys.IsEmpty() && !SlateApp.IsActive())
+		{
+			PressedKeys.Reset();
+		}
+	}
 
 	virtual bool HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& KeyEvent) override
 	{
@@ -98,7 +109,7 @@ public:
 		return false;
 	}
 
-	virtual bool HandleMouseButtonDownEvent(FSlateApplication&, const FPointerEvent& MouseEvent) override
+	virtual bool HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent) override
 	{
 		if (!Owner || MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton) return false;
 		if (PressedKeys.IsEmpty()) return false;
@@ -115,10 +126,41 @@ public:
 		}
 		if (!NodeClass) return false;
 
-		// Only intercept when the click landed on our graph editor. IsHovered() returns true while
-		// the pointer is over the SGraphEditor or any of its children (panel, nodes, pins).
+		// Only intercept when the click landed inside our graph panel AND there is no interactive
+		// widget (Add pin button, pin, node body) between the leaf and the panel. Walking the path
+		// from leaf to root catches the case where the leaf is an inner SImage / STextBlock of an
+		// SButton, where a strict leaf == panel check would still bypass the button.
 		TSharedPtr<SGraphEditor> GraphEditor = Owner->GetGraphEditorWidget();
-		if (!GraphEditor.IsValid() || !GraphEditor->IsHovered()) return false;
+		if (!GraphEditor.IsValid()) return false;
+
+		SGraphPanel* Panel = GraphEditor->GetGraphPanel();
+		if (!Panel) return false;
+
+		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
+		FWidgetPath WidgetPath = SlateApp.LocateWindowUnderMouse(ScreenPos, SlateApp.GetInteractiveTopLevelWindows());
+		if (!WidgetPath.IsValid()) return false;
+
+		const SWidget* PanelAsWidget = static_cast<const SWidget*>(Panel);
+		bool bReachedPanel = false;
+		for (int32 Idx = WidgetPath.Widgets.Num() - 1; Idx >= 0; --Idx)
+		{
+			const SWidget& W = WidgetPath.Widgets[Idx].Widget.Get();
+			if (&W == PanelAsWidget) { bReachedPanel = true; break; }
+
+			// Anything interactive between the leaf and the panel means the user is clicking that
+			// thing (button, pin, node header, comment, etc.) — don't steal the click.
+			const FName TypeName = W.GetType();
+			if (TypeName == TEXT("SButton") || TypeName == TEXT("SCheckBox") ||
+				TypeName == TEXT("SHyperlink") || TypeName == TEXT("SEditableText") ||
+				TypeName == TEXT("SMultiLineEditableText") || TypeName == TEXT("SInlineEditableTextBlock") ||
+				TypeName == TEXT("SGraphPin") || TypeName == TEXT("SGraphNode") ||
+				TypeName == TEXT("SGraphNodeComment") || TypeName == TEXT("SGraphNodeKnot"))
+			{
+				return false;
+			}
+		}
+
+		if (!bReachedPanel) return false;
 
 		Owner->OnSpawnNativeNodeAtCursor(NodeClass);
 		return true; // Consume so the click doesn't also start a pan / box-select.
@@ -859,6 +901,10 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(FScriptableGraphCommands::Get().RemoveANDPin,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveANDPin),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveANDPin));
+
+	Commands->MapAction(FScriptableGraphCommands::Get().RemoveORPin,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveORPin),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveORPin));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -1493,6 +1539,52 @@ bool FScriptableGraphEditor::CanRemoveANDPin() const
 	if (!AND) return false;
 
 	return AND->InputCount > UScriptableNode_AND::MinInputCount;
+}
+
+void FScriptableGraphEditor::OnRemoveORPin()
+{
+	if (!GraphEditorWidget.IsValid()) return;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Input) return;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return;
+
+	UScriptableNode_OR* OR = Cast<UScriptableNode_OR>(SfEdNode->GetRuntimeNode());
+	if (!OR) return;
+
+	// Parse the branch index from the pin name (pure numeric per MakeInputName).
+	const FString PinNameStr = Pin->PinName.ToString();
+	int32 DigitStart = PinNameStr.Len();
+	while (DigitStart > 0 && FChar::IsDigit(PinNameStr[DigitStart - 1]))
+	{
+		--DigitStart;
+	}
+	if (DigitStart == PinNameStr.Len()) return;
+
+	const int32 BranchIndex = FCString::Atoi(*PinNameStr.Mid(DigitStart));
+	if (BranchIndex < 0 || BranchIndex >= OR->InputCount) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("RemoveORPinTx", "Remove OR Pin"));
+	OR->RemoveInputPinAt(BranchIndex);
+	ReconstructEdGraphFromAsset();
+}
+
+bool FScriptableGraphEditor::CanRemoveORPin() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+
+	UEdGraphPin* Pin = GraphEditorWidget->GetGraphPinForMenu();
+	if (!Pin || Pin->Direction != EGPD_Input) return false;
+
+	UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(Pin->GetOwningNode());
+	if (!SfEdNode) return false;
+
+	const UScriptableNode_OR* OR = Cast<UScriptableNode_OR>(SfEdNode->GetRuntimeNode());
+	if (!OR) return false;
+
+	return OR->InputCount > UScriptableNode_OR::MinInputCount;
 }
 
 void FScriptableGraphEditor::OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event)
