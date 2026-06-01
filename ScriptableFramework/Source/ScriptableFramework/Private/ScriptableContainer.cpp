@@ -47,7 +47,34 @@ void FScriptableContainer::AddContext(const FScriptableContext& InContext)
 
 void FScriptableContainer::SetContext(const FScriptableContext& InContext)
 {
-	Context.MigrateToNewBagInstance(InContext.GetBag());
+	const FInstancedPropertyBag& SourceBag = InContext.GetBag();
+	const UPropertyBag* SourceStruct = SourceBag.GetPropertyBagStruct();
+	if (!SourceStruct) return;
+
+	const UPropertyBag* TargetStruct = Context.GetPropertyBagStruct();
+	if (!TargetStruct)
+	{
+		// Local bag is empty (no ContextDefinitions on this container). Adopt the source bag
+		// wholesale — there's no authored shape to preserve.
+		Context = SourceBag;
+		return;
+	}
+
+	const uint8* SourceMemory = SourceBag.GetValue().GetMemory();
+	uint8* TargetMemory = Context.GetMutableValue().GetMemory();
+	if (!SourceMemory || !TargetMemory) return;
+
+	for (const FPropertyBagPropertyDesc& SourceDesc : SourceStruct->GetPropertyDescs())
+	{
+		if (!SourceDesc.CachedProperty) continue;
+		const FPropertyBagPropertyDesc* TargetDesc = TargetStruct->FindPropertyDescByName(SourceDesc.Name);
+		if (!TargetDesc || !TargetDesc->CachedProperty) continue;
+		if (!TargetDesc->CachedProperty->SameType(SourceDesc.CachedProperty)) continue;
+
+		void* TargetAddr = TargetDesc->CachedProperty->ContainerPtrToValuePtr<void>(TargetMemory);
+		const void* SourceAddr = SourceDesc.CachedProperty->ContainerPtrToValuePtr<void>(SourceMemory);
+		TargetDesc->CachedProperty->CopyCompleteValue(TargetAddr, SourceAddr);
+	}
 }
 
 UScriptableObject* FScriptableContainer::FindBindingSource(const FGuid& InID) const

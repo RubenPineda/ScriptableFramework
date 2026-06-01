@@ -4,6 +4,7 @@
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableActionRunner.h"
 #include "ScriptableContext.h"
+#include "UObject/UnrealType.h"
 
 FScriptableAction::FScriptableAction()
 {
@@ -80,6 +81,124 @@ UScriptableActionRunner* FScriptableAction::Run(FScriptableAction&& Action, UObj
 
 	Action.SetContext(InContext);
 	return Run(MoveTemp(Action), Owner);
+}
+
+UScriptableActionRunner* FScriptableAction::RunCopy(UObject* Owner, const FScriptableAction& SourceAction)
+{
+	if (!Owner) return nullptr;
+
+	// Redirect to the CDO copy when SourceAction is a member of Owner via an EditDefaultsOnly
+	// property — otherwise we'd clone stale per-instance Instanced subobjects on placed-in-level
+	// actors (the bug the async BP node already worked around).
+	const FScriptableAction* Authoritative = ResolveAuthoritative(&SourceAction, Owner);
+	if (!Authoritative) return nullptr;
+
+	UScriptableActionRunner* Runner = NewObject<UScriptableActionRunner>(Owner);
+	if (!Runner) return nullptr;
+
+	FScriptableAction Cloned = Authoritative->Clone(Runner);
+	Runner->Launch(MoveTemp(Cloned), Owner);
+	return Runner;
+}
+
+UScriptableActionRunner* FScriptableAction::RunCopy(UObject* Owner, const FScriptableAction& SourceAction, const FScriptableContext& InContext)
+{
+	if (!Owner) return nullptr;
+
+	const FScriptableAction* Authoritative = ResolveAuthoritative(&SourceAction, Owner);
+	if (!Authoritative) return nullptr;
+
+	UScriptableActionRunner* Runner = NewObject<UScriptableActionRunner>(Owner);
+	if (!Runner) return nullptr;
+
+	FScriptableAction Cloned = Authoritative->Clone(Runner);
+	Cloned.SetContext(InContext);
+	Runner->Launch(MoveTemp(Cloned), Owner);
+	return Runner;
+}
+
+const FScriptableAction* FScriptableAction::ResolveAuthoritative(const FScriptableAction* InstanceAction, const UObject* Owner)
+{
+	if (!InstanceAction || !Owner) return InstanceAction;
+
+	const uint8* OwnerBase = reinterpret_cast<const uint8*>(Owner);
+	const uint8* ActionBase = reinterpret_cast<const uint8*>(InstanceAction);
+
+	// Early out if the pointer is not physically inside the Owner's direct memory footprint.
+	if (ActionBase < OwnerBase) return InstanceAction;
+
+	const SIZE_T Offset = static_cast<SIZE_T>(ActionBase - OwnerBase);
+	if (Offset >= static_cast<SIZE_T>(Owner->GetClass()->GetPropertiesSize()))
+	{
+		return InstanceAction;
+	}
+
+	// We only iterate properties that explicitly contain our memory offset
+	bool bIsEditDefaultsOnly = false;
+	const UStruct* CurrentStruct = Owner->GetClass();
+	SIZE_T CurrentBaseOffset = 0;
+
+	while (CurrentStruct)
+	{
+		// Reached the action itself — descending further would inspect FScriptableAction's own
+		// internals, whose flags don't speak about the wrapper chain. Without this guard, an
+		// EditDefaultsOnly UPROPERTY added inside FScriptableAction in the future would falsely
+		// flip every RunCopy caller into the CDO path.
+		if (CurrentStruct == FScriptableAction::StaticStruct()) break;
+
+		bool bFoundInLevel = false;
+		for (TFieldIterator<FProperty> It(CurrentStruct); It; ++It)
+		{
+			const FProperty* Prop = *It;
+			SIZE_T PropStart = CurrentBaseOffset + static_cast<SIZE_T>(Prop->GetOffset_ForInternal());
+			// GetSize() accounts for total memory (including static inline arrays)
+			SIZE_T PropEnd = PropStart + static_cast<SIZE_T>(Prop->GetSize());
+
+			if (Offset >= PropStart && Offset < PropEnd)
+			{
+				// If any property in the chain is blocked from instance editing, the action inherits it.
+				if (Prop->HasAnyPropertyFlags(CPF_DisableEditOnInstance))
+				{
+					bIsEditDefaultsOnly = true;
+				}
+
+				if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+				{
+					// Adjust base offset for static inline arrays (e.g. FMyStruct Configs[4])
+					SIZE_T ElementOffset = 0;
+					if (Prop->ArrayDim > 1)
+					{
+						SIZE_T RelativeOffset = Offset - PropStart;
+						SIZE_T ArrayIndex = RelativeOffset / static_cast<SIZE_T>(Prop->GetElementSize());
+						ElementOffset = ArrayIndex * static_cast<SIZE_T>(Prop->GetElementSize());
+					}
+
+					CurrentStruct = StructProp->Struct;
+					CurrentBaseOffset = PropStart + ElementOffset;
+					bFoundInLevel = true;
+				}
+				else
+				{
+					CurrentStruct = nullptr; // Hit a non-struct leaf property (shouldn't happen for our target, but safe)
+				}
+				break;
+			}
+		}
+
+		if (!bFoundInLevel) break;
+	}
+
+	// If the property chain is authoritative (EditDefaultsOnly), fetch it directly from the CDO.
+	if (bIsEditDefaultsOnly)
+	{
+		if (const UObject* CDO = Owner->GetClass()->GetDefaultObject())
+		{
+			// We can bypass reflection entirely for the read and just cast the offset.
+			return reinterpret_cast<const FScriptableAction*>(reinterpret_cast<const uint8*>(CDO) + Offset);
+		}
+	}
+
+	return InstanceAction;
 }
 
 void FScriptableAction::Register(UObject* InOwner)

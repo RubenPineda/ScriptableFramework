@@ -96,6 +96,19 @@ public:
 	/** As above, with external context applied before launch. */
 	static UScriptableActionRunner* Run(FScriptableAction&& Action, UObject* Owner, const FScriptableContext& Context);
 
+	/** Executes a copy of the provided action. */
+	static UScriptableActionRunner* RunCopy(UObject* Owner, const FScriptableAction& SourceAction);
+
+	/** As above, with external context applied before launch. */
+	static UScriptableActionRunner* RunCopy(UObject* Owner, const FScriptableAction& SourceAction, const FScriptableContext& Context);
+
+	/**
+	 * If InstanceAction is a member of Owner via an EditDefaultsOnly (CPF_DisableEditOnInstance)
+	 * UPROPERTY, returns the same property on Owner's class CDO so callers see authoritative state
+	 * unaffected by stale per-instance overrides. Otherwise returns InstanceAction as-is. Null-safe.
+	 */
+	static const FScriptableAction* ResolveAuthoritative(const FScriptableAction* InstanceAction, const UObject* Owner);
+
 	/**
 	 * Reverts the action's effects and cleans up memory.
 	 * Calls Reset on all tasks and unregisters them safely.
