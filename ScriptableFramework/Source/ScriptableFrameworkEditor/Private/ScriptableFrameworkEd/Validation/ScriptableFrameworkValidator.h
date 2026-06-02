@@ -7,8 +7,9 @@
 #include "ScriptableFrameworkValidator.generated.h"
 
 /**
- * Global validator that scans any saved or validated Asset in the editor to ensure
- * that ScriptableObjects (Actions/Requirements) have valid data flow bindings.
+ * Global save-time validator: runs the shared binding pass on any asset that may
+ * nest UScriptableObjects and forwards issues to the message log. UScriptableGraph
+ * assets are skipped — their dedicated editor panel owns the experience instead.
  */
 UCLASS()
 class UScriptableFrameworkValidator : public UEditorValidatorBase
