@@ -68,6 +68,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	bool IsCancelled() const { return bCancelled; }
 
+	/** Source graph asset. */
+	UScriptableGraph* GetAsset() const { return Asset; }
+
+	/**
+	 * Exit output captured at completion (set when Exit fires or a Finish requests).
+	 * NAME_None until committed.
+	 * SubGraph nodes read this on OnGraphFinishedNative to route the parent pin.
+	 */
+	FName GetCompletionOutput() const { return CompletionOutput; }
+
 	/** Broadcast once when the graph naturally finishes (no active nodes, no pending activations). */
 	FScriptableGraphFinishedNative OnGraphFinishedNative;
 
@@ -83,6 +93,12 @@ private:
 	void HandleNodePinFired(UScriptableNode* Node, FName OutputName);
 	void HandleNodeInactive(UScriptableNode* Node);
 	void HandleNodeRequestEvent(FName EventName);
+
+	/**
+	 * First-Finish-wins: stop active nodes (no pin propagation) and route through
+	 * Exit's OutputName so the cleanup sub-flow runs the right branch. Re-entry ignored.
+	 */
+	void HandleNodeRequestFinishGraph(FName OutputName);
 
 	void ProcessQueue();
 	void CheckCompletion();
@@ -127,6 +143,12 @@ private:
 
 	/** True once the Exit's Finished/Cancelled output has been fired. Prevents re-triggering it. */
 	bool bExitTriggered = false;
+
+	/**
+	 * Captured Exit output name. Exposed via GetCompletionOutput so parent SubGraph
+	 * nodes know which pin to fire when OnGraphFinishedNative broadcasts.
+	 */
+	FName CompletionOutput = NAME_None;
 
 	/** FIFO of pending input activations. Drained by ProcessQueue. */
 	TArray<FPendingActivation> Pending;

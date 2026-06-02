@@ -7,11 +7,13 @@
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_OR.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Reroute.h"
 #include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_GoTo.h"
+#include "ScriptableFrameworkEd/Graph/Nodes/ScriptableEdGraphNode_Finish.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Task.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Sequence.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_AND.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_OR.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_GoTo.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Finish.h"
 #include "SGraphNodeKnot.h"
 
 TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Node) const
@@ -44,6 +46,11 @@ TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Nod
 	if (UScriptableEdGraphNode_GoTo* GoToNode = Cast<UScriptableEdGraphNode_GoTo>(Node))
 	{
 		return SNew(SScriptableGraphNode_GoTo, GoToNode);
+	}
+
+	if (UScriptableEdGraphNode_Finish* FinishNode = Cast<UScriptableEdGraphNode_Finish>(Node))
+	{
+		return SNew(SScriptableGraphNode_Finish, FinishNode);
 	}
 
 	return nullptr;

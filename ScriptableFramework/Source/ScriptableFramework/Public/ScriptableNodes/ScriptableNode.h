@@ -11,6 +11,7 @@ class UScriptableNode;
 DECLARE_MULTICAST_DELEGATE_TwoParams(FScriptableNodePinFiredNative, UScriptableNode* /*Node*/, FName /*OutputName*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeInactiveNative, UScriptableNode* /*Node*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeRequestEventNative, FName /*EventName*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeRequestFinishGraphNative, FName /*OutputName*/);
 
 /**
  * Base class for any node inside a UScriptableGraph: defines the pin-state model and activation protocol.
@@ -64,6 +65,12 @@ public:
 
 	/** Fired when the node asks the runner to dispatch a named event (e.g. a Go To node). The runner forwards it to FireEvent. */
 	FScriptableNodeRequestEventNative OnRequestEventNative;
+
+	/**
+	 * Asks the runner to complete the graph through a specific output (Finish node).
+	 * Runner stops active nodes and fires Exit's matching output.
+	 */
+	FScriptableNodeRequestFinishGraphNative OnRequestFinishGraphNative;
 
 	/** Releases in-flight resources without propagating downstream. Called on hard-cancel; override to cancel internal work silently. */
 	virtual void Teardown() {}

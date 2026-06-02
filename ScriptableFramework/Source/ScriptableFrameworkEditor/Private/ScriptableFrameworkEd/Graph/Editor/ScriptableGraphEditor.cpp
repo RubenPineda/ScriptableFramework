@@ -617,6 +617,7 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Palette(const FSpawnTabArg
 		.BaseClassRootCategory(LOCTEXT("PaletteScriptableTasks", "Scriptable Tasks"))
 		.AdditionalBaseClassRootCategory(LOCTEXT("PaletteNativeNodes", "Native Nodes"))
 		.AdditionalBaseClassUserRootCategory(LOCTEXT("PaletteScriptableNodes", "Scriptable Nodes"))
+		.ExcludedClasses({ UScriptableTask_RunGraph::StaticClass() })
 		.EnableDragOut(true);
 
 	return SNew(SDockTab)
@@ -743,6 +744,7 @@ FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, c
 		.BaseClassRootCategory(LOCTEXT("PickerScriptableTasks", "Scriptable Tasks"))
 		.AdditionalBaseClassRootCategory(LOCTEXT("PickerNativeNodes", "Native Nodes"))
 		.AdditionalBaseClassUserRootCategory(LOCTEXT("PickerScriptableNodes", "Scriptable Nodes"))
+		.ExcludedClasses({ UScriptableTask_RunGraph::StaticClass() })
 		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins))
 		.OnPickerClosed(MenuClosedAdapter);
 
@@ -1604,6 +1606,26 @@ void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPr
 {
 	UScriptableGraph* Graph = EditedGraph.Get();
 	if (!Graph || !Graph->EdGraph || !InObject) return;
+
+	// Graph.Outputs edits ripple to Exit ed-nodes (their pin set depends on it).
+	if (InObject == Graph)
+	{
+		const FName PropertyName = InEvent.Property ? InEvent.Property->GetFName() : NAME_None;
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs))
+		{
+			for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+			{
+				UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+				if (!SfEd) continue;
+				const UScriptableNode* Runtime = SfEd->GetRuntimeNode();
+				if (Runtime && Runtime->IsA<UScriptableNode_Exit>())
+				{
+					SfEd->ReconstructNode();
+				}
+			}
+		}
+		return;
+	}
 
 	// Walk up the outer chain of the changed object until we find a UScriptableNode owned by the
 	// edited graph. This catches both direct edits on the wrapper and edits on the inner task

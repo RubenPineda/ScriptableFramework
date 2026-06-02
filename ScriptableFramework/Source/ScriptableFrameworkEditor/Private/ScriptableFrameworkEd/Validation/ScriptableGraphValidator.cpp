@@ -7,6 +7,7 @@
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableNode_GoTo.h"
 #include "ScriptableNodes/ScriptableNode_Exit.h"
+#include "ScriptableNodes/ScriptableNode_Finish.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
@@ -429,6 +430,65 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 							FText::FromString(GetNodeLabel(Node)), FText::FromString(GetNodeLabel(NodesByGuid.FindRef(SourceId)))),
 						GValidatorId, ReaderId));
 				}
+			}
+		}
+	}
+
+	// --- Asset Outputs: no None/empty entries, no duplicates. The UPROPERTY has NoElementDuplicate
+	// but stale assets / external edits can still slip past it; warn explicitly here so the user sees
+	// the issue surfaced in the validation tab. ---
+	{
+		TSet<FName> SeenOutputs;
+		for (int32 Index = 0; Index < Graph->Outputs.Num(); ++Index)
+		{
+			const FName& Output = Graph->Outputs[Index];
+
+			if (Output.IsNone())
+			{
+				OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("OutputNone", "Graph.Outputs entry #{0} is None or empty."), Index),
+					GValidatorId));
+				continue;
+			}
+
+			if (SeenOutputs.Contains(Output))
+			{
+				OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("OutputDuplicate", "Graph.Outputs declares '{0}' more than once."), FText::FromName(Output)),
+					GValidatorId));
+				continue;
+			}
+
+			SeenOutputs.Add(Output);
+		}
+	}
+
+	// --- Finish must not be wired downstream of Exit. Exit's outputs already are the graph's
+	// completion paths; feeding one back into a Finish would loop into HandleNodeRequestFinishGraph,
+	// which short-circuits via bExitTriggered — silently dead wire that confuses the author. ---
+	{
+		TSet<FGuid> FinishNodeIds;
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (Cast<UScriptableNode_Finish>(Node))
+			{
+				FinishNodeIds.Add(Node->GetBindingID());
+			}
+		}
+
+		if (!FinishNodeIds.IsEmpty())
+		{
+			for (const FScriptableGraphConnection& Conn : Graph->Connections)
+			{
+				if (!FinishNodeIds.Contains(Conn.To.NodeID)) continue;
+
+				const UScriptableNode* FromNode = NodesByGuid.FindRef(Conn.From.NodeID);
+				if (!Cast<UScriptableNode_Exit>(FromNode)) continue;
+
+				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("FinishFromExit", "Finish node is wired from Exit's '{0}' output. Exit already represents completion; this connection has no effect."),
+						FText::FromName(Conn.From.PinName)),
+					GValidatorId, Conn.To.NodeID));
 			}
 		}
 	}

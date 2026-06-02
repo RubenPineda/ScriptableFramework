@@ -43,6 +43,13 @@ public:
 	UPROPERTY()
 	FGuid EntryNodeID;
 
+	/**
+	 * User-declared completion outputs. Appended after Exit's built-in "Finished"/"Cancelled" pins
+	 * and mirrored by SubGraph nodes referencing this asset. Order = pin order.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Outputs", meta = (NoElementDuplicate))
+	TArray<FName> Outputs;
+
 	//~ UObject interface
 	virtual void PostInitProperties() override;
 	virtual void PostLoad() override;

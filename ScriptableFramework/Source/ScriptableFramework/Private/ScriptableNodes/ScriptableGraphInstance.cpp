@@ -75,6 +75,7 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 		Node->OnPinFiredNative.AddUObject(this, &UScriptableGraphInstance::HandleNodePinFired);
 		Node->OnNodeInactiveNative.AddUObject(this, &UScriptableGraphInstance::HandleNodeInactive);
 		Node->OnRequestEventNative.AddUObject(this, &UScriptableGraphInstance::HandleNodeRequestEvent);
+		Node->OnRequestFinishGraphNative.AddUObject(this, &UScriptableGraphInstance::HandleNodeRequestFinishGraph);
 	}
 
 	// Activate the Entry node. Its synchronous Activate() will mark Out, fire it, and propagate.
@@ -167,6 +168,12 @@ void UScriptableGraphInstance::HandleNodePinFired(UScriptableNode* Node, FName O
 {
 	if (bCancelled || !Node) return;
 
+	// Capture Exit's first fire for parent SubGraph routing.
+	if (Node == ExitNode && CompletionOutput.IsNone())
+	{
+		CompletionOutput = OutputName;
+	}
+
 	const FScriptableGraphPinRef OutputRef{ Node->GetBindingID(), OutputName };
 
 	// Enqueue every downstream input wired to this output.
@@ -213,6 +220,26 @@ void UScriptableGraphInstance::HandleNodeRequestEvent(FName EventName)
 	// A Go To node asked us to jump. FireEvent is re-entrant: inside the drain it just enqueues the
 	// target ReceiveEvent's downstream activations, which the running ProcessQueue then picks up.
 	FireEvent(EventName);
+}
+
+void UScriptableGraphInstance::HandleNodeRequestFinishGraph(FName OutputName)
+{
+	if (bCancelled || bFinished || bExitTriggered) return;
+
+	// First Finish wins. Stop in-flight nodes (no pin propagation), clear pending, route via Exit.
+	bExitTriggered = true;
+	CompletionOutput = OutputName;
+	Pending.Empty();
+	TeardownNodes();
+
+	if (ExitNode)
+	{
+		HandleNodePinFired(ExitNode, OutputName);
+	}
+	else
+	{
+		Finish();
+	}
 }
 
 void UScriptableGraphInstance::ProcessQueue()
@@ -269,6 +296,7 @@ void UScriptableGraphInstance::TeardownNodes()
 		Node->OnPinFiredNative.RemoveAll(this);
 		Node->OnNodeInactiveNative.RemoveAll(this);
 		Node->OnRequestEventNative.RemoveAll(this);
+		Node->OnRequestFinishGraphNative.RemoveAll(this);
 
 		Node->Teardown();
 		Node->Unregister();
@@ -290,6 +318,7 @@ void UScriptableGraphInstance::Finish()
 		Node->OnPinFiredNative.RemoveAll(this);
 		Node->OnNodeInactiveNative.RemoveAll(this);
 		Node->OnRequestEventNative.RemoveAll(this);
+		Node->OnRequestFinishGraphNative.RemoveAll(this);
 	}
 
 	OnGraphFinishedNative.Broadcast();
