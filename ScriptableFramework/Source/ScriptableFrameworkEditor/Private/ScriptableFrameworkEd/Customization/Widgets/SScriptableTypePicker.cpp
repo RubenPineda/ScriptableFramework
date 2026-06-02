@@ -53,6 +53,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 	BaseClassRootCategory = InArgs._BaseClassRootCategory;
 	AdditionalBaseClassRootCategory = InArgs._AdditionalBaseClassRootCategory;
 	AdditionalBaseClassUserRootCategory = InArgs._AdditionalBaseClassUserRootCategory;
+	ExcludedClasses = InArgs._ExcludedClasses;
 	bEnableDragOut = InArgs._EnableDragOut;
 
 	TArray<FString> Filters;
@@ -624,6 +625,7 @@ void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, cons
 		if (Class == BaseClass) continue;
 		if (Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Hidden | CLASS_HideDropDown)) continue;
 		if (Class->HasMetaData(TEXT("Hidden"))) continue;
+		if (ExcludedClasses.Contains(Class)) continue;
 		if (!MatchesFilter(Class, MetaKey)) continue;
 
 		FText EffectiveRoot = RootCategory;

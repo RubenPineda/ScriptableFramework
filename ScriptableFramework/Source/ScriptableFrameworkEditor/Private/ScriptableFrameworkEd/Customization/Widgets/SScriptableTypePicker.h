@@ -72,6 +72,11 @@ public:
 		SLATE_ARGUMENT(FText, AdditionalBaseClassUserRootCategory)
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
+		/** Optional list of concrete classes to omit from the result regardless of which base they
+		 * came from. Used to hide specific tasks/nodes per context (e.g. UScriptableTask_RunGraph is
+		 * excluded in the Scriptable Graph picker since SubGraph replaces it; it stays available in
+		 * the Action picker). Matches the class strictly — subclasses are NOT excluded. */
+		SLATE_ARGUMENT(TArray<const UClass*>, ExcludedClasses)
 		/** Callback to call when a type is selected. */
 		SLATE_ARGUMENT(FOnNodeTypePicked, OnNodeTypePicked)
 		/** Optional callback fired when the picker widget is destroyed (i.e. the host menu has closed, regardless of whether a selection was made or the user pressed Escape). Use this to release any drag-off state the menu was hosting. */
@@ -167,6 +172,7 @@ private:
 	FText BaseClassRootCategory;
 	FText AdditionalBaseClassRootCategory;
 	FText AdditionalBaseClassUserRootCategory;
+	TArray<const UClass*> ExcludedClasses;
 	bool bEnableDragOut = false;
 
 	TArray<TArray<FString>> FilterPaths;
