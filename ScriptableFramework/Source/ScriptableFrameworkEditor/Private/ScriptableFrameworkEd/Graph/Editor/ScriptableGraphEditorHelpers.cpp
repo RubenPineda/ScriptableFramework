@@ -77,30 +77,56 @@ namespace ScriptableGraphEditorHelpers
 		return EdNode;
 	}
 
+	namespace
+	{
+		/** First ScriptableExec pin on Node in the given direction, or null. */
+		UEdGraphPin* FindFirstScriptableExecPin(UEdGraphNode* Node, EEdGraphPinDirection Direction)
+		{
+			if (!Node) return nullptr;
+			for (UEdGraphPin* Pin : Node->Pins)
+			{
+				if (Pin && Pin->Direction == Direction && Pin->PinType.PinCategory == UScriptableEdGraphNode::ScriptableExecPinCategory)
+				{
+					return Pin;
+				}
+			}
+			return nullptr;
+		}
+	}
+
 	void AutoWireFromPin(UEdGraphPin* FromPin, UEdGraphNode* TargetNode)
 	{
 		if (!FromPin || !TargetNode) return;
 
-		// Pick the opposite-direction pin (output drag → first input, input drag → first output),
-		// filtered to ScriptableExec so we don't bridge incompatible pin systems.
-		const EEdGraphPinDirection TargetDir = (FromPin->Direction == EGPD_Output) ? EGPD_Input : EGPD_Output;
-
-		UEdGraphPin* TargetPin = nullptr;
-		for (UEdGraphPin* Pin : TargetNode->Pins)
-		{
-			if (Pin && Pin->Direction == TargetDir && Pin->PinType.PinCategory == UScriptableEdGraphNode::ScriptableExecPinCategory)
-			{
-				TargetPin = Pin;
-				break;
-			}
-		}
-
-		if (!TargetPin) return;
-
 		const UEdGraphSchema* Schema = TargetNode->GetSchema();
 		if (!Schema) return;
 
-		Schema->TryCreateConnection(FromPin, TargetPin);
+		// Incoming-side pin on the new node: opposite direction to FromPin (output drag → first input,
+		// input drag → first output). This is the side that absorbs the dragged wire.
+		const EEdGraphPinDirection IncomingDir = (FromPin->Direction == EGPD_Output) ? EGPD_Input : EGPD_Output;
+		UEdGraphPin* IncomingPin = FindFirstScriptableExecPin(TargetNode, IncomingDir);
+		if (!IncomingPin) return;
+
+		// Splice the new node into the dragged wire IF (a) FromPin was already connected to something
+		// and (b) the new node has at least one matching-direction output pin to forward the signal to.
+		// Without an output pin (e.g. Exit) we can't be the middle of a chain, so we just fan in
+		// without breaking the original wire — same as the legacy single-connection behaviour.
+		const TArray<UEdGraphPin*> ExistingPeers = FromPin->LinkedTo;
+		UEdGraphPin* OutgoingPin = FindFirstScriptableExecPin(TargetNode, FromPin->Direction);
+
+		if (OutgoingPin && !ExistingPeers.IsEmpty())
+		{
+			for (UEdGraphPin* Peer : ExistingPeers)
+			{
+				if (!Peer) continue;
+				// Break the old direct wire and re-route it through TargetNode's first output.
+				// Picking the first output matches the rule the user wanted for ambiguity.
+				FromPin->BreakLinkTo(Peer);
+				Schema->TryCreateConnection(OutgoingPin, Peer);
+			}
+		}
+
+		Schema->TryCreateConnection(FromPin, IncomingPin);
 	}
 
 	UScriptableEdGraphNode* SpawnEdNodeForRuntime(UEdGraph* ParentGraph, UScriptableNode* RuntimeNode, const FVector2f& Location)
