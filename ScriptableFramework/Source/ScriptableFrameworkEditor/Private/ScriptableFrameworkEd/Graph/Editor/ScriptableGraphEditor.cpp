@@ -616,6 +616,7 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Palette(const FSpawnTabArg
 		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
 		.BaseClassRootCategory(LOCTEXT("PaletteScriptableTasks", "Scriptable Tasks"))
 		.AdditionalBaseClassRootCategory(LOCTEXT("PaletteNativeNodes", "Native Nodes"))
+		.AdditionalBaseClassUserRootCategory(LOCTEXT("PaletteScriptableNodes", "Scriptable Nodes"))
 		.EnableDragOut(true);
 
 	return SNew(SDockTab)
@@ -741,6 +742,7 @@ FActionMenuContent FScriptableGraphEditor::OnCreateNodeMenu(UEdGraph* InGraph, c
 		.AdditionalClassCategoryMeta(ScriptableFrameworkEditor::MD_NodeCategory)
 		.BaseClassRootCategory(LOCTEXT("PickerScriptableTasks", "Scriptable Tasks"))
 		.AdditionalBaseClassRootCategory(LOCTEXT("PickerNativeNodes", "Native Nodes"))
+		.AdditionalBaseClassUserRootCategory(LOCTEXT("PickerScriptableNodes", "Scriptable Nodes"))
 		.OnNodeTypePicked(SScriptableTypeSelector::FOnNodeTypePicked::CreateSP(this, &FScriptableGraphEditor::OnNodeMenuTypePicked, InGraph, CapturedLocation, CapturedPins))
 		.OnPickerClosed(MenuClosedAdapter);
 

@@ -32,7 +32,7 @@ public:
 		, _ClassCategoryMeta(NAME_None)
 		, _FilterCategoryMeta(NAME_None)
 		, _Filter()
-		, _ItemStyle(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("ComboBox.Row"))
+		, _ItemStyle(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>("TableView.Row"))
 	{}
 		/** Fixed width of the menu */
 		SLATE_ARGUMENT(float, ListWidth)
@@ -64,6 +64,12 @@ public:
 		SLATE_ARGUMENT(FText, BaseClassRootCategory)
 		/** Same as BaseClassRootCategory, applied to entries coming from AdditionalBaseClass. */
 		SLATE_ARGUMENT(FText, AdditionalBaseClassRootCategory)
+		/** Optional: when set, classes from AdditionalBaseClass that live OUTSIDE the framework's
+		 * own package (i.e. user-defined subclasses in another module / plugin) go under this root
+		 * category instead of AdditionalBaseClassRootCategory. Lets the picker split built-in
+		 * nodes ("Native Nodes") from project-defined ones ("Scriptable Nodes"). Leave empty for
+		 * the legacy single-bucket behaviour. */
+		SLATE_ARGUMENT(FText, AdditionalBaseClassUserRootCategory)
 		/** Filter */
 		SLATE_ARGUMENT(FString, Filter)
 		/** Callback to call when a type is selected. */
@@ -120,7 +126,12 @@ private:
 	bool MatchesFilter(const UStruct* Struct, const FName& MetaKey);
 
 	void CacheTypes(const UScriptStruct* BaseScriptStruct, const UClass* BaseClass);
-	void CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory = FText::GetEmpty());
+
+	/** When UserRootCategory is non-empty, classes outside the framework's own package go under it
+	 * instead of RootCategory. The split key is the class's package name prefix
+	 * ("/Script/ScriptableFramework") so the framework's runtime module and its sub-plugins all
+	 * count as "Native"; everything else (user project modules, third-party plugins) is "user". */
+	void CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory = FText::GetEmpty(), const FText& UserRootCategory = FText::GetEmpty());
 
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const;
@@ -131,8 +142,15 @@ private:
 
 	/** Tree key handler: Enter commits the highlighted item; everything else falls through to navigation. */
 	FReply OnTreeKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent);
+
+	/** SearchBox commit (Enter while focus is in the search field). Commits the auto-selected first match. */
+	void OnSearchBoxCommitted(const FText& InText, ETextCommit::Type CommitType);
 	void OnNodeTypeExpansionChanged(TSharedPtr<FScriptableTypeItem> ExpandedItem, bool bInExpanded);
 	void OnSearchBoxTextChanged(const FText& NewText);
+
+	/** Walks the filtered tree to find the first non-category (leaf) item, depth-first. Used to
+	 * auto-highlight the closest match as the user types so Enter commits it immediately. */
+	TSharedPtr<FScriptableTypeItem> FindFirstLeaf(const TArray<TSharedPtr<FScriptableTypeItem>>& Items) const;
 	int32 FilterNodeTypesChildren(const TArray<FString>& FilterStrings, const bool bParentMatches, const TArray<TSharedPtr<FScriptableTypeItem>>& SourceArray, TArray<TSharedPtr<FScriptableTypeItem>>& OutDestArray);
 	void ExpandAll(const TArray<TSharedPtr<FScriptableTypeItem>>& Items);
 	TArray<TSharedPtr<FScriptableTypeItem>> GetPathToItemStruct(const UStruct* Struct) const;
@@ -148,6 +166,7 @@ private:
 	FName AdditionalClassCategoryMeta;
 	FText BaseClassRootCategory;
 	FText AdditionalBaseClassRootCategory;
+	FText AdditionalBaseClassUserRootCategory;
 	bool bEnableDragOut = false;
 
 	TArray<TArray<FString>> FilterPaths;

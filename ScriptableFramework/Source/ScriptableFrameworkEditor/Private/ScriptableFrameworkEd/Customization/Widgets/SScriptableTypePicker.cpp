@@ -52,6 +52,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 	AdditionalBaseClass = InArgs._AdditionalBaseClass;
 	BaseClassRootCategory = InArgs._BaseClassRootCategory;
 	AdditionalBaseClassRootCategory = InArgs._AdditionalBaseClassRootCategory;
+	AdditionalBaseClassUserRootCategory = InArgs._AdditionalBaseClassUserRootCategory;
 	bEnableDragOut = InArgs._EnableDragOut;
 
 	TArray<FString> Filters;
@@ -152,6 +153,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 			[
 				SAssignNew(SearchBox, SSearchBox)
 					.OnTextChanged(this, &SScriptableTypeSelector::OnSearchBoxTextChanged)
+					.OnTextCommitted(this, &SScriptableTypeSelector::OnSearchBoxCommitted)
 					.Visibility(InArgs._SearchVisibility)
 			];
 	}
@@ -555,10 +557,13 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 	CacheClassesFromBase(BaseClass, ClassCategoryMeta, BaseClassRootCategory);
 
 	// 3. Classes from AdditionalBaseClass (uses AdditionalClassCategoryMeta, falling back to ClassCategoryMeta).
+	// When AdditionalBaseClassUserRootCategory is set, user-defined subclasses (those that live
+	// outside /Script/ScriptableFramework*) go under that root instead of the default one — letting
+	// the picker show built-ins and project nodes as separate top-level groups.
 	if (AdditionalBaseClass)
 	{
 		const FName ExtraMetaKey = AdditionalClassCategoryMeta.IsNone() ? ClassCategoryMeta : AdditionalClassCategoryMeta;
-		CacheClassesFromBase(AdditionalBaseClass, ExtraMetaKey, AdditionalBaseClassRootCategory);
+		CacheClassesFromBase(AdditionalBaseClass, ExtraMetaKey, AdditionalBaseClassRootCategory, AdditionalBaseClassUserRootCategory);
 	}
 
 	// 4. Assets associated with BaseClass (Task → ActionAsset, Condition → RequirementAsset).
@@ -598,7 +603,7 @@ void SScriptableTypeSelector::CacheTypes(const UScriptStruct* BaseScriptStruct, 
 	FilteredRootNode = RootNode;
 }
 
-void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory)
+void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, const FName& MetaKey, const FText& RootCategory, const FText& UserRootCategory)
 {
 	if (!BaseClass) return;
 
@@ -609,6 +614,9 @@ void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, cons
 	TArray<TSharedPtr<FScriptableTypeData>> ObjectNodes;
 	TypeCache->GetClasses(BaseClass, ObjectNodes);
 
+	const bool bSplitByPackage = !UserRootCategory.IsEmpty();
+	static const TCHAR* FrameworkPackagePrefix = TEXT("/Script/ScriptableFramework");
+
 	for (const TSharedPtr<FScriptableTypeData>& Data : ObjectNodes)
 	{
 		const UClass* Class = Data->GetClass();
@@ -618,7 +626,20 @@ void SScriptableTypeSelector::CacheClassesFromBase(const UClass* BaseClass, cons
 		if (Class->HasMetaData(TEXT("Hidden"))) continue;
 		if (!MatchesFilter(Class, MetaKey)) continue;
 
-		AddNode(Class, MetaKey, RootCategory);
+		FText EffectiveRoot = RootCategory;
+		if (bSplitByPackage)
+		{
+			// Prefix check covers the framework's runtime module ("/Script/ScriptableFramework")
+			// AND its sub-plugins ("/Script/ScriptableFrameworkAI", "/Script/ScriptableFrameworkSequencer",
+			// ...). Anything else — user project modules, unrelated plugins — is treated as user-defined.
+			const FString PackageName = Class->GetOutermost()->GetName();
+			if (!PackageName.StartsWith(FrameworkPackagePrefix))
+			{
+				EffectiveRoot = UserRootCategory;
+			}
+		}
+
+		AddNode(Class, MetaKey, EffectiveRoot);
 	}
 }
 
@@ -832,6 +853,35 @@ void SScriptableTypeSelector::OnSearchBoxTextChanged(const FText& NewText)
 	NodeTypeTree->SetTreeItemsSource(&FilteredRootNode->Children);
 	ExpandAll(FilteredRootNode->Children);
 	NodeTypeTree->RequestTreeRefresh();
+
+	// Auto-highlight the first leaf in the filtered set so Enter commits the top match immediately,
+	// mirroring the BP action menu's behaviour. Scrolls it into view in case it was off-screen.
+	NodeTypeTree->ClearSelection();
+	if (const TSharedPtr<FScriptableTypeItem> FirstLeaf = FindFirstLeaf(FilteredRootNode->Children))
+	{
+		NodeTypeTree->SetItemSelection(FirstLeaf, true, ESelectInfo::Direct);
+		NodeTypeTree->RequestScrollIntoView(FirstLeaf);
+	}
+}
+
+TSharedPtr<SScriptableTypeSelector::FScriptableTypeItem> SScriptableTypeSelector::FindFirstLeaf(const TArray<TSharedPtr<FScriptableTypeItem>>& Items) const
+{
+	for (const TSharedPtr<FScriptableTypeItem>& Item : Items)
+	{
+		if (!Item.IsValid()) continue;
+		if (!Item->IsCategory()) return Item;
+		if (TSharedPtr<FScriptableTypeItem> Nested = FindFirstLeaf(Item->Children)) return Nested;
+	}
+	return nullptr;
+}
+
+void SScriptableTypeSelector::OnSearchBoxCommitted(const FText& InText, ETextCommit::Type CommitType)
+{
+	// Only Enter commits; losing focus or pressing Escape leaves the picker open without selecting.
+	if (CommitType == ETextCommit::OnEnter)
+	{
+		CommitSelection();
+	}
 }
 
 int32 SScriptableTypeSelector::FilterNodeTypesChildren(const TArray<FString>& FilterStrings, const bool bParentMatches, const TArray<TSharedPtr<FScriptableTypeItem>>& SourceArray, TArray<TSharedPtr<FScriptableTypeItem>>& OutDestArray)
