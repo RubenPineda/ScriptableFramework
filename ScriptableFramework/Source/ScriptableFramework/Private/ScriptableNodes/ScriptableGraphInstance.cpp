@@ -1,16 +1,28 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_Exit.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableContext.h"
+#include "ScriptableObject.h"
 
 void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext)
 {
 	if (!InAsset || !InOwner) return;
+
+#if WITH_EDITOR
+	/** Editor-only gate: refuse to run a graph whose last compile failed. The editor module surfaces a dialog after PIE. */
+	if (InAsset->bLastCompileFailed)
+	{
+		UE_LOG(LogScriptableObject, Error, TEXT("ScriptableGraph '%s' refused to launch: last compile failed. Open the asset and hit Compile to see the issues."), *InAsset->GetName());
+		UScriptableGraph::OnLaunchBlockedByCompile.Broadcast(InAsset);
+		return;
+	}
+#endif
 
 	Asset = InAsset;
 	Owner = InOwner;

@@ -140,13 +140,16 @@ private:
 	/** Spawns the Validation tab hosting an SKzValidationPanel wired to this graph. */
 	TSharedRef<SDockTab> SpawnTab_Validation(const FSpawnTabArgs& Args);
 
-	/** Adds the "Validate" toolbar button. */
+	/** Adds the "Compile" toolbar button. */
 	void ExtendToolbar();
 
-	/** Toolbar handler: focuses the Validation tab and re-runs validation. */
-	void OnRunValidation();
+	/** Toolbar handler: runs the validator pass, persists the compile result on the asset, and surfaces issues in the panel. */
+	void OnCompile();
 
-	/** Runs all matching validators on the graph and returns the fresh issue list for the panel. */
+	/** Shared compile flow used by both the toolbar button and the open-time pass. Set bMarkPackageDirty=false when the flip is a passive refresh, not a user edit. */
+	void RunCompile(bool bMarkPackageDirty);
+
+	/** Pull from the panel (Refresh button): re-runs the validator and returns the fresh issue list. Does not persist. */
 	TArray<FKzValidationIssue> HandleRunValidation();
 
 	/** Click-to-navigate: selects and pans to the ed-node whose runtime BindingID matches the issue's ContextId. */

@@ -94,5 +94,16 @@ public:
 	/** Editor-only visual representation of the graph. Holds node positions, wires, comments, etc. */
 	UPROPERTY()
 	TObjectPtr<UEdGraph> EdGraph;
+
+	/**
+	 * Result of the last compile pass. Set by the editor's Compile action (and on editor open).
+	 * Runtime Launch refuses to start the graph while this is true (editor-only gate).
+	 */
+	UPROPERTY()
+	bool bLastCompileFailed = false;
+
+	/** Broadcast by Launch when it refuses to start a graph because bLastCompileFailed is true. Editor module observes this to surface a post-PIE dialog. */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnLaunchBlockedByCompile, UScriptableGraph* /*Asset*/);
+	static FOnLaunchBlockedByCompile OnLaunchBlockedByCompile;
 #endif
 };

@@ -489,6 +489,9 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 
 	ExtendToolbar();
 	RegenerateMenusAndToolbars();
+
+	/** Open-time compile: refreshes bLastCompileFailed from current state without bumping the package dirty flag. */
+	RunCompile(/*bMarkPackageDirty*/ false);
 }
 
 FName FScriptableGraphEditor::GetToolkitFName() const
@@ -1699,14 +1702,14 @@ void FScriptableGraphEditor::ExtendToolbar()
 		GetToolkitCommands(),
 		FToolBarExtensionDelegate::CreateLambda([this](FToolBarBuilder& ToolbarBuilder)
 			{
-				ToolbarBuilder.BeginSection("Validation");
+				ToolbarBuilder.BeginSection("Compile");
 				{
 					ToolbarBuilder.AddToolBarButton(
-						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRunValidation)),
+						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCompile)),
 						NAME_None,
-						LOCTEXT("ValidateBtn", "Validate"),
-						LOCTEXT("ValidateBtnTip", "Run structural validation on this graph and open the Validation tab"),
-						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Refresh"));
+						LOCTEXT("CompileBtn", "Compile"),
+						LOCTEXT("CompileBtnTip", "Validate this graph and persist the compile result. The runtime refuses to launch graphs whose last compile failed."),
+						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Blueprint.CompileStatus.Background"));
 				}
 				ToolbarBuilder.EndSection();
 
@@ -1739,15 +1742,35 @@ void FScriptableGraphEditor::ExtendToolbar()
 	AddToolbarExtender(Extender);
 }
 
-void FScriptableGraphEditor::OnRunValidation()
+void FScriptableGraphEditor::OnCompile()
 {
 	if (const TSharedPtr<FTabManager> TabManagerPin = GetTabManager())
 	{
 		TabManagerPin->TryInvokeTab(ValidationTabId);
 	}
+	RunCompile(/*bMarkPackageDirty*/ true);
+}
+
+void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph) return;
+
+	const TArray<FKzValidationIssue> Issues = FKzAssetValidationUtils::RunValidation(Graph);
+	const bool bHasError = Issues.ContainsByPredicate(
+		[](const FKzValidationIssue& Issue) { return Issue.Severity == EKzValidationSeverity::Error; });
+
+	/** Persist only when the result actually flipped, to avoid spurious package-dirty bumps on a clean re-compile. */
+	if (Graph->bLastCompileFailed != bHasError)
+	{
+		if (bMarkPackageDirty) Graph->Modify();
+		Graph->bLastCompileFailed = bHasError;
+		if (bMarkPackageDirty) Graph->MarkPackageDirty();
+	}
+
 	if (ValidationPanel.IsValid())
 	{
-		ValidationPanel->RefreshIssues();
+		ValidationPanel->SetIssues(Issues);
 	}
 }
 

@@ -7,6 +7,10 @@
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "Core/KzBagOps.h"
 
+#if WITH_EDITOR
+UScriptableGraph::FOnLaunchBlockedByCompile UScriptableGraph::OnLaunchBlockedByCompile;
+#endif
+
 UScriptableGraph::UScriptableGraph()
 {
 }
