@@ -277,6 +277,35 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 	Section.AddSeparator(TEXT("ScriptableNodeEditDeleteSep"));
 	Section.AddMenuEntry(FGenericCommands::Get().Delete);
 
+	/**
+	 * Comment bubble toggle, BP-style. The SCommentBubble (created by SGraphNode::UpdateGraphNode)
+	 * shows a chevron in the title bar for inline editing; this entry just controls the always-on
+	 * pinning so the bubble stays visible after the user clicks away.
+	 */
+	TWeakObjectPtr<UEdGraphNode> WeakNode(const_cast<UEdGraphNode*>(Context->Node.Get()));
+	FToolMenuSection& CommentSection = Menu->AddSection(TEXT("ScriptableNodeComment"), LOCTEXT("CommentSection", "Comment"));
+	CommentSection.AddMenuEntry(
+		"TogglePinCommentBubble",
+		LOCTEXT("TogglePinCommentBubble", "Pin Comment Bubble"),
+		LOCTEXT("TogglePinCommentBubbleTip", "Keep the comment bubble visible above this node."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([WeakNode]()
+				{
+					UEdGraphNode* Node = WeakNode.Get();
+					if (!Node) return;
+					Node->Modify();
+					Node->bCommentBubblePinned = !Node->bCommentBubblePinned;
+					Node->bCommentBubbleVisible = Node->bCommentBubblePinned;
+				}),
+			FCanExecuteAction(),
+			FIsActionChecked::CreateLambda([WeakNode]()
+				{
+					const UEdGraphNode* Node = WeakNode.Get();
+					return Node && Node->bCommentBubblePinned;
+				})),
+		EUserInterfaceActionType::ToggleButton);
+
 	Super::GetContextMenuActions(Menu, Context);
 }
 
