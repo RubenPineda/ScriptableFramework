@@ -35,6 +35,20 @@ FLinearColor UScriptableEdGraphNode_Task::GetNodeTitleColor() const
 	return FScriptableFrameworkEditorStyle::ScriptableTaskColor;
 }
 
+FText UScriptableEdGraphNode_Task::GetTooltipText() const
+{
+	/** Surface the inner task's class tooltip instead of the wrapper's, which is generic. */
+	if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(GetRuntimeNode()))
+	{
+		if (const UScriptableTask* Task = TaskNode->Task)
+		{
+			const FText TaskTooltip = Task->GetClass()->GetToolTipText(/*bShortTooltip*/ false);
+			if (!TaskTooltip.IsEmpty()) return TaskTooltip;
+		}
+	}
+	return Super::GetTooltipText();
+}
+
 bool UScriptableEdGraphNode_Task::ShouldShowPinLabel(FName PinName) const
 {
 	if (PinName == UScriptableNode_Task::StartInputName) return false;
