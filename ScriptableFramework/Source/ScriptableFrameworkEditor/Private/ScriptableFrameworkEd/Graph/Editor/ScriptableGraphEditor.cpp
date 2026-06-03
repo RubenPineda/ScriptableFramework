@@ -367,6 +367,18 @@ FScriptableGraphEditor::~FScriptableGraphEditor()
 	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
 	FCoreUObjectDelegates::OnObjectTransacted.Remove(OnObjectTransactedHandle);
 
+	if (GraphChangedHandle.IsValid())
+	{
+		if (UScriptableGraph* Graph = EditedGraph.Get())
+		{
+			if (Graph->EdGraph)
+			{
+				Graph->EdGraph->RemoveOnGraphChangedHandler(GraphChangedHandle);
+			}
+		}
+		GraphChangedHandle.Reset();
+	}
+
 	if (SpawnInputProcessor.IsValid() && FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().UnregisterInputPreProcessor(SpawnInputProcessor);
@@ -419,6 +431,12 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	// Ensure the asset has a visual UEdGraph, then mirror its runtime Nodes onto it.
 	InitEdGraph();
 	ReconstructEdGraphFromAsset();
+
+	if (InGraph && InGraph->EdGraph)
+	{
+		GraphChangedHandle = InGraph->EdGraph->AddOnGraphChangedHandler(
+			FOnGraphChanged::FDelegate::CreateSP(this, &FScriptableGraphEditor::HandleGraphChanged));
+	}
 
 	// Default three-pane layout: details left | graph center | node details right.
 	const TSharedRef<FTabManager::FLayout> Layout = FTabManager::NewLayout("ScriptableGraphEditor_Layout_v4")
@@ -1389,6 +1407,9 @@ void FScriptableGraphEditor::OnNodeTitleCommitted(const FText& NewText, ETextCom
 	const FScopedTransaction Transaction(LOCTEXT("RenameNodeTx", "Rename Node"));
 	NodeBeingChanged->Modify();
 	NodeBeingChanged->OnRenameNode(NewText.ToString());
+
+	/** OnRenameNode bypasses both NotifyGraphChanged and FCoreUObjectDelegates::OnObjectPropertyChanged. */
+	MarkDirtySinceLastCompile();
 }
 
 void FScriptableGraphEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
@@ -1613,6 +1634,8 @@ void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPr
 	// Graph.Outputs edits ripple to Exit ed-nodes (their pin set depends on it).
 	if (InObject == Graph)
 	{
+		MarkDirtySinceLastCompile();
+
 		const FName PropertyName = InEvent.Property ? InEvent.Property->GetFName() : NAME_None;
 		if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs))
 		{
@@ -1637,6 +1660,8 @@ void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPr
 	{
 		UScriptableNode* Node = Cast<UScriptableNode>(Cursor);
 		if (!Node || Node->GetOuter() != Graph) continue;
+
+		MarkDirtySinceLastCompile();
 
 		for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
 		{
@@ -1708,8 +1733,8 @@ void FScriptableGraphEditor::ExtendToolbar()
 						FUIAction(FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnCompile)),
 						NAME_None,
 						LOCTEXT("CompileBtn", "Compile"),
-						LOCTEXT("CompileBtnTip", "Validate this graph and persist the compile result. The runtime refuses to launch graphs whose last compile failed."),
-						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Blueprint.CompileStatus.Background"));
+						TAttribute<FText>::Create(TAttribute<FText>::FGetter::CreateSP(this, &FScriptableGraphEditor::GetCompileButtonTooltip)),
+						TAttribute<FSlateIcon>::Create(TAttribute<FSlateIcon>::FGetter::CreateSP(this, &FScriptableGraphEditor::GetCompileButtonIcon)));
 				}
 				ToolbarBuilder.EndSection();
 
@@ -1772,6 +1797,52 @@ void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
 	{
 		ValidationPanel->SetIssues(Issues);
 	}
+
+	/** Compile is the only event that clears dirty. The status icon polls the flag every paint. */
+	bIsDirtySinceLastCompile = false;
+}
+
+void FScriptableGraphEditor::MarkDirtySinceLastCompile()
+{
+	bIsDirtySinceLastCompile = true;
+}
+
+void FScriptableGraphEditor::HandleGraphChanged(const FEdGraphEditAction& Action)
+{
+	/** Pure selection changes don't count as edits. Everything else (add/remove node, pins, connections) does. */
+	if (Action.Action == GRAPHACTION_SelectNode) return;
+	MarkDirtySinceLastCompile();
+}
+
+FSlateIcon FScriptableGraphEditor::GetCompileButtonIcon() const
+{
+	const FName StyleSet = FAppStyle::GetAppStyleSetName();
+	const FName Base("Blueprint.CompileStatus.Background");
+
+	if (bIsDirtySinceLastCompile)
+	{
+		return FSlateIcon(StyleSet, Base, NAME_None, "Blueprint.CompileStatus.Overlay.Unknown");
+	}
+	const UScriptableGraph* Graph = EditedGraph.Get();
+	if (Graph && Graph->bLastCompileFailed)
+	{
+		return FSlateIcon(StyleSet, Base, NAME_None, "Blueprint.CompileStatus.Overlay.Error");
+	}
+	return FSlateIcon(StyleSet, Base, NAME_None, "Blueprint.CompileStatus.Overlay.Good");
+}
+
+FText FScriptableGraphEditor::GetCompileButtonTooltip() const
+{
+	if (bIsDirtySinceLastCompile)
+	{
+		return LOCTEXT("CompileBtnTip_Dirty", "Graph has uncompiled changes. Click to compile.");
+	}
+	const UScriptableGraph* Graph = EditedGraph.Get();
+	if (Graph && Graph->bLastCompileFailed)
+	{
+		return LOCTEXT("CompileBtnTip_Failed", "Last compile failed. Click to recompile and see the issues.");
+	}
+	return LOCTEXT("CompileBtnTip_Good", "Graph is up to date. Click to recompile.");
 }
 
 TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()

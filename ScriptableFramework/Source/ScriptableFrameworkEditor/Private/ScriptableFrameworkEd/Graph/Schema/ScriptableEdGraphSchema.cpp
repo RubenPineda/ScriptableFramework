@@ -119,6 +119,12 @@ bool UScriptableEdGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPin* 
 	A->MakeLinkTo(B);
 	PersistConnection(A, B);
 
+	/** SGraphPanel + dirty tracker subscribe to OnGraphChanged; without this, neither hears connect/disconnect. */
+	if (UEdGraphNode* Node = A->GetOwningNode())
+	{
+		if (UEdGraph* OwningEdGraph = Node->GetGraph()) OwningEdGraph->NotifyGraphChanged();
+	}
+
 	return true;
 }
 
@@ -153,6 +159,11 @@ void UScriptableEdGraphSchema::BreakSinglePinLink(UEdGraphPin* SourcePin, UEdGra
 			return C.From.NodeID == FromID && C.From.PinName == FromPinName
 				&& C.To.NodeID == ToID && C.To.PinName == ToPinName;
 		});
+
+	if (UEdGraph* OwningEdGraph = FromPin->GetOwningNode() ? FromPin->GetOwningNode()->GetGraph() : nullptr)
+	{
+		OwningEdGraph->NotifyGraphChanged();
+	}
 }
 
 void UScriptableEdGraphSchema::BreakPinLinks(UEdGraphPin& TargetPin, bool bSendsNodeNotification) const
@@ -186,6 +197,11 @@ void UScriptableEdGraphSchema::BreakPinLinks(UEdGraphPin& TargetPin, bool bSends
 			}
 			return C.To.NodeID == NodeID && C.To.PinName == PinName;
 		});
+
+	if (UEdGraph* MutableOwningGraph = const_cast<UEdGraph*>(OwningGraph))
+	{
+		MutableOwningGraph->NotifyGraphChanged();
+	}
 }
 
 void UScriptableEdGraphSchema::BreakNodeLinks(UEdGraphNode& TargetNode) const

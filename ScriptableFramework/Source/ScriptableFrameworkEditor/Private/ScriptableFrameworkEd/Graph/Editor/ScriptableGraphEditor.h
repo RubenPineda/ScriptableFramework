@@ -6,6 +6,9 @@
 #include "Toolkits/AssetEditorToolkit.h"
 #include "GraphEditor.h"
 #include "Widgets/Views/SListView.h"
+#include "Textures/SlateIcon.h"
+
+struct FEdGraphEditAction;
 
 class UScriptableGraph;
 class UScriptableNode;
@@ -149,6 +152,16 @@ private:
 	/** Shared compile flow used by both the toolbar button and the open-time pass. Set bMarkPackageDirty=false when the flip is a passive refresh, not a user edit. */
 	void RunCompile(bool bMarkPackageDirty);
 
+	/** Marks the editor dirty since the last compile. Called from every semantic edit hook. */
+	void MarkDirtySinceLastCompile();
+
+	/** UEdGraph::OnGraphChanged hook: marks dirty on any change that isn't a pure selection. */
+	void HandleGraphChanged(const FEdGraphEditAction& Action);
+
+	/** Driven by bIsDirtySinceLastCompile and Graph->bLastCompileFailed: yellow > red > green. */
+	FSlateIcon GetCompileButtonIcon() const;
+	FText GetCompileButtonTooltip() const;
+
 	/** Pull from the panel (Refresh button): re-runs the validator and returns the fresh issue list. Does not persist. */
 	TArray<FKzValidationIssue> HandleRunValidation();
 
@@ -202,6 +215,12 @@ private:
 
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
+
+	/** Handle to UEdGraph::OnGraphChanged so we can detect topology/connection edits and unsubscribe at destruction. */
+	FDelegateHandle GraphChangedHandle;
+
+	/** Cleared by RunCompile, set by every semantic edit. Drives the yellow/red status of the Compile button. Transient. */
+	bool bIsDirtySinceLastCompile = false;
 
 	/** Tracks held shortcut keys (S/B/G/E/A) and turns LMB-down over the graph into a node spawn. */
 	TSharedPtr<FScriptableGraphSpawnInputProcessor> SpawnInputProcessor;
