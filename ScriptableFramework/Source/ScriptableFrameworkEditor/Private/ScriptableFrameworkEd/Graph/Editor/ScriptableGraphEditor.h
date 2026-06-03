@@ -158,6 +158,9 @@ private:
 	/** UEdGraph::OnGraphChanged hook: marks dirty on any change that isn't a pure selection. */
 	void HandleGraphChanged(const FEdGraphEditAction& Action);
 
+	/** Applies validation issues onto each ed-node's bHasCompilerMessage/ErrorType/ErrorMsg, then triggers a redraw. */
+	void ApplyValidationToErrorBanners(const TArray<FKzValidationIssue>& Issues);
+
 	/** Driven by bIsDirtySinceLastCompile and Graph->bLastCompileFailed: yellow > red > green. */
 	FSlateIcon GetCompileButtonIcon() const;
 	FText GetCompileButtonTooltip() const;
@@ -221,6 +224,9 @@ private:
 
 	/** Cleared by RunCompile, set by every semantic edit. Drives the yellow/red status of the Compile button. Transient. */
 	bool bIsDirtySinceLastCompile = false;
+
+	/** Set by RunCompile while it broadcasts NotifyGraphChanged to redraw error banners. Stops the dirty tracker from rebooting itself. */
+	bool bSuppressDirtyOnGraphChange = false;
 
 	/** Tracks held shortcut keys (S/B/G/E/A) and turns LMB-down over the graph into a node spawn. */
 	TSharedPtr<FScriptableGraphSpawnInputProcessor> SpawnInputProcessor;

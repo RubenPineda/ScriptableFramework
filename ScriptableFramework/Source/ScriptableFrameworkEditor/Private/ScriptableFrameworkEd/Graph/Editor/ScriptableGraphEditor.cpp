@@ -55,6 +55,7 @@
 #include "Widgets/SKzValidationPanel.h"
 #include "Validation/KzAssetValidationUtils.h"
 #include "Core/KzValidationTypes.h"
+#include "Logging/TokenizedMessage.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "Widgets/Input/SSearchBox.h"
@@ -1798,6 +1799,8 @@ void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
 		ValidationPanel->SetIssues(Issues);
 	}
 
+	ApplyValidationToErrorBanners(Issues);
+
 	/** Compile is the only event that clears dirty. The status icon polls the flag every paint. */
 	bIsDirtySinceLastCompile = false;
 }
@@ -1809,9 +1812,65 @@ void FScriptableGraphEditor::MarkDirtySinceLastCompile()
 
 void FScriptableGraphEditor::HandleGraphChanged(const FEdGraphEditAction& Action)
 {
+	if (bSuppressDirtyOnGraphChange) return;
+
 	/** Pure selection changes don't count as edits. Everything else (add/remove node, pins, connections) does. */
 	if (Action.Action == GRAPHACTION_SelectNode) return;
 	MarkDirtySinceLastCompile();
+}
+
+void FScriptableGraphEditor::ApplyValidationToErrorBanners(const TArray<FKzValidationIssue>& Issues)
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph) return;
+
+	/** Aggregate per node: highest severity (lowest enum value) wins, messages concatenate for the tooltip. */
+	struct FNodeMarker
+	{
+		int32 Severity = EMessageSeverity::Info;
+		FString Message;
+	};
+	TMap<FGuid, FNodeMarker> Markers;
+	for (const FKzValidationIssue& Issue : Issues)
+	{
+		if (!Issue.ContextId.IsValid()) continue;
+
+		const int32 EngineSeverity =
+			Issue.Severity == EKzValidationSeverity::Error ? EMessageSeverity::Error :
+			Issue.Severity == EKzValidationSeverity::Warning ? EMessageSeverity::Warning :
+			EMessageSeverity::Info;
+
+		FNodeMarker& Marker = Markers.FindOrAdd(Issue.ContextId);
+		Marker.Severity = FMath::Min(Marker.Severity, EngineSeverity);
+		if (!Marker.Message.IsEmpty()) Marker.Message += TEXT("\n");
+		Marker.Message += Issue.Message.ToString();
+	}
+
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+		if (!SfEd) continue;
+
+		const UScriptableNode* Runtime = SfEd->GetRuntimeNode();
+		const FGuid BindingID = Runtime ? Runtime->GetBindingID() : FGuid();
+
+		if (const FNodeMarker* Found = Markers.Find(BindingID))
+		{
+			SfEd->bHasCompilerMessage = true;
+			SfEd->ErrorType = Found->Severity;
+			/** Banner text mirrors BP's convention: short label, the full message lives in the panel. */
+			SfEd->ErrorMsg = Found->Severity == EMessageSeverity::Error ? TEXT("ERROR!") : TEXT("WARNING!");
+		}
+		else
+		{
+			SfEd->bHasCompilerMessage = false;
+			SfEd->ErrorMsg.Reset();
+		}
+	}
+
+	/** SGraphNode only re-reads ErrorMsg/ErrorType inside UpdateGraphNode; the cheapest way to retrigger that for every node is to broadcast OnGraphChanged. */
+	TGuardValue<bool> Guard(bSuppressDirtyOnGraphChange, true);
+	Graph->EdGraph->NotifyGraphChanged();
 }
 
 FSlateIcon FScriptableGraphEditor::GetCompileButtonIcon() const
