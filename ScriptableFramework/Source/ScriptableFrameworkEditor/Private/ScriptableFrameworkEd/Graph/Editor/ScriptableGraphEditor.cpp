@@ -56,6 +56,8 @@
 #include "Validation/KzAssetValidationUtils.h"
 #include "Core/KzValidationTypes.h"
 #include "Logging/TokenizedMessage.h"
+#include "ScriptableFrameworkEd/ScriptableGraphEditorSettings.h"
+#include "Subsystems/EditorAssetSubsystem.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "Widgets/Input/SSearchBox.h"
@@ -1736,6 +1738,15 @@ void FScriptableGraphEditor::ExtendToolbar()
 						LOCTEXT("CompileBtn", "Compile"),
 						TAttribute<FText>::Create(TAttribute<FText>::FGetter::CreateSP(this, &FScriptableGraphEditor::GetCompileButtonTooltip)),
 						TAttribute<FSlateIcon>::Create(TAttribute<FSlateIcon>::FGetter::CreateSP(this, &FScriptableGraphEditor::GetCompileButtonIcon)));
+
+					/** Compact dropdown chevron next to Compile, mirroring the BP toolbar combo. */
+					ToolbarBuilder.AddComboButton(
+						FUIAction(),
+						FOnGetContent::CreateSP(this, &FScriptableGraphEditor::GenerateCompileOptionsMenu),
+						LOCTEXT("CompileOptions_Label", ""),
+						LOCTEXT("CompileOptions_Tooltip", "Compile options"),
+						TAttribute<FSlateIcon>(),
+						/*bInSimpleComboBox=*/ true);
 				}
 				ToolbarBuilder.EndSection();
 
@@ -1803,6 +1814,36 @@ void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
 
 	/** Compile is the only event that clears dirty. The status icon polls the flag every paint. */
 	bIsDirtySinceLastCompile = false;
+
+	/** Save / Jump options only apply on user-initiated compile (open-time pass is silent). */
+	if (bMarkPackageDirty)
+	{
+		const UScriptableGraphEditorSettings* Settings = GetDefault<UScriptableGraphEditorSettings>();
+
+		const bool bShouldSave =
+			Settings->SaveOnCompile == EScriptableSaveOnCompile::Always ||
+			(Settings->SaveOnCompile == EScriptableSaveOnCompile::OnSuccessOnly && !bHasError);
+
+		if (bShouldSave)
+		{
+			if (UEditorAssetSubsystem* AssetSub = GEditor ? GEditor->GetEditorSubsystem<UEditorAssetSubsystem>() : nullptr)
+			{
+				AssetSub->SaveLoadedAsset(Graph, /*bOnlyIfIsDirty*/ false);
+			}
+		}
+
+		if (bHasError && Settings->bJumpToErrorNode && GraphEditorWidget.IsValid() && Graph->EdGraph)
+		{
+			for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+			{
+				if (EdNode && EdNode->bHasCompilerMessage && EdNode->ErrorType == EMessageSeverity::Error)
+				{
+					GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
+					break;
+				}
+			}
+		}
+	}
 }
 
 void FScriptableGraphEditor::MarkDirtySinceLastCompile()
@@ -1888,6 +1929,76 @@ FSlateIcon FScriptableGraphEditor::GetCompileButtonIcon() const
 		return FSlateIcon(StyleSet, Base, NAME_None, "Blueprint.CompileStatus.Overlay.Error");
 	}
 	return FSlateIcon(StyleSet, Base, NAME_None, "Blueprint.CompileStatus.Overlay.Good");
+}
+
+TSharedRef<SWidget> FScriptableGraphEditor::GenerateCompileOptionsMenu()
+{
+	FMenuBuilder MenuBuilder(/*bShouldCloseAfter=*/ true, nullptr);
+
+	MenuBuilder.AddSubMenu(
+		LOCTEXT("SaveOnCompile", "Save on Compile"),
+		LOCTEXT("SaveOnCompileTip", "Whether the asset is saved automatically after a Compile pass."),
+		FNewMenuDelegate::CreateSP(this, &FScriptableGraphEditor::BuildSaveOnCompileMenu));
+
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("JumpToErrorNode", "Jump to Error Node"),
+		LOCTEXT("JumpToErrorNodeTip", "After a failed compile, pan to and select the first node carrying the error."),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([]()
+				{
+					UScriptableGraphEditorSettings* Settings = GetMutableDefault<UScriptableGraphEditorSettings>();
+					Settings->bJumpToErrorNode = !Settings->bJumpToErrorNode;
+					Settings->SaveConfig();
+				}),
+			FCanExecuteAction(),
+			FIsActionChecked::CreateLambda([]()
+				{
+					return GetDefault<UScriptableGraphEditorSettings>()->bJumpToErrorNode;
+				})),
+		NAME_None,
+		EUserInterfaceActionType::ToggleButton);
+
+	return MenuBuilder.MakeWidget();
+}
+
+void FScriptableGraphEditor::BuildSaveOnCompileMenu(FMenuBuilder& MenuBuilder)
+{
+	const EScriptableSaveOnCompile Levels[] =
+	{
+		EScriptableSaveOnCompile::Never,
+		EScriptableSaveOnCompile::OnSuccessOnly,
+		EScriptableSaveOnCompile::Always,
+	};
+	const FText Labels[] =
+	{
+		LOCTEXT("SaveNever", "Never"),
+		LOCTEXT("SaveOnSuccess", "On Success Only"),
+		LOCTEXT("SaveAlways", "Always"),
+	};
+
+	for (int32 i = 0; i < UE_ARRAY_COUNT(Levels); ++i)
+	{
+		const EScriptableSaveOnCompile Level = Levels[i];
+		MenuBuilder.AddMenuEntry(
+			Labels[i],
+			FText::GetEmpty(),
+			FSlateIcon(),
+			FUIAction(
+				FExecuteAction::CreateLambda([Level]()
+					{
+						UScriptableGraphEditorSettings* Settings = GetMutableDefault<UScriptableGraphEditorSettings>();
+						Settings->SaveOnCompile = Level;
+						Settings->SaveConfig();
+					}),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateLambda([Level]()
+					{
+						return GetDefault<UScriptableGraphEditorSettings>()->SaveOnCompile == Level;
+					})),
+			NAME_None,
+			EUserInterfaceActionType::RadioButton);
+	}
 }
 
 FText FScriptableGraphEditor::GetCompileButtonTooltip() const

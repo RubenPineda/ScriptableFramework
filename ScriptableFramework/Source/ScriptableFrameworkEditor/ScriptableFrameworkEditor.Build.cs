@@ -31,6 +31,7 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"KismetWidgets",
 				"ApplicationCore",
 				"DataValidation",
+				"DeveloperSettings",
 				"ToolMenus",
 				"GraphEditor",
 				"KzLib"

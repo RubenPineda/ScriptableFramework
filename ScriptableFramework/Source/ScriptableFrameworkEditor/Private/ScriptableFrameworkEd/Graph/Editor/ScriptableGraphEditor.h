@@ -165,6 +165,10 @@ private:
 	FSlateIcon GetCompileButtonIcon() const;
 	FText GetCompileButtonTooltip() const;
 
+	/** Dropdown shown by the small chevron next to Compile: Save on Compile submenu + Jump to Error Node toggle. */
+	TSharedRef<SWidget> GenerateCompileOptionsMenu();
+	void BuildSaveOnCompileMenu(class FMenuBuilder& MenuBuilder);
+
 	/** Pull from the panel (Refresh button): re-runs the validator and returns the fresh issue list. Does not persist. */
 	TArray<FKzValidationIssue> HandleRunValidation();
 
