@@ -141,12 +141,13 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 		NodesByGuid.Add(Id, Node);
 	}
 
-	// --- Entry points: EntryNodeID + every ReceiveEvent. Also flag ReceiveEvents with no EventName. ---
+	// --- Entry points: EntryNodeID + every ReceiveEvent. Also flag empty + duplicate EventNames. ---
 	TArray<FGuid> Seeds;
 	if (Graph->EntryNodeID.IsValid() && NodesByGuid.Contains(Graph->EntryNodeID))
 	{
 		Seeds.AddUnique(Graph->EntryNodeID);
 	}
+	TMap<FName, TArray<FGuid>> EventNameToNodeIds;
 	for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
 	{
 		const UScriptableNode_ReceiveEvent* Receive = Cast<UScriptableNode_ReceiveEvent>(Node);
@@ -159,6 +160,21 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 		{
 			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
 				LOCTEXT("EmptyEventName", "ReceiveEvent node has empty EventName and will never fire."),
+				GValidatorId, Id));
+			continue;
+		}
+
+		EventNameToNodeIds.FindOrAdd(Receive->EventName).Add(Id);
+	}
+
+	/** Duplicate event names collide at dispatch: only one node fires per broadcast, silently dropping the rest. */
+	for (const TPair<FName, TArray<FGuid>>& Pair : EventNameToNodeIds)
+	{
+		if (Pair.Value.Num() <= 1) continue;
+		for (const FGuid& Id : Pair.Value)
+		{
+			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+				FText::Format(LOCTEXT("DuplicateEventName", "Multiple ReceiveEvent nodes declare the event '{0}'."), FText::FromName(Pair.Key)),
 				GValidatorId, Id));
 		}
 	}
@@ -490,6 +506,29 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 						FText::FromName(Conn.From.PinName)),
 					GValidatorId, Conn.To.NodeID));
 			}
+		}
+	}
+
+	// --- Finish.OutputName must reference a name still declared in Graph.Outputs. The picker only
+	// shows current entries, but renaming/removing an Output leaves previously-set names orphaned
+	// in the asset; the runtime silently falls back to "Finished" instead of the author's pick. ---
+	{
+		TSet<FName> DeclaredOutputs;
+		for (const FName& Output : Graph->Outputs)
+		{
+			if (!Output.IsNone()) DeclaredOutputs.Add(Output);
+		}
+
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			const UScriptableNode_Finish* Finish = Cast<UScriptableNode_Finish>(Node);
+			if (!Finish || Finish->OutputName.IsNone()) continue;
+			if (DeclaredOutputs.Contains(Finish->OutputName)) continue;
+
+			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+				FText::Format(LOCTEXT("FinishOrphanOutput", "Finish node targets '{0}', which is no longer declared in Graph.Outputs."),
+					FText::FromName(Finish->OutputName)),
+				GValidatorId, Node->GetBindingID()));
 		}
 	}
 }
