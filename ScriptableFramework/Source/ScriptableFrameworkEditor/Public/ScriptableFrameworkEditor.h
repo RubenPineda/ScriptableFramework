@@ -17,10 +17,12 @@ private:
 	TArray<TWeakObjectPtr<UScriptableGraph>> CompileBlockedDuringPIE;
 
 	FDelegateHandle LaunchBlockedHandle;
+	FDelegateHandle PostLoadedHandle;
 	FDelegateHandle BeginPIEHandle;
 	FDelegateHandle EndPIEHandle;
 
 	void HandleLaunchBlocked(UScriptableGraph* Asset);
+	void HandleGraphPostLoaded(UScriptableGraph* Asset);
 	void HandleBeginPIE(const bool bSimulating);
 	void HandleEndPIE(const bool bSimulating);
 

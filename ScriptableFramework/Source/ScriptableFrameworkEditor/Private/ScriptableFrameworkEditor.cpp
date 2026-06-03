@@ -39,6 +39,10 @@
 
 #include "Editor.h"
 #include "Subsystems/AssetEditorSubsystem.h"
+#include "Containers/Ticker.h"
+#include "Validation/KzAssetValidationUtils.h"
+#include "Core/KzValidationTypes.h"
+#include "ScriptableFrameworkEditorHelpers.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Styling/AppStyle.h"
 #include "Widgets/SWindow.h"
@@ -77,6 +81,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	RegisterNodeFactory<FScriptableGraphNodeFactory>();
 
 	LaunchBlockedHandle = UScriptableGraph::OnLaunchBlockedByCompile.AddRaw(this, &FScriptableFrameworkEditorModule::HandleLaunchBlocked);
+	PostLoadedHandle = UScriptableGraph::OnPostLoaded.AddRaw(this, &FScriptableFrameworkEditorModule::HandleGraphPostLoaded);
 	BeginPIEHandle = FEditorDelegates::BeginPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleBeginPIE);
 	EndPIEHandle = FEditorDelegates::EndPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleEndPIE);
 }
@@ -85,6 +90,7 @@ void FScriptableFrameworkEditorModule::OnShutdownModule()
 {
 	FEditorDelegates::EndPIE.Remove(EndPIEHandle);
 	FEditorDelegates::BeginPIE.Remove(BeginPIEHandle);
+	UScriptableGraph::OnPostLoaded.Remove(PostLoadedHandle);
 	UScriptableGraph::OnLaunchBlockedByCompile.Remove(LaunchBlockedHandle);
 
 	FScriptableEdGraphNodeRegistry::Shutdown();
@@ -96,6 +102,37 @@ void FScriptableFrameworkEditorModule::HandleLaunchBlocked(UScriptableGraph* Ass
 {
 	if (!Asset) return;
 	CompileBlockedDuringPIE.AddUnique(Asset);
+}
+
+void FScriptableFrameworkEditorModule::HandleGraphPostLoaded(UScriptableGraph* Asset)
+{
+	if (!Asset) return;
+
+	/**
+	 * Defer to next tick: PostLoad fires mid-load, when cross-asset references (RunGraph targets,
+	 * SubGraph asset pointers) may still be resolving. By the next tick the world is consistent and
+	 * any validator that walks references gets a stable view.
+	 */
+	TWeakObjectPtr<UScriptableGraph> WeakAsset(Asset);
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakAsset](float) -> bool
+		{
+			UScriptableGraph* Graph = WeakAsset.Get();
+			if (!Graph) return false;
+
+			const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
+			const TSet<FGuid> Reachable = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
+
+			const bool bHasError = RawIssues.ContainsByPredicate([&](const FKzValidationIssue& Issue)
+				{
+					if (Issue.Severity != EKzValidationSeverity::Error) return false;
+					if (Issue.ContextId.IsValid() && !Reachable.Contains(Issue.ContextId)) return false;
+					return true;
+				});
+
+			/** Passive refresh: update the in-memory flag only. The asset-open compile and the Compile button persist it. */
+			Graph->bLastCompileFailed = bHasError;
+			return false;
+		}), 0.0f);
 }
 
 void FScriptableFrameworkEditorModule::HandleBeginPIE(const bool bSimulating)

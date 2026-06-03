@@ -7,6 +7,7 @@
 #include "PropertyBindingPath.h"
 
 class UScriptableObject;
+class UScriptableGraph;
 struct FPropertyBindingBindableStructDescriptor;
 struct FBindingChainElement;
 
@@ -48,4 +49,7 @@ namespace ScriptableFrameworkEditor
 
 	/** Helper to set the internal asset on wrapper tasks. */
 	void SetWrapperAssetProperty(TSharedPtr<IPropertyHandle> Handle, UObject* Asset);
+
+	/** BFS over Graph->Connections from EntryNodeID + every ReceiveEvent + Exit. Used by every compile pass to drop issues on unreachable nodes (BP behaviour). */
+	TSet<FGuid> ComputeReachableNodeIds(const UScriptableGraph* Graph);
 }

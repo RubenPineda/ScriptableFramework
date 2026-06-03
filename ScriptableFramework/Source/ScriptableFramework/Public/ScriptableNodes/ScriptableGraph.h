@@ -105,5 +105,9 @@ public:
 	/** Broadcast by Launch when it refuses to start a graph because bLastCompileFailed is true. Editor module observes this to surface a post-PIE dialog. */
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnLaunchBlockedByCompile, UScriptableGraph* /*Asset*/);
 	static FOnLaunchBlockedByCompile OnLaunchBlockedByCompile;
+
+	/** Broadcast from PostLoad in editor builds so the editor module can defer a compile refresh until validators are reachable. */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnPostLoaded, UScriptableGraph* /*Asset*/);
+	static FOnPostLoaded OnPostLoaded;
 #endif
 };

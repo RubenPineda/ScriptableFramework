@@ -8,6 +8,11 @@
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableConditions/ScriptableCondition.h"
 #include "ScriptableConditions/ScriptableRequirement.h"
+#include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
+#include "ScriptableNodes/ScriptableNode_Exit.h"
+#include "ScriptableNodes/ScriptableGraphConnection.h"
 #include "StructUtils/InstancedStruct.h"
 #include "IPropertyAccessEditor.h"
 #include "PropertyBindingBindableStructDescriptor.h"
@@ -313,5 +318,37 @@ namespace ScriptableFrameworkEditor
 				AssetProp->SetObjectPropertyValue(ValuePtr, Asset);
 			}
 		}
+	}
+
+	TSet<FGuid> ComputeReachableNodeIds(const UScriptableGraph* Graph)
+	{
+		TSet<FGuid> Reachable;
+		if (!Graph) return Reachable;
+
+		TArray<FGuid> Queue;
+		if (Graph->EntryNodeID.IsValid()) Queue.Add(Graph->EntryNodeID);
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			if (Cast<UScriptableNode_ReceiveEvent>(Node) || Cast<UScriptableNode_Exit>(Node))
+			{
+				const FGuid Id = Node->GetBindingID();
+				if (Id.IsValid()) Queue.AddUnique(Id);
+			}
+		}
+
+		Reachable.Append(Queue);
+		for (int32 Head = 0; Head < Queue.Num(); ++Head)
+		{
+			for (const FScriptableGraphConnection& Conn : Graph->Connections)
+			{
+				if (Conn.From.NodeID != Queue[Head]) continue;
+				bool bAlready = false;
+				Reachable.Add(Conn.To.NodeID, &bAlready);
+				if (!bAlready) Queue.Add(Conn.To.NodeID);
+			}
+		}
+
+		return Reachable;
 	}
 }

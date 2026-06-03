@@ -1796,37 +1796,10 @@ void FScriptableGraphEditor::RunCompile(bool bMarkPackageDirty)
 	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
 
 	/**
-	 * Reachable nodes from any execution entry point (Entry + ReceiveEvent + Exit). BFS over
-	 * Graph->Connections. Issues on unreachable nodes are dropped wholesale (BP behaviour): they
-	 * don't appear in the panel, don't paint the ERROR! banner, and don't flip bLastCompileFailed.
-	 * Graph-level issues (no ContextId) are kept regardless.
+	 * Drop issues on unreachable nodes (BP behaviour): they don't appear in the panel, don't paint the
+	 * ERROR! banner, and don't flip bLastCompileFailed. Graph-level issues (no ContextId) are kept.
 	 */
-	TSet<FGuid> ReachableNodeIds;
-	{
-		TArray<FGuid> Queue;
-		if (Graph->EntryNodeID.IsValid()) Queue.Add(Graph->EntryNodeID);
-		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
-		{
-			if (!Node) continue;
-			if (Cast<UScriptableNode_ReceiveEvent>(Node) || Cast<UScriptableNode_Exit>(Node))
-			{
-				const FGuid Id = Node->GetBindingID();
-				if (Id.IsValid()) Queue.AddUnique(Id);
-			}
-		}
-
-		ReachableNodeIds.Append(Queue);
-		for (int32 Head = 0; Head < Queue.Num(); ++Head)
-		{
-			for (const FScriptableGraphConnection& Conn : Graph->Connections)
-			{
-				if (Conn.From.NodeID != Queue[Head]) continue;
-				bool bAlready = false;
-				ReachableNodeIds.Add(Conn.To.NodeID, &bAlready);
-				if (!bAlready) Queue.Add(Conn.To.NodeID);
-			}
-		}
-	}
+	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
 
 	TArray<FKzValidationIssue> Issues;
 	Issues.Reserve(RawIssues.Num());

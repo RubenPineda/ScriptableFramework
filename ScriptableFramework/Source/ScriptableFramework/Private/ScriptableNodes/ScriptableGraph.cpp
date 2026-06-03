@@ -9,6 +9,7 @@
 
 #if WITH_EDITOR
 UScriptableGraph::FOnLaunchBlockedByCompile UScriptableGraph::OnLaunchBlockedByCompile;
+UScriptableGraph::FOnPostLoaded UScriptableGraph::OnPostLoaded;
 #endif
 
 UScriptableGraph::UScriptableGraph()
@@ -44,6 +45,10 @@ void UScriptableGraph::PostLoad()
 		RebuildContextBag();
 	}
 	PruneOrphanConnections();
+
+#if WITH_EDITOR
+	OnPostLoaded.Broadcast(this);
+#endif
 }
 
 #if WITH_EDITOR
