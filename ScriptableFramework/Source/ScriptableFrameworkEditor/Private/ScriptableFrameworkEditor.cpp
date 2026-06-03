@@ -26,6 +26,9 @@
 #include "ScriptableTasks/ScriptableTask_NestedAction.h"
 #include "ScriptableFrameworkEd/Customization/ScriptableTaskNestedActionCustomization.h"
 
+#include "ScriptableNodes/ScriptableNode_Finish.h"
+#include "ScriptableFrameworkEd/Customization/ScriptableNodeFinishCustomization.h"
+
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
@@ -68,6 +71,7 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	RegisterPropertyLayout<FScriptableRequirement, FScriptableRequirementCustomization>();
 	RegisterPropertyLayout<UScriptableCondition_NestedRequirement, FScriptableConditionNestedRequirementCustomization>();
 	RegisterPropertyLayout<UScriptableTask_NestedAction, FScriptableTaskNestedActionCustomization>();
+	RegisterClassLayout<UScriptableNode_Finish, FScriptableNodeFinishCustomization>();
 
 	RegisterPinFactory<FScriptableGraphPinFactory>();
 	RegisterNodeFactory<FScriptableGraphNodeFactory>();

@@ -48,7 +48,12 @@ void SScriptableGraphNode_Finish::CreateBelowPinControls(TSharedPtr<SVerticalBox
 EVisibility SScriptableGraphNode_Finish::GetComboVisibility() const
 {
 	const UScriptableNode_Finish* Finish = GetRuntimeFinish();
-	const UScriptableGraph* Graph = Finish ? Finish->GetTypedOuter<UScriptableGraph>() : nullptr;
+	if (!Finish) return EVisibility::Collapsed;
+
+	/** Already has a non-None pick: surface the combo so the user can change or clear it. */
+	if (!Finish->OutputName.IsNone()) return EVisibility::Visible;
+
+	const UScriptableGraph* Graph = Finish->GetTypedOuter<UScriptableGraph>();
 	if (!Graph) return EVisibility::Collapsed;
 
 	for (const FName& Output : Graph->Outputs)
@@ -75,11 +80,20 @@ TSharedRef<SWidget> SScriptableGraphNode_Finish::BuildOutputMenu()
 	const UScriptableNode_Finish* Finish = GetRuntimeFinish();
 	const UScriptableGraph* Graph = Finish ? Finish->GetTypedOuter<UScriptableGraph>() : nullptr;
 
+	/** Clear-to-default entry: persists OutputName=None so the runtime falls back to Exit's "Finished". */
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("DefaultFinished", "Default (Finished)"),
+		LOCTEXT("DefaultFinishedTip", "Clear the pick; the runtime falls back to Exit's 'Finished' output."),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SScriptableGraphNode_Finish::OnOutputPicked, FName(NAME_None))));
+
 	if (Graph)
 	{
-		// Only the asset-declared Outputs. The Exit built-ins ("Finished"/"Cancelled") are not picker
-		// targets — Finish without an explicit pick already falls back to "Finished" at runtime, and
-		// "Cancelled" semantically belongs to external Cancel(), not to a deliberate terminator.
+		const bool bHasUserOutputs = Graph->Outputs.ContainsByPredicate([](const FName& Out) { return !Out.IsNone(); });
+		if (bHasUserOutputs) MenuBuilder.AddMenuSeparator();
+
+		// Asset-declared Outputs only. The Exit built-in "Cancelled" semantically belongs to
+		// external Cancel(), not to a deliberate terminator, so it's not a picker target.
 		for (const FName& Output : Graph->Outputs)
 		{
 			if (Output.IsNone()) continue;
