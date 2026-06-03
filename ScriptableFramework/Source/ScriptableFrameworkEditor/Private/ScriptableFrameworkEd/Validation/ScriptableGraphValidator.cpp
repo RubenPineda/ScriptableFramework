@@ -425,7 +425,7 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 			{
 				if (!Ancestors.Contains(SourceId))
 				{
-					OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
+					OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Info,
 						FText::Format(LOCTEXT("CrossNodeOrder", "Node '{0}' reads an Output of '{1}', which is not upstream of it; the value may be unset when '{0}' runs."),
 							FText::FromString(GetNodeLabel(Node)), FText::FromString(GetNodeLabel(NodesByGuid.FindRef(SourceId)))),
 						GValidatorId, ReaderId));
