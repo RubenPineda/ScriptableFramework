@@ -139,7 +139,7 @@ public:
 		SGraphPanel* Panel = GraphEditor->GetGraphPanel();
 		if (!Panel) return false;
 
-		const FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
+		const FVector2f ScreenPos = MouseEvent.GetScreenSpacePosition();
 		FWidgetPath WidgetPath = SlateApp.LocateWindowUnderMouse(ScreenPos, SlateApp.GetInteractiveTopLevelWindows());
 		if (!WidgetPath.IsValid()) return false;
 
@@ -933,6 +933,21 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(FScriptableGraphCommands::Get().RemoveORPin,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnRemoveORPin),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanRemoveORPin));
+
+	const FScriptableGraphCommands& SfCommands = FScriptableGraphCommands::Get();
+	const FCanExecuteAction CanAlign = FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() >= 2; });
+	const FCanExecuteAction CanDistribute = FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() >= 3; });
+
+	Commands->MapAction(SfCommands.AlignNodesTop,    FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesTop),    CanAlign);
+	Commands->MapAction(SfCommands.AlignNodesBottom, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesBottom), CanAlign);
+	Commands->MapAction(SfCommands.AlignNodesLeft,   FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesLeft),   CanAlign);
+	Commands->MapAction(SfCommands.AlignNodesRight,  FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesRight),  CanAlign);
+	Commands->MapAction(SfCommands.AlignNodesMiddle, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesMiddle), CanAlign);
+	Commands->MapAction(SfCommands.AlignNodesCenter, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnAlignNodesCenter), CanAlign);
+	Commands->MapAction(SfCommands.DistributeNodesHorizontally, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnDistributeNodesHorizontally), CanDistribute);
+	Commands->MapAction(SfCommands.DistributeNodesVertically,   FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnDistributeNodesVertically),   CanDistribute);
+	Commands->MapAction(SfCommands.ZoomToSelection,  FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnZoomToSelection),
+		FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() > 0; }));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -1364,6 +1379,111 @@ void FScriptableGraphEditor::OnCreateComment()
 	Graph->NotifyGraphChanged();
 }
 
+namespace
+{
+	/** Returns the node's rendered size when its slate widget is available; falls back to NodeWidth/NodeHeight (≈ 0 for non-comment nodes). */
+	FVector2f GetNodeRenderedSize(const TSharedPtr<SGraphEditor>& GraphEditor, const UEdGraphNode* Node)
+	{
+		if (!Node) return FVector2f::ZeroVector;
+		if (GraphEditor.IsValid())
+		{
+			if (SGraphPanel* Panel = GraphEditor->GetGraphPanel())
+			{
+				if (TSharedPtr<SGraphNode> Widget = Panel->GetNodeWidgetFromGuid(Node->NodeGuid))
+				{
+					return Widget->GetDesiredSize();
+				}
+			}
+		}
+		return FVector2f(static_cast<float>(Node->NodeWidth), static_cast<float>(Node->NodeHeight));
+	}
+
+	TArray<UEdGraphNode*> CollectSelectedNodes(const TSharedPtr<SGraphEditor>& GraphEditor)
+	{
+		TArray<UEdGraphNode*> Nodes;
+		if (!GraphEditor.IsValid()) return Nodes;
+		const FGraphPanelSelectionSet Selection = GraphEditor->GetSelectedNodes();
+		for (UObject* Obj : Selection)
+		{
+			if (UEdGraphNode* Node = Cast<UEdGraphNode>(Obj)) Nodes.Add(Node);
+		}
+		return Nodes;
+	}
+}
+
+void FScriptableGraphEditor::AlignNodesAxis(EScriptableAlignMode Mode, bool bVertical)
+{
+	const TArray<UEdGraphNode*> Nodes = CollectSelectedNodes(GraphEditorWidget);
+	if (Nodes.Num() < 2) return;
+
+	/** Compute selection bounds along the chosen axis. */
+	float Min = TNumericLimits<float>::Max();
+	float Max = TNumericLimits<float>::Lowest();
+	for (UEdGraphNode* Node : Nodes)
+	{
+		const FVector2f Size = GetNodeRenderedSize(GraphEditorWidget, Node);
+		const float NodeMin = bVertical ? static_cast<float>(Node->NodePosY) : static_cast<float>(Node->NodePosX);
+		const float NodeMax = NodeMin + (bVertical ? Size.Y : Size.X);
+		Min = FMath::Min(Min, NodeMin);
+		Max = FMath::Max(Max, NodeMax);
+	}
+
+	const FScopedTransaction Transaction(LOCTEXT("AlignNodesTx", "Align Nodes"));
+	for (UEdGraphNode* Node : Nodes)
+	{
+		const FVector2f Size = GetNodeRenderedSize(GraphEditorWidget, Node);
+		const float NodeSize = bVertical ? Size.Y : Size.X;
+
+		float NewPos = 0.f;
+		switch (Mode)
+		{
+			case EScriptableAlignMode::Min:    NewPos = Min;                            break;
+			case EScriptableAlignMode::Max:    NewPos = Max - NodeSize;                 break;
+			case EScriptableAlignMode::Center: NewPos = (Min + Max) * 0.5f - NodeSize * 0.5f; break;
+		}
+
+		Node->Modify();
+		if (bVertical) Node->NodePosY = FMath::RoundToInt(NewPos);
+		else           Node->NodePosX = FMath::RoundToInt(NewPos);
+	}
+
+	if (UEdGraph* OwningGraph = Nodes[0]->GetGraph()) OwningGraph->NotifyGraphChanged();
+}
+
+void FScriptableGraphEditor::DistributeNodesAxis(bool bVertical)
+{
+	TArray<UEdGraphNode*> Nodes = CollectSelectedNodes(GraphEditorWidget);
+	if (Nodes.Num() < 3) return; // distribute needs three: two anchors plus at least one to space.
+
+	Nodes.Sort([bVertical](const UEdGraphNode& A, const UEdGraphNode& B)
+	{
+		return bVertical ? (A.NodePosY < B.NodePosY) : (A.NodePosX < B.NodePosX);
+	});
+
+	const float First = bVertical ? static_cast<float>(Nodes[0]->NodePosY) : static_cast<float>(Nodes[0]->NodePosX);
+	const float Last  = bVertical ? static_cast<float>(Nodes.Last()->NodePosY) : static_cast<float>(Nodes.Last()->NodePosX);
+	const float Step  = (Last - First) / static_cast<float>(Nodes.Num() - 1);
+
+	const FScopedTransaction Transaction(LOCTEXT("DistributeNodesTx", "Distribute Nodes"));
+	for (int32 i = 1; i < Nodes.Num() - 1; ++i)
+	{
+		Nodes[i]->Modify();
+		const int32 NewPos = FMath::RoundToInt(First + Step * static_cast<float>(i));
+		if (bVertical) Nodes[i]->NodePosY = NewPos;
+		else           Nodes[i]->NodePosX = NewPos;
+	}
+
+	if (UEdGraph* OwningGraph = Nodes[0]->GetGraph()) OwningGraph->NotifyGraphChanged();
+}
+
+void FScriptableGraphEditor::OnZoomToSelection()
+{
+	if (GraphEditorWidget.IsValid())
+	{
+		GraphEditorWidget->ZoomToFit(/*bOnlyTargetSelection*/ true);
+	}
+}
+
 FVector2f FScriptableGraphEditor::GetCursorGraphPosition() const
 {
 	if (!GraphEditorWidget.IsValid()) return FVector2f::ZeroVector;
@@ -1376,8 +1496,8 @@ FVector2f FScriptableGraphEditor::GetCursorGraphPosition() const
 		const FGeometry& PanelGeo = Panel->GetTickSpaceGeometry();
 		if (PanelGeo.GetLocalSize().X > 0.0f && PanelGeo.GetLocalSize().Y > 0.0f)
 		{
-			const FVector2D ScreenCursor = FSlateApplication::Get().GetCursorPos();
-			const FVector2D LocalCursor = PanelGeo.AbsoluteToLocal(ScreenCursor);
+			const FVector2f ScreenCursor = FSlateApplication::Get().GetCursorPos();
+			const FVector2f LocalCursor = PanelGeo.AbsoluteToLocal(ScreenCursor);
 			return FVector2f(Panel->PanelCoordToGraphCoord(LocalCursor));
 		}
 	}

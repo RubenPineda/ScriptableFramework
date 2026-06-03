@@ -29,4 +29,21 @@ public:
 
 	/** Removes the right-clicked input pin from an OR node, sliding higher inputs down. */
 	TSharedPtr<FUICommandInfo> RemoveORPin;
+
+	/** Cardinal alignment of selected nodes (Shift+W/S/A/D). */
+	TSharedPtr<FUICommandInfo> AlignNodesTop;
+	TSharedPtr<FUICommandInfo> AlignNodesBottom;
+	TSharedPtr<FUICommandInfo> AlignNodesLeft;
+	TSharedPtr<FUICommandInfo> AlignNodesRight;
+
+	/** Centerline alignment of selected nodes (Shift+M vertical, Shift+C horizontal). */
+	TSharedPtr<FUICommandInfo> AlignNodesMiddle;
+	TSharedPtr<FUICommandInfo> AlignNodesCenter;
+
+	/** Even spacing along an axis (Shift+H horizontal, Shift+V vertical). */
+	TSharedPtr<FUICommandInfo> DistributeNodesHorizontally;
+	TSharedPtr<FUICommandInfo> DistributeNodesVertically;
+
+	/** Zoom and pan the graph view to fit the current selection (F). */
+	TSharedPtr<FUICommandInfo> ZoomToSelection;
 };

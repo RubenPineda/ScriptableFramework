@@ -120,6 +120,24 @@ private:
 	void OnSelectAllNodes();
 	void OnCreateComment();
 
+	/** Cardinal alignment (Mode picks min/max/center) along the chosen axis. */
+	enum class EScriptableAlignMode : uint8 { Min, Max, Center };
+	void AlignNodesAxis(EScriptableAlignMode Mode, bool bVertical);
+	void OnAlignNodesTop()    { AlignNodesAxis(EScriptableAlignMode::Min,    /*bVertical*/ true);  }
+	void OnAlignNodesBottom() { AlignNodesAxis(EScriptableAlignMode::Max,    /*bVertical*/ true);  }
+	void OnAlignNodesMiddle() { AlignNodesAxis(EScriptableAlignMode::Center, /*bVertical*/ true);  }
+	void OnAlignNodesLeft()   { AlignNodesAxis(EScriptableAlignMode::Min,    /*bVertical*/ false); }
+	void OnAlignNodesRight()  { AlignNodesAxis(EScriptableAlignMode::Max,    /*bVertical*/ false); }
+	void OnAlignNodesCenter() { AlignNodesAxis(EScriptableAlignMode::Center, /*bVertical*/ false); }
+
+	/** Even spacing of the selection between the first and last node on the chosen axis. */
+	void DistributeNodesAxis(bool bVertical);
+	void OnDistributeNodesHorizontally() { DistributeNodesAxis(/*bVertical*/ false); }
+	void OnDistributeNodesVertically()   { DistributeNodesAxis(/*bVertical*/ true);  }
+
+	/** Pan and zoom the graph view to fit the current selection. No-op when nothing is selected. */
+	void OnZoomToSelection();
+
 	/** Spawns the given runtime UScriptableNode subclass at the current cursor position in graph space.
 	 * Called by FScriptableGraphSpawnInputProcessor when the user clicks while holding a shortcut key. */
 	void OnSpawnNativeNodeAtCursor(UClass* RuntimeNodeClass);

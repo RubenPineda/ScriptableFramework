@@ -30,6 +30,16 @@ void FScriptableGraphCommands::RegisterCommands()
 		EUserInterfaceActionType::Button,
 		FInputChord()
 	);
+
+	UI_COMMAND(AlignNodesTop,    "Align Top",    "Align selected nodes to the topmost node.",    EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::W));
+	UI_COMMAND(AlignNodesBottom, "Align Bottom", "Align selected nodes to the bottommost node.", EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::S));
+	UI_COMMAND(AlignNodesLeft,   "Align Left",   "Align selected nodes to the leftmost node.",   EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::A));
+	UI_COMMAND(AlignNodesRight,  "Align Right",  "Align selected nodes to the rightmost node.",  EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::D));
+	UI_COMMAND(AlignNodesMiddle, "Align Middle", "Align selected nodes to the vertical centerline of the selection.",   EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::M));
+	UI_COMMAND(AlignNodesCenter, "Align Center", "Align selected nodes to the horizontal centerline of the selection.", EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::C));
+	UI_COMMAND(DistributeNodesHorizontally, "Distribute Horizontally", "Evenly distribute selected nodes along the X axis between the leftmost and rightmost.", EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::H));
+	UI_COMMAND(DistributeNodesVertically,   "Distribute Vertically",   "Evenly distribute selected nodes along the Y axis between the topmost and bottommost.",  EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::V));
+	UI_COMMAND(ZoomToSelection,  "Zoom to Selection", "Pan and zoom the graph view to fit the current selection.", EUserInterfaceActionType::Button, FInputChord(EKeys::F));
 }
 
 #undef LOCTEXT_NAMESPACE
