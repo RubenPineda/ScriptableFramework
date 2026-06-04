@@ -119,6 +119,10 @@ bool UScriptableEdGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPin* 
 	A->MakeLinkTo(B);
 	PersistConnection(A, B);
 
+	/** Newly-connected pins must un-hide if hide-unconnected mode is on. Affects both endpoints. */
+	if (UScriptableEdGraphNode* SfA = Cast<UScriptableEdGraphNode>(A->GetOwningNode())) SfA->ApplyPinVisibility();
+	if (UScriptableEdGraphNode* SfB = Cast<UScriptableEdGraphNode>(B->GetOwningNode())) SfB->ApplyPinVisibility();
+
 	/** SGraphPanel + dirty tracker subscribe to OnGraphChanged; without this, neither hears connect/disconnect. */
 	if (UEdGraphNode* Node = A->GetOwningNode())
 	{
@@ -160,6 +164,10 @@ void UScriptableEdGraphSchema::BreakSinglePinLink(UEdGraphPin* SourcePin, UEdGra
 				&& C.To.NodeID == ToID && C.To.PinName == ToPinName;
 		});
 
+	/** Newly-disconnected pins must re-evaluate visibility under hide-unconnected mode. */
+	if (UScriptableEdGraphNode* SfFrom = const_cast<UScriptableEdGraphNode*>(FromEdNode)) SfFrom->ApplyPinVisibility();
+	if (UScriptableEdGraphNode* SfTo = const_cast<UScriptableEdGraphNode*>(ToEdNode)) SfTo->ApplyPinVisibility();
+
 	if (UEdGraph* OwningEdGraph = FromPin->GetOwningNode() ? FromPin->GetOwningNode()->GetGraph() : nullptr)
 	{
 		OwningEdGraph->NotifyGraphChanged();
@@ -197,6 +205,9 @@ void UScriptableEdGraphSchema::BreakPinLinks(UEdGraphPin& TargetPin, bool bSends
 			}
 			return C.To.NodeID == NodeID && C.To.PinName == PinName;
 		});
+
+	/** Re-evaluate the just-cleared pin (former peers updated through their own ApplyPinVisibility on the next NotifyGraphChanged path). */
+	if (UScriptableEdGraphNode* MutableSfNode = const_cast<UScriptableEdGraphNode*>(SfNode)) MutableSfNode->ApplyPinVisibility();
 
 	if (UEdGraph* MutableOwningGraph = const_cast<UEdGraph*>(OwningGraph))
 	{
@@ -305,6 +316,35 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 					return Node && Node->bCommentBubblePinned;
 				})),
 		EUserInterfaceActionType::ToggleButton);
+
+	/** Per-node pin visibility toggle: hide pins that aren't wired, to declutter Sequence/AND/etc with many branches. */
+	TWeakObjectPtr<UScriptableEdGraphNode> WeakSfNode(const_cast<UScriptableEdGraphNode*>(Cast<UScriptableEdGraphNode>(Context->Node.Get())));
+	if (WeakSfNode.IsValid())
+	{
+		FToolMenuSection& PinsSection = Menu->AddSection(TEXT("ScriptableNodePins"), LOCTEXT("PinsSection", "Pins"));
+		PinsSection.AddMenuEntry(
+			"ToggleHideUnconnectedPins",
+			LOCTEXT("HideUnconnected", "Hide Unconnected Pins"),
+			LOCTEXT("HideUnconnectedTip", "Hide every pin on this node that has no connections. Toggle off to see them all again."),
+			FSlateIcon(),
+			FUIAction(
+				FExecuteAction::CreateLambda([WeakSfNode]()
+					{
+						UScriptableEdGraphNode* SfNode = WeakSfNode.Get();
+						if (!SfNode) return;
+						SfNode->Modify();
+						SfNode->bHideUnconnectedPins = !SfNode->bHideUnconnectedPins;
+						SfNode->ApplyPinVisibility();
+						if (UEdGraph* OwningGraph = SfNode->GetGraph()) OwningGraph->NotifyGraphChanged();
+					}),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateLambda([WeakSfNode]()
+					{
+						const UScriptableEdGraphNode* SfNode = WeakSfNode.Get();
+						return SfNode && SfNode->bHideUnconnectedPins;
+					})),
+			EUserInterfaceActionType::ToggleButton);
+	}
 
 	Super::GetContextMenuActions(Menu, Context);
 }

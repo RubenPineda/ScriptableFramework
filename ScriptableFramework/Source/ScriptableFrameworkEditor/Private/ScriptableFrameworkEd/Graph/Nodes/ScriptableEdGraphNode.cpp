@@ -111,8 +111,19 @@ void UScriptableEdGraphNode::ReconstructNode()
 		if (OldPin) DestroyPin(OldPin);
 	}
 
+	ApplyPinVisibility();
+
 	if (UEdGraph* OwningGraph = GetGraph())
 	{
 		OwningGraph->NotifyGraphChanged();
+	}
+}
+
+void UScriptableEdGraphNode::ApplyPinVisibility()
+{
+	for (UEdGraphPin* Pin : Pins)
+	{
+		if (!Pin) continue;
+		Pin->bHidden = bHideUnconnectedPins && Pin->LinkedTo.IsEmpty();
 	}
 }

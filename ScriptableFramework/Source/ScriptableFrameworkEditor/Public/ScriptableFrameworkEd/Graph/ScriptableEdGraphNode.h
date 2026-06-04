@@ -28,6 +28,10 @@ public:
 	UPROPERTY()
 	TObjectPtr<UScriptableNode> RuntimeNode;
 
+	/** When true, ApplyPinVisibility marks every unconnected pin of this node as hidden. Toggle lives on the per-node right-click menu. */
+	UPROPERTY()
+	bool bHideUnconnectedPins = false;
+
 	/** Binds this editor node to its runtime counterpart. Call before AllocateDefaultPins. */
 	void SetRuntimeNode(UScriptableNode* InNode) { RuntimeNode = InNode; }
 
@@ -44,6 +48,9 @@ public:
 
 	/** Hook for subclasses to add pin-specific right-click entries (called from the schema's pin route). Base does nothing; e.g. Sequence overrides to add "Remove pin". */
 	virtual void AppendPinContextActions(class UToolMenu* Menu, class UGraphNodeContextMenuContext* Context) const {}
+
+	/** Sets Pin->bHidden on every pin according to bHideUnconnectedPins and its current LinkedTo state. Called on toggle, after connection mutations, and after ReconstructNode. */
+	void ApplyPinVisibility();
 
 	/** Decides whether a pin's label is rendered. Default shows every label; override to hide. */
 	virtual bool ShouldShowPinLabel(FName PinName) const { return true; }
