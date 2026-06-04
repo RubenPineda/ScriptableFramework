@@ -9,6 +9,7 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "Engine/Blueprint.h"
 #include "UObject/UnrealType.h"
+#include "ScopedTransaction.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableBindingsValidation"
 
@@ -126,15 +127,34 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 
 			const FText TargetName = GetTargetDisplayName(Obj, Binding.TargetPath);
 
+			/** Shared quick-fix for every obsolete-binding variant below: drop this binding from the owning object. */
+			TWeakObjectPtr<UScriptableObject> WeakObj(Obj);
+			FPropertyBindingPath CapturedTarget = Binding.TargetPath;
+			auto BuildIssue = [&](const FText& Msg)
+			{
+				FKzValidationIssue Issue = FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId);
+				Issue.QuickFixLabel = LOCTEXT("ClearStaleBinding", "Clear");
+				Issue.QuickFix = [WeakObj, CapturedTarget]()
+				{
+					UScriptableObject* SObj = WeakObj.Get();
+					if (!SObj) return;
+					const FScopedTransaction Tx(LOCTEXT("QF_ClearStaleBinding", "Clear stale binding"));
+					SObj->Modify();
+					SObj->GetPropertyBindings().RemovePropertyBindings(CapturedTarget);
+					/** Broadcast OnObjectPropertyChanged so the editor marks dirty, reconstructs the slate node, and refreshes details. */
+					SObj->PostEditChange();
+				};
+				return Issue;
+			};
+
 			const FProperty* TargetProp = nullptr;
 			const bool bTargetValid = ScriptableFrameworkEditor::ValidateBindingPath(Obj->GetClass(), &Binding.TargetPath, TargetProp);
 			if (!bTargetValid || !TargetProp)
 			{
-				const FText Msg = FText::Format(
+				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingTargetGone", "'{0}': Binding targets property '{1}' that no longer exists."),
 					FText::FromString(Obj->GetName()),
-					TargetName);
-				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
+					TargetName)));
 				continue;
 			}
 
@@ -143,11 +163,10 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 
 			if (!SourceDesc)
 			{
-				const FText Msg = FText::Format(
+				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingSourceContext", "'{0}': Binding on '{1}' points to a source context that no longer exists."),
 					FText::FromString(Obj->GetName()),
-					TargetName);
-				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
+					TargetName)));
 				continue;
 			}
 
@@ -155,21 +174,19 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			const bool bSourceValid = ScriptableFrameworkEditor::ValidateBindingPath(SourceDesc->Struct.Get(), &Binding.SourcePath, SourceProp);
 			if (!bSourceValid || !SourceProp)
 			{
-				const FText Msg = FText::Format(
+				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingSourceProp", "'{0}': Binding on '{1}' points to a source property that no longer exists."),
 					FText::FromString(Obj->GetName()),
-					TargetName);
-				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
+					TargetName)));
 				continue;
 			}
 
 			if (!FScriptablePropertyUtilities::ArePropertiesCompatible(SourceProp, TargetProp))
 			{
-				const FText Msg = FText::Format(
+				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingTypeMismatch", "'{0}': Binding on '{1}' has an incompatible source type."),
 					FText::FromString(Obj->GetName()),
-					TargetName);
-				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
+					TargetName)));
 			}
 		}
 	}

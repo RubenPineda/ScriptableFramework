@@ -11,6 +11,7 @@
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "ScopedTransaction.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphValidator"
 
@@ -372,10 +373,23 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 			}
 			else if (!DeclaredEvents.Contains(GoTo->TargetEvent))
 			{
-				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+				FKzValidationIssue Issue = FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
 					FText::Format(LOCTEXT("GoToMissing", "Go To node '{0}' targets event '{1}', which no ReceiveEvent node declares."),
 						FText::FromString(GetNodeLabel(Node)), FText::FromName(GoTo->TargetEvent)),
-					GValidatorId, Id));
+					GValidatorId, Id);
+
+				TWeakObjectPtr<UScriptableNode_GoTo> WeakGoTo(const_cast<UScriptableNode_GoTo*>(GoTo));
+				Issue.QuickFixLabel = LOCTEXT("ClearTarget", "Clear");
+				Issue.QuickFix = [WeakGoTo]()
+				{
+					UScriptableNode_GoTo* G = WeakGoTo.Get();
+					if (!G) return;
+					const FScopedTransaction Tx(LOCTEXT("QF_ClearGoToTarget", "Clear orphan GoTo target"));
+					G->Modify();
+					G->TargetEvent = NAME_None;
+					G->PostEditChange();
+				};
+				OutIssues.Add(MoveTemp(Issue));
 			}
 		}
 	}
@@ -454,6 +468,29 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 	// but stale assets / external edits can still slip past it; warn explicitly here so the user sees
 	// the issue surfaced in the validation tab. ---
 	{
+		TWeakObjectPtr<UScriptableGraph> WeakGraph(const_cast<UScriptableGraph*>(Graph));
+		auto MakeRemoveOutputFix = [WeakGraph](int32 IndexToRemove) -> TFunction<void()>
+		{
+			return [WeakGraph, IndexToRemove]()
+			{
+				UScriptableGraph* G = WeakGraph.Get();
+				if (!G || !G->Outputs.IsValidIndex(IndexToRemove)) return;
+				const FScopedTransaction Tx(LOCTEXT("QF_RemoveOutput", "Remove Graph.Outputs entry"));
+				G->Modify();
+				G->Outputs.RemoveAt(IndexToRemove);
+				/** Targeted event so the editor knows to reconstruct Exit pins and mark dirty. */
+				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableGraph::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs)))
+				{
+					FPropertyChangedEvent Event(Prop, EPropertyChangeType::ArrayRemove);
+					G->PostEditChangeProperty(Event);
+				}
+				else
+				{
+					G->PostEditChange();
+				}
+			};
+		};
+
 		TSet<FName> SeenOutputs;
 		for (int32 Index = 0; Index < Graph->Outputs.Num(); ++Index)
 		{
@@ -461,17 +498,23 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 
 			if (Output.IsNone())
 			{
-				OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
 					FText::Format(LOCTEXT("OutputNone", "Graph.Outputs entry #{0} is None or empty."), Index),
-					GValidatorId));
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("RemoveEntry", "Remove");
+				Issue.QuickFix = MakeRemoveOutputFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
 				continue;
 			}
 
 			if (SeenOutputs.Contains(Output))
 			{
-				OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
 					FText::Format(LOCTEXT("OutputDuplicate", "Graph.Outputs declares '{0}' more than once."), FText::FromName(Output)),
-					GValidatorId));
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("DedupeEntry", "Dedupe");
+				Issue.QuickFix = MakeRemoveOutputFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
 				continue;
 			}
 
@@ -525,10 +568,23 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 			if (!Finish || Finish->OutputName.IsNone()) continue;
 			if (DeclaredOutputs.Contains(Finish->OutputName)) continue;
 
-			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+			FKzValidationIssue Issue = FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
 				FText::Format(LOCTEXT("FinishOrphanOutput", "Finish node targets '{0}', which is no longer declared in Graph.Outputs."),
 					FText::FromName(Finish->OutputName)),
-				GValidatorId, Node->GetBindingID()));
+				GValidatorId, Node->GetBindingID());
+
+			TWeakObjectPtr<UScriptableNode_Finish> WeakFinish(const_cast<UScriptableNode_Finish*>(Finish));
+			Issue.QuickFixLabel = LOCTEXT("ClearOrphan", "Clear");
+			Issue.QuickFix = [WeakFinish]()
+			{
+				UScriptableNode_Finish* F = WeakFinish.Get();
+				if (!F) return;
+				const FScopedTransaction Tx(LOCTEXT("QF_ClearFinishOrphan", "Clear orphan Finish output"));
+				F->Modify();
+				F->OutputName = NAME_None;
+				F->PostEditChange();
+			};
+			OutIssues.Add(MoveTemp(Issue));
 		}
 	}
 }

@@ -2152,7 +2152,32 @@ FText FScriptableGraphEditor::GetCompileButtonTooltip() const
 
 TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()
 {
-	return FKzAssetValidationUtils::RunValidation(EditedGraph.Get());
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph) return {};
+
+	/**
+	 * Same reachability filter as RunCompile so the panel and ERROR! banners stay consistent regardless
+	 * of who triggered the refresh (panel button, quick-fix re-validation, etc.). Does NOT persist
+	 * bLastCompileFailed — that stays the user's last explicit Compile result.
+	 */
+	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
+	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
+
+	TArray<FKzValidationIssue> Issues;
+	Issues.Reserve(RawIssues.Num());
+	for (const FKzValidationIssue& Issue : RawIssues)
+	{
+		if (Issue.ContextId.IsValid() && !ReachableNodeIds.Contains(Issue.ContextId)) continue;
+		Issues.Add(Issue);
+	}
+
+	ApplyValidationToErrorBanners(Issues);
+
+	/** Quick-fixes mutate state outside the details panel's UI; force a rebuild so cached row state catches up. */
+	if (AssetDetailsView.IsValid()) AssetDetailsView->ForceRefresh();
+	if (NodeDetailsView.IsValid())  NodeDetailsView->ForceRefresh();
+
+	return Issues;
 }
 
 void FScriptableGraphEditor::HandleValidationIssueActivated(const FKzValidationIssue& Issue)
