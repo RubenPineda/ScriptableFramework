@@ -14,3 +14,10 @@ FLinearColor UScriptableEdGraphNode_SubGraph::GetNodeTitleColor() const
 	// Same teal as the UScriptableGraph asset entry — signals the node embeds a graph.
 	return FScriptableFrameworkEditorStyle::ScriptableGraphColor;
 }
+
+bool UScriptableEdGraphNode_SubGraph::ShouldShowPinLabel(FName PinName) const
+{
+	/** "In" is the implicit start pin and reads as noise alongside named event pins; Cancel and events keep their labels. */
+	if (PinName == UScriptableNode_SubGraph::InInputName) return false;
+	return Super::ShouldShowPinLabel(PinName);
+}

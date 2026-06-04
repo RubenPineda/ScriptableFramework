@@ -10,7 +10,7 @@
 #include "ScriptableTasks/ScriptableActionAsset.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
-#include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "ScriptableNodes/ScriptableNode_SubGraph.h"
 #include "Engine/Blueprint.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
@@ -514,21 +514,18 @@ void UScriptableEdGraphSchema::DroppedAssetsOnGraph(const TArray<FAssetData>& As
 		}
 		else if (AssetClass->IsChildOf(UScriptableGraph::StaticClass()))
 		{
-			// Graph asset: spawn a Task wrapper around UScriptableTask_RunGraph, set the asset.
+			// Graph asset: spawn a native SubGraph node and point its SubGraphAsset at the dropped graph.
 			UScriptableGraph* GraphAsset = Cast<UScriptableGraph>(Asset.GetAsset());
 			if (!GraphAsset) continue;
 
-			SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(Graph, UScriptableTask_RunGraph::StaticClass(), Cursor, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
+			SpawnedNode = ScriptableGraphEditorHelpers::SpawnNativeNode(Graph, UScriptableNode_SubGraph::StaticClass(), Cursor, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
 			if (UScriptableEdGraphNode* SfEdNode = Cast<UScriptableEdGraphNode>(SpawnedNode))
 			{
-				if (UScriptableNode_Task* Wrapper = Cast<UScriptableNode_Task>(SfEdNode->GetRuntimeNode()))
+				if (UScriptableNode_SubGraph* SubGraphRuntime = Cast<UScriptableNode_SubGraph>(SfEdNode->GetRuntimeNode()))
 				{
-					if (UScriptableTask_RunGraph* RunGraphTask = Cast<UScriptableTask_RunGraph>(Wrapper->Task))
-					{
-						RunGraphTask->Modify();
-						RunGraphTask->GraphAsset = GraphAsset;
-						SfEdNode->ReconstructNode();
-					}
+					SubGraphRuntime->Modify();
+					SubGraphRuntime->SubGraphAsset = GraphAsset;
+					SfEdNode->ReconstructNode();
 				}
 			}
 		}

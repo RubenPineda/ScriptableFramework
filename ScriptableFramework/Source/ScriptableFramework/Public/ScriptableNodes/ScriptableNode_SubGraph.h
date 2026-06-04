@@ -22,6 +22,9 @@ class SCRIPTABLEFRAMEWORK_API UScriptableNode_SubGraph : public UScriptableNode
 public:
 	static const FName InInputName;
 
+	/** Cancels the live sub-runner; fires the "Cancelled" output via the runner's teardown path. */
+	static const FName CancelInputName;
+
 	/** Hidden "running" output that keeps the node in ActiveNodes while the sub-runner is alive. */
 	static const FName PendingOutputName;
 
