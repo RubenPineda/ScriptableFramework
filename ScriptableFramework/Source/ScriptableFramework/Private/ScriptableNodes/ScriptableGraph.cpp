@@ -6,6 +6,9 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
 #include "ScriptableNodes/ScriptableNode_SubGraph.h"
+#include "ScriptableNodes/ScriptableNode_Task.h"
+#include "ScriptableTasks/ScriptableTask.h"
+#include "Bindings/ScriptablePropertyBindings.h"
 #include "Core/KzBagOps.h"
 
 #if WITH_EDITOR
@@ -48,6 +51,7 @@ void UScriptableGraph::PostLoad()
 	PruneOrphanConnections();
 
 #if WITH_EDITOR
+	SnapshotContextNames();
 	OnPostLoaded.Broadcast(this);
 #endif
 }
@@ -64,6 +68,91 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
 	{
 		RebuildContextBag();
+	}
+}
+
+void UScriptableGraph::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+
+	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
+	if (MemberName != GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context)) return;
+
+	// Rename detection has to run BEFORE the snapshot refresh
+	DetectAndApplyContextRename();
+	SnapshotContextNames();
+	RebuildContextBag();
+}
+
+void UScriptableGraph::SnapshotContextNames()
+{
+	PreviousContextNames.Reset();
+	PreviousContextNames.Reserve(Context.Num());
+	for (const FKzParamDef& Param : Context)
+	{
+		PreviousContextNames.Add(Param.Name);
+	}
+}
+
+void UScriptableGraph::DetectAndApplyContextRename()
+{
+	// Single-entry rename detection: same length + exactly one slot whose Name flipped.
+	// Add/remove or multi-edit changes the length or yields multiple diffs, so skip.
+	if (Context.Num() != PreviousContextNames.Num()) return;
+
+	int32 DiffIndex = INDEX_NONE;
+	int32 DiffCount = 0;
+	for (int32 i = 0; i < Context.Num(); ++i)
+	{
+		if (Context[i].Name != PreviousContextNames[i])
+		{
+			DiffIndex = i;
+			++DiffCount;
+		}
+	}
+	if (DiffCount != 1 || DiffIndex == INDEX_NONE) return;
+
+	const FName OldName = PreviousContextNames[DiffIndex];
+	const FName NewName = Context[DiffIndex].Name;
+	if (OldName.IsNone() || NewName.IsNone() || OldName == NewName) return;
+
+	RedirectContextBindings(OldName, NewName);
+}
+
+namespace
+{
+	/** Rewrites the first segment of every Context-bound path on a single holder. */
+	void RedirectInHolder(UScriptableObject* Holder, FName OldName, FName NewName)
+	{
+		if (!Holder) return;
+		FScriptablePropertyBindings& Bindings = Holder->GetPropertyBindings();
+		bool bAnyChanged = false;
+		for (FScriptablePropertyBinding& B : Bindings.Bindings)
+		{
+			if (B.SourceID.IsValid()) continue;
+			TArrayView<FPropertyBindingPathSegment> Segments = B.SourcePath.GetMutableSegments();
+			if (Segments.Num() > 0 && Segments[0].GetName() == OldName)
+			{
+				Segments[0].SetName(NewName);
+				bAnyChanged = true;
+			}
+		}
+		if (bAnyChanged) Holder->Modify();
+	}
+}
+
+void UScriptableGraph::RedirectContextBindings(FName OldName, FName NewName)
+{
+	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
+	{
+		if (!Node) continue;
+		RedirectInHolder(Node, OldName, NewName);
+
+		/** Task wrappers expose Task-level bindings on the inner UScriptableTask — those reference the graph's Context too. */
+		if (UScriptableNode_Task* TaskWrapper = Cast<UScriptableNode_Task>(Node))
+		{
+			RedirectInHolder(TaskWrapper->Task, OldName, NewName);
+		}
 	}
 }
 #endif
