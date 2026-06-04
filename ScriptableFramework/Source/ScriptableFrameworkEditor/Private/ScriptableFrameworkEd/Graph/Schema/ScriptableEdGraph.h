@@ -14,4 +14,8 @@ UCLASS()
 class UScriptableEdGraph : public UEdGraph
 {
 	GENERATED_BODY()
+
+public:
+	/** Currently-selected ed-nodes. Transient — owned by the host editor's selection callback, read by the connection drawing policy to highlight incident wires. */
+	TSet<const UEdGraphNode*> SelectedNodes;
 };

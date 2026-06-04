@@ -1,9 +1,13 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableFrameworkEd/Graph/Schema/ScriptableConnectionDrawingPolicy.h"
+#include "ScriptableFrameworkEd/Graph/Schema/ScriptableEdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraph/EdGraphNode.h"
 
-FScriptableConnectionDrawingPolicy::FScriptableConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements)
+FScriptableConnectionDrawingPolicy::FScriptableConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements, UEdGraph* InGraphObj)
 	: FConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements)
+	, GraphObj(InGraphObj)
 {
 	// Suppress the mid-wire arrow head. Direction is conveyed by the exec triangles at the pins.
 	ArrowImage = nullptr;
@@ -19,5 +23,20 @@ void FScriptableConnectionDrawingPolicy::DetermineWiringStyle(UEdGraphPin* Outpu
 	if (bOrphan)
 	{
 		Params.WireColor = FLinearColor::Red;
+		return;
+	}
+
+	/** Brighten + thicken wires incident to any selected node, mirroring the BP "selection-relationship" cue. */
+	if (const UScriptableEdGraph* SfGraph = Cast<UScriptableEdGraph>(GraphObj))
+	{
+		const UEdGraphNode* FromNode = OutputPin ? OutputPin->GetOwningNode() : nullptr;
+		const UEdGraphNode* ToNode = InputPin ? InputPin->GetOwningNode() : nullptr;
+		const bool bTouchesSelection = (FromNode && SfGraph->SelectedNodes.Contains(FromNode))
+			|| (ToNode && SfGraph->SelectedNodes.Contains(ToNode));
+		if (bTouchesSelection)
+		{
+			Params.WireThickness *= 1.75f;
+			Params.WireColor *= 1.4f;
+		}
 	}
 }

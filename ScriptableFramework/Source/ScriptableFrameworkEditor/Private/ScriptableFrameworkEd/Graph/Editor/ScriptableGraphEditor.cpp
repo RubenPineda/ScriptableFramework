@@ -1910,6 +1910,22 @@ void FScriptableGraphEditor::OnPackageSaved(const FString& PackageFileName, UPac
 
 void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection)
 {
+	/** Refresh the connection drawing policy's input: it brightens/thickens wires touching any selected node. */
+	if (UScriptableGraph* Graph = EditedGraph.Get())
+	{
+		if (UScriptableEdGraph* SfEdGraph = Cast<UScriptableEdGraph>(Graph->EdGraph))
+		{
+			SfEdGraph->SelectedNodes.Reset();
+			for (UObject* Selected : NewSelection)
+			{
+				if (const UEdGraphNode* Node = Cast<UEdGraphNode>(Selected))
+				{
+					SfEdGraph->SelectedNodes.Add(Node);
+				}
+			}
+		}
+	}
+
 	if (!NodeDetailsView.IsValid()) return;
 
 	// Single-selection only: anything else (empty or multi) clears the panel.
