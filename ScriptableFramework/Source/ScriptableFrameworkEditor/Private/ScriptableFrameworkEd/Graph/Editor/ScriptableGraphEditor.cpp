@@ -57,6 +57,10 @@
 #include "Core/KzValidationTypes.h"
 #include "Logging/TokenizedMessage.h"
 #include "ScriptableFrameworkEd/ScriptableGraphEditorSettings.h"
+#include "ScriptableFrameworkEd/Debug/ScriptableDebugRegistry.h"
+#include "ScriptableNodes/ScriptableGraphSubsystem.h"
+#include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "Engine/Engine.h"
 #include "Subsystems/EditorAssetSubsystem.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
@@ -1934,6 +1938,33 @@ void FScriptableGraphEditor::ExtendToolbar()
 						FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Search"));
 				}
 				ToolbarBuilder.EndSection();
+
+				/**
+				 * Debug Object selector at the far right, BP-style. AddComboButton would force the
+				 * icon-above-label toolbar block; we want a flat horizontal "text + chevron" combo,
+				 * matching the BP debug object widget, so we add a hand-built SComboButton via AddWidget.
+				 */
+				ToolbarBuilder.BeginSection("DebugObject");
+				{
+					ToolbarBuilder.AddWidget(
+						SNew(SBox)
+							.WidthOverride(200.f)
+							.VAlign(VAlign_Center)
+							.Padding(FMargin(4.f, 0.f))
+							[
+								SNew(SComboButton)
+									.OnGetMenuContent(this, &FScriptableGraphEditor::BuildDebugObjectMenu)
+									.ToolTipText(LOCTEXT("DebugObjectTip", "Live runner whose active nodes are highlighted on the canvas."))
+									.ContentPadding(FMargin(4.f, 2.f))
+									.ButtonContent()
+									[
+										SNew(STextBlock)
+											.Text_Lambda([this]() { return GetDebugObjectLabel(); })
+											.Font(FAppStyle::Get().GetFontStyle("NormalFont"))
+									]
+							]);
+				}
+				ToolbarBuilder.EndSection();
 			}));
 
 	AddToolbarExtender(Extender);
@@ -2174,6 +2205,93 @@ void FScriptableGraphEditor::BuildSaveOnCompileMenu(FMenuBuilder& MenuBuilder)
 			NAME_None,
 			EUserInterfaceActionType::RadioButton);
 	}
+}
+
+FText FScriptableGraphEditor::GetDebugObjectLabel() const
+{
+	const UScriptableGraph* Graph = EditedGraph.Get();
+	const UScriptableGraphInstance* Debug = FScriptableDebugRegistry::GetDebugInstance(Graph);
+	if (!Debug || !Debug->IsRunning())
+	{
+		return LOCTEXT("NoDebugObject", "No debug object selected");
+	}
+	const UObject* Owner = Debug->GetOwner();
+	const FString OwnerName = Owner ? Owner->GetName() : TEXT("<no owner>");
+	return FText::FromString(OwnerName);
+}
+
+TSharedRef<SWidget> FScriptableGraphEditor::BuildDebugObjectMenu()
+{
+	FMenuBuilder MenuBuilder(/*bShouldCloseAfter*/ true, nullptr);
+
+	UScriptableGraph* Graph = EditedGraph.Get();
+	const UScriptableGraph* GraphConst = Graph;
+
+	/** "No debug object selected" — clears the registry. Button (not Radio) so it doesn't show the bullet when current; the toolbar label already conveys that state. */
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("NoDebugObjectEntry", "No debug object selected"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateLambda([GraphConst]()
+			{
+				FScriptableDebugRegistry::SetDebugInstance(GraphConst, nullptr);
+			})),
+		NAME_None,
+		EUserInterfaceActionType::Button);
+
+	if (!Graph) return MenuBuilder.MakeWidget();
+
+	/** Collect live runners of THIS asset across every world. Owner-name is the picker label. */
+	TArray<TWeakObjectPtr<UScriptableGraphInstance>> Candidates;
+	if (GEngine)
+	{
+		for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+		{
+			UWorld* World = Ctx.World();
+			if (!World) continue;
+			UScriptableGraphSubsystem* Sub = World->GetSubsystem<UScriptableGraphSubsystem>();
+			if (!Sub) continue;
+			for (UScriptableGraphInstance* Inst : Sub->GetActiveRunners())
+			{
+				if (Inst && Inst->GetAsset() == Graph)
+				{
+					Candidates.Add(Inst);
+				}
+			}
+		}
+	}
+
+	if (Candidates.IsEmpty()) return MenuBuilder.MakeWidget();
+
+	MenuBuilder.AddSeparator();
+
+	for (const TWeakObjectPtr<UScriptableGraphInstance>& WeakInst : Candidates)
+	{
+		UScriptableGraphInstance* Inst = WeakInst.Get();
+		if (!Inst) continue;
+
+		const UObject* Owner = Inst->GetOwner();
+		const FString Label = Owner ? Owner->GetName() : Inst->GetName();
+
+		MenuBuilder.AddMenuEntry(
+			FText::FromString(Label),
+			FText::GetEmpty(),
+			FSlateIcon(),
+			FUIAction(
+				FExecuteAction::CreateLambda([GraphConst, WeakInst]()
+					{
+						FScriptableDebugRegistry::SetDebugInstance(GraphConst, WeakInst.Get());
+					}),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateLambda([GraphConst, WeakInst]()
+					{
+						return FScriptableDebugRegistry::GetDebugInstance(GraphConst) == WeakInst.Get();
+					})),
+			NAME_None,
+			EUserInterfaceActionType::RadioButton);
+	}
+
+	return MenuBuilder.MakeWidget();
 }
 
 FText FScriptableGraphEditor::GetCompileButtonTooltip() const

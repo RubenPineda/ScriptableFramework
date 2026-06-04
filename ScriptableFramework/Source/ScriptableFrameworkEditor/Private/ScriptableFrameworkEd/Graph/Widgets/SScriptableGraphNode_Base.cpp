@@ -2,14 +2,11 @@
 
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/Debug/ScriptableDebugRegistry.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
-#include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableNodes/ScriptableNode.h"
 
-#include "Editor.h"
-#include "Engine/Engine.h"
-#include "Engine/World.h"
 #include "Styling/AppStyle.h"
 
 void SScriptableGraphNode_Base::Construct(const FArguments& InArgs, UEdGraphNode* InNode)
@@ -28,52 +25,67 @@ void SScriptableGraphNode_Base::GetOverlayBrushes(bool bSelected, const FVector2
 
 	const UScriptableGraph* Asset = SfNode->GetTypedOuter<UScriptableGraph>();
 	if (!Asset) return;
-	const bool* EnabledPtr = Asset->Breakpoints.Find(SfNode->GetRuntimeNode()->GetBindingID());
-	if (!EnabledPtr) return;
+	const FGuid TargetId = SfNode->GetRuntimeNode()->GetBindingID();
 
-	/** Filled red dot when enabled, hollow when disabled — mirroring SGraphNodeK2Base. Centred top-left. */
-	FOverlayBrushInfo BreakpointInfo;
-	BreakpointInfo.Brush = FAppStyle::GetBrush(*EnabledPtr
-		? TEXT("Kismet.DebuggerOverlay.Breakpoint.EnabledAndValid")
-		: TEXT("Kismet.DebuggerOverlay.Breakpoint.Disabled"));
-	if (BreakpointInfo.Brush)
+	/** Breakpoint overlay (filled when enabled, hollow when disabled). Independent of the active halo. */
+	if (const bool* EnabledPtr = Asset->Breakpoints.Find(TargetId))
 	{
-		BreakpointInfo.OverlayOffset -= BreakpointInfo.Brush->ImageSize / 2.f;
-		Brushes.Add(BreakpointInfo);
+		FOverlayBrushInfo BreakpointInfo;
+		BreakpointInfo.Brush = FAppStyle::GetBrush(*EnabledPtr
+			? TEXT("Kismet.DebuggerOverlay.Breakpoint.EnabledAndValid")
+			: TEXT("Kismet.DebuggerOverlay.Breakpoint.Disabled"));
+		if (BreakpointInfo.Brush)
+		{
+			BreakpointInfo.OverlayOffset -= BreakpointInfo.Brush->ImageSize / 2.f;
+			Brushes.Add(BreakpointInfo);
+		}
 	}
 
-	/** Active-node halo: any live runner of this asset currently has the node in ActiveNodes. */
-	if (GEngine)
+	/** Active-node halo rendered as a tinted box via OnPaint — the Kismet InstructionPointer brush is 72x72 and dominates the canvas when multiple nodes are active at once. */
+}
+
+int32 SScriptableGraphNode_Base::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	bool bActive = false;
+	if (const UScriptableEdGraphNode* SfNode = Cast<UScriptableEdGraphNode>(GraphNode))
 	{
-		const FGuid TargetId = SfNode->GetRuntimeNode()->GetBindingID();
-		bool bAnyActive = false;
-		for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+		if (UScriptableNode* RuntimeNode = SfNode->GetRuntimeNode())
 		{
-			UWorld* World = Ctx.World();
-			if (!World) continue;
-			UScriptableGraphSubsystem* Sub = World->GetSubsystem<UScriptableGraphSubsystem>();
-			if (!Sub) continue;
-			for (UScriptableGraphInstance* Inst : Sub->GetActiveRunners())
+			if (const UScriptableGraph* Asset = SfNode->GetTypedOuter<UScriptableGraph>())
 			{
-				if (!Inst || Inst->GetAsset() != Asset) continue;
-				for (UScriptableNode* ActiveNode : Inst->GetActiveNodes())
+				if (const UScriptableGraphInstance* Debug = FScriptableDebugRegistry::GetDebugInstance(Asset))
 				{
-					if (ActiveNode && ActiveNode->GetBindingID() == TargetId) { bAnyActive = true; break; }
+					if (Debug->IsRunning())
+					{
+						const FGuid TargetId = RuntimeNode->GetBindingID();
+						for (UScriptableNode* ActiveNode : Debug->GetActiveNodes())
+						{
+							if (ActiveNode && ActiveNode->GetBindingID() == TargetId) { bActive = true; break; }
+						}
+					}
 				}
-				if (bAnyActive) break;
-			}
-			if (bAnyActive) break;
-		}
-
-		if (bAnyActive)
-		{
-			FOverlayBrushInfo InstrInfo;
-			InstrInfo.Brush = FAppStyle::GetBrush(TEXT("Kismet.DebuggerOverlay.InstructionPointer"));
-			if (InstrInfo.Brush)
-			{
-				InstrInfo.OverlayOffset -= InstrInfo.Brush->ImageSize / 2.f;
-				Brushes.Add(InstrInfo);
 			}
 		}
 	}
+
+	if (bActive)
+	{
+		const FSlateBrush* HaloBrush = FAppStyle::GetBrush(TEXT("Graph.Node.ShadowSelected"));
+		if (HaloBrush)
+		{
+			const FLinearColor HaloColor(1.0f, 0.45f, 0.0f, 1.0f);
+			const FVector2f Inflation(14.0f, 14.0f);
+			const FVector2f LocalSize = AllottedGeometry.GetLocalSize();
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				LayerId,
+				AllottedGeometry.ToPaintGeometry(LocalSize + Inflation * 2.f, FSlateLayoutTransform(-Inflation)),
+				HaloBrush,
+				ESlateDrawEffect::None,
+				HaloColor);
+		}
+	}
+
+	/** Shift the node body up one layer so it draws over the halo we just laid down. */
+	return SGraphNode::OnPaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId + (bActive ? 1 : 0), InWidgetStyle, bParentEnabled);
 }

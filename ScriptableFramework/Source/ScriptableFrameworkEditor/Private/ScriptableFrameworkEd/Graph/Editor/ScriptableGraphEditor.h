@@ -193,6 +193,10 @@ private:
 	TSharedRef<SWidget> GenerateCompileOptionsMenu();
 	void BuildSaveOnCompileMenu(class FMenuBuilder& MenuBuilder);
 
+	/** BP-style Debug Object combo: lists live runners of the edited asset, lets the user focus the canvas overlay on one. */
+	FText GetDebugObjectLabel() const;
+	TSharedRef<SWidget> BuildDebugObjectMenu();
+
 	/** Pull from the panel (Refresh button): re-runs the validator and returns the fresh issue list. Does not persist. */
 	TArray<FKzValidationIssue> HandleRunValidation();
 

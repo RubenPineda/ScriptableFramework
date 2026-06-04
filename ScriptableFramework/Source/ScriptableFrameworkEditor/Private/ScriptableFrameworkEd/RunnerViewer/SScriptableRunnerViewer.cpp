@@ -7,6 +7,7 @@
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
+#include "ScriptableFrameworkEd/Debug/ScriptableDebugRegistry.h"
 
 #include "Editor.h"
 #include "Engine/Engine.h"
@@ -329,6 +330,7 @@ void SScriptableRunnerViewer::PopulateActiveNodes(FRowPtr Row)
 	Box->ClearChildren();
 	if (!Inst) return;
 
+	TWeakObjectPtr<UScriptableGraphInstance> WeakInst(Inst);
 	for (UScriptableNode* Node : Inst->GetActiveNodes())
 	{
 		if (!Node) continue;
@@ -338,7 +340,7 @@ void SScriptableRunnerViewer::PopulateActiveNodes(FRowPtr Row)
 			SNew(SButton)
 				.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
 				.ContentPadding(FMargin(2, 0))
-				.OnClicked_Lambda([this, WeakNode]() { OnJumpToNode(WeakNode); return FReply::Handled(); })
+				.OnClicked_Lambda([this, WeakNode, WeakInst]() { OnJumpToNode(WeakNode, WeakInst); return FReply::Handled(); })
 				[
 					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("  - %s"), *GetNodeLabel(Node))))
 				]
@@ -358,6 +360,7 @@ void SScriptableRunnerViewer::PopulateFires(FRowPtr Row)
 
 	Box->ClearChildren();
 
+	TWeakObjectPtr<UScriptableGraphInstance> WeakInst(Row->Instance);
 	for (const FScriptableRunnerFire& Fire : Row->Fires)
 	{
 		TWeakObjectPtr<UScriptableNode> WeakFireNode = Fire.Node;
@@ -367,7 +370,7 @@ void SScriptableRunnerViewer::PopulateFires(FRowPtr Row)
 			SNew(SButton)
 				.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
 				.ContentPadding(FMargin(2, 0))
-				.OnClicked_Lambda([this, WeakFireNode]() { OnJumpToNode(WeakFireNode); return FReply::Handled(); })
+				.OnClicked_Lambda([this, WeakFireNode, WeakInst]() { OnJumpToNode(WeakFireNode, WeakInst); return FReply::Handled(); })
 				[
 					SNew(STextBlock)
 						.ColorAndOpacity(FSlateColor::UseSubduedForeground())
@@ -405,12 +408,18 @@ void SScriptableRunnerViewer::OnCancelRunnerClicked(TWeakObjectPtr<UScriptableGr
 	}
 }
 
-void SScriptableRunnerViewer::OnJumpToNode(TWeakObjectPtr<UScriptableNode> WeakNode)
+void SScriptableRunnerViewer::OnJumpToNode(TWeakObjectPtr<UScriptableNode> WeakNode, TWeakObjectPtr<UScriptableGraphInstance> WeakInstance)
 {
 	UScriptableNode* Node = WeakNode.Get();
 	if (!Node || !GEditor) return;
 	const UScriptableGraph* Asset = Node->FindOwningAsset();
 	if (!Asset || !Asset->EdGraph) return;
+
+	/** Set the clicked runner as this asset's Debug Object so the canvas halos light up. */
+	if (UScriptableGraphInstance* Inst = WeakInstance.Get())
+	{
+		FScriptableDebugRegistry::SetDebugInstance(Asset, Inst);
+	}
 
 	UEdGraphNode* MatchingEdNode = nullptr;
 	const FGuid TargetId = Node->GetBindingID();

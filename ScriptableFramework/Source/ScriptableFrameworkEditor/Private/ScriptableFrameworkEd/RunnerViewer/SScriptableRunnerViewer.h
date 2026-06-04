@@ -73,7 +73,7 @@ private:
 
 	void OnCancelAllClicked();
 	void OnCancelRunnerClicked(TWeakObjectPtr<UScriptableGraphInstance> WeakInstance);
-	void OnJumpToNode(TWeakObjectPtr<UScriptableNode> WeakNode);
+	void OnJumpToNode(TWeakObjectPtr<UScriptableNode> WeakNode, TWeakObjectPtr<UScriptableGraphInstance> WeakInstance);
 
 	TArray<FRowPtr> Rows;
 	TSharedPtr<STreeView<FRowPtr>> Tree;
