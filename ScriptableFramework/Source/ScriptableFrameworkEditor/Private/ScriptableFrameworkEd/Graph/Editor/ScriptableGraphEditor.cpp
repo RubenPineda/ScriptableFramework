@@ -1834,8 +1834,17 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Validation(const FSpawnTab
 		.OnIssueActivated(SKzValidationPanel::FOnIssueActivated::CreateSP(this, &FScriptableGraphEditor::HandleValidationIssueActivated))
 		.OnRunValidation(SKzValidationPanel::FOnRunValidation::CreateSP(this, &FScriptableGraphEditor::HandleRunValidation));
 
+	/** Dynamic label so the tab shows the unfiltered issue count as a BP-style badge ("Validation (3)"). */
+	TAttribute<FText> TabLabel = TAttribute<FText>::Create(TAttribute<FText>::FGetter::CreateLambda([this]()
+		{
+			if (!ValidationPanel.IsValid()) return LOCTEXT("ValidationTab", "Validation");
+			const int32 Count = ValidationPanel->GetTotalIssueCount();
+			if (Count <= 0) return LOCTEXT("ValidationTab", "Validation");
+			return FText::Format(LOCTEXT("ValidationTabWithCount", "Validation ({0})"), FText::AsNumber(Count));
+		}));
+
 	return SNew(SDockTab)
-		.Label(LOCTEXT("ValidationTab", "Validation"))
+		.Label(TabLabel)
 		[
 			ValidationPanel.ToSharedRef()
 		];
