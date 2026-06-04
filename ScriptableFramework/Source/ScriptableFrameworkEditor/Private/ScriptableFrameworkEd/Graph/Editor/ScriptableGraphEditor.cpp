@@ -52,6 +52,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
+#include "UObject/ObjectSaveContext.h"
 #include "Widgets/SKzValidationPanel.h"
 #include "Validation/KzAssetValidationUtils.h"
 #include "Core/KzValidationTypes.h"
@@ -64,6 +65,7 @@
 #include "Subsystems/EditorAssetSubsystem.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
+#include "ScriptableNodes/ScriptableNode_SubGraph.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/SBoxPanel.h"
 
@@ -373,6 +375,7 @@ FScriptableGraphEditor::~FScriptableGraphEditor()
 {
 	FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(OnObjectPropertyChangedHandle);
 	FCoreUObjectDelegates::OnObjectTransacted.Remove(OnObjectTransactedHandle);
+	UPackage::PackageSavedWithContextEvent.Remove(OnPackageSavedHandle);
 
 	if (GraphChangedHandle.IsValid())
 	{
@@ -434,6 +437,8 @@ void FScriptableGraphEditor::Initialize(const EToolkitMode::Type Mode, const TSh
 	OnObjectTransactedHandle = FCoreUObjectDelegates::OnObjectTransacted.AddSP(
 		StaticCastSharedRef<FScriptableGraphEditor>(AsShared()),
 		&FScriptableGraphEditor::OnObjectTransacted);
+
+	OnPackageSavedHandle = UPackage::PackageSavedWithContextEvent.AddSP(this, &FScriptableGraphEditor::OnPackageSaved);
 
 	// Ensure the asset has a visual UEdGraph, then mirror its runtime Nodes onto it.
 	InitEdGraph();
@@ -729,7 +734,18 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		}
 	}
 
-	// 3. Re-link pins according to the persisted FScriptableGraphConnection list.
+	// 3. Re-link pins according to the persisted FScriptableGraphConnection list. Missing pins on a
+	// SubGraph endpoint are recreated as orphans so wires that pointed at a now-vanished event/output
+	// stay visible (red) instead of disappearing silently — same UX as Blueprint.
+	auto ResurrectOrphanPin = [](UScriptableEdGraphNode* EdNode, FName PinName, EEdGraphPinDirection Direction) -> UEdGraphPin*
+		{
+			if (!EdNode || !EdNode->GetRuntimeNode()) return nullptr;
+			if (!EdNode->GetRuntimeNode()->IsA<UScriptableNode_SubGraph>()) return nullptr;
+			UEdGraphPin* Orphan = EdNode->CreatePin(Direction, UScriptableEdGraphNode::ScriptableExecPinCategory, PinName);
+			if (Orphan) Orphan->bOrphanedPin = true;
+			return Orphan;
+		};
+
 	for (const FScriptableGraphConnection& Conn : Graph->Connections)
 	{
 		UScriptableEdGraphNode* FromNode = EdNodeByID.FindRef(Conn.From.NodeID);
@@ -737,7 +753,9 @@ void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 		if (!FromNode || !ToNode) continue;
 
 		UEdGraphPin* FromPin = FromNode->FindPin(Conn.From.PinName, EGPD_Output);
+		if (!FromPin) FromPin = ResurrectOrphanPin(FromNode, Conn.From.PinName, EGPD_Output);
 		UEdGraphPin* ToPin = ToNode->FindPin(Conn.To.PinName, EGPD_Input);
+		if (!ToPin) ToPin = ResurrectOrphanPin(ToNode, Conn.To.PinName, EGPD_Input);
 		if (!FromPin || !ToPin) continue;
 
 		FromPin->MakeLinkTo(ToPin);
@@ -1832,6 +1850,62 @@ void FScriptableGraphEditor::OnRuntimeNodePropertyChanged(UObject* InObject, FPr
 		}
 		return;
 	}
+
+	/** Cross-asset reactivity: an edit in a foreign UScriptableGraph that we embed via UScriptableNode_SubGraph
+	 * must rebuild the embedding ed-nodes so their event-input / declared-output pins stay in sync. We filter to
+	 * the properties that actually shape pins (Outputs/Nodes on the sub-asset, EventName on its ReceiveEvents). */
+	UScriptableGraph* ForeignGraph = nullptr;
+	bool bRelevantChange = false;
+	const FName PropertyName = InEvent.Property ? InEvent.Property->GetFName() : NAME_None;
+
+	if (UScriptableGraph* DirectChange = Cast<UScriptableGraph>(InObject))
+	{
+		if (DirectChange != Graph)
+		{
+			ForeignGraph = DirectChange;
+			bRelevantChange = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Outputs)) ||
+				(PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Nodes));
+		}
+	}
+	else if (UScriptableNode_ReceiveEvent* EventNode = Cast<UScriptableNode_ReceiveEvent>(InObject))
+	{
+		UScriptableGraph* EventOwner = EventNode->GetTypedOuter<UScriptableGraph>();
+		if (EventOwner && EventOwner != Graph)
+		{
+			ForeignGraph = EventOwner;
+			bRelevantChange = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableNode_ReceiveEvent, EventName));
+		}
+	}
+
+	if (!bRelevantChange || !ForeignGraph) return;
+
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+		if (!SfEd) continue;
+		const UScriptableNode_SubGraph* SubGraphNode = Cast<UScriptableNode_SubGraph>(SfEd->GetRuntimeNode());
+		if (!SubGraphNode || SubGraphNode->SubGraphAsset != ForeignGraph) continue;
+		SfEd->ReconstructNode();
+	}
+}
+
+void FScriptableGraphEditor::OnPackageSaved(const FString& PackageFileName, UPackage* SavedPackage, FObjectPostSaveContext SaveContext)
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph || !Graph->EdGraph || !SavedPackage) return;
+
+	/** Own package: live property-change handler already reacts; skip to avoid a redundant reconstruct pass. */
+	if (SavedPackage == Graph->GetPackage()) return;
+
+	for (UEdGraphNode* EdNode : Graph->EdGraph->Nodes)
+	{
+		UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+		if (!SfEd) continue;
+		const UScriptableNode_SubGraph* SubGraphNode = Cast<UScriptableNode_SubGraph>(SfEd->GetRuntimeNode());
+		if (!SubGraphNode || !SubGraphNode->SubGraphAsset) continue;
+		if (SubGraphNode->SubGraphAsset->GetPackage() != SavedPackage) continue;
+		SfEd->ReconstructNode();
+	}
 }
 
 void FScriptableGraphEditor::OnGraphSelectionChanged(const FGraphPanelSelectionSet& NewSelection)
@@ -2064,6 +2138,30 @@ void FScriptableGraphEditor::HandleGraphChanged(const FEdGraphEditAction& Action
 	/** Pure selection changes don't count as edits. Everything else (add/remove node, pins, connections) does. */
 	if (Action.Action == GRAPHACTION_SelectNode) return;
 	MarkDirtySinceLastCompile();
+
+	/** Re-validate on edits so banners flip live — if the user just fixed the last error, the red strip should
+	 * vanish without waiting for an explicit Compile. ApplyValidationToErrorBanners guards its NotifyGraphChanged
+	 * via bSuppressDirtyOnGraphChange so we don't recurse here. */
+	RefreshErrorBanners();
+}
+
+void FScriptableGraphEditor::RefreshErrorBanners()
+{
+	UScriptableGraph* Graph = EditedGraph.Get();
+	if (!Graph) return;
+
+	const TArray<FKzValidationIssue> RawIssues = FKzAssetValidationUtils::RunValidation(Graph);
+	const TSet<FGuid> ReachableNodeIds = ScriptableFrameworkEditor::ComputeReachableNodeIds(Graph);
+
+	TArray<FKzValidationIssue> Issues;
+	Issues.Reserve(RawIssues.Num());
+	for (const FKzValidationIssue& Issue : RawIssues)
+	{
+		if (Issue.ContextId.IsValid() && !ReachableNodeIds.Contains(Issue.ContextId)) continue;
+		Issues.Add(Issue);
+	}
+
+	ApplyValidationToErrorBanners(Issues);
 }
 
 void FScriptableGraphEditor::ApplyValidationToErrorBanners(const TArray<FKzValidationIssue>& Issues)

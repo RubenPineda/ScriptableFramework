@@ -33,18 +33,19 @@ void UScriptableEdGraphNode_ReceiveEvent::OnRenameNode(const FString& NewName)
 	UScriptableNode_ReceiveEvent* Event = Cast<UScriptableNode_ReceiveEvent>(RuntimeNode);
 	if (!Event) return;
 
-	const FName OldName = Event->EventName;
 	const FName NewNameAsName(*NewName);
-	if (OldName == NewNameAsName) return;
+	if (Event->EventName == NewNameAsName) return;
 
 	Event->Modify();
-	Event->EventName = NewNameAsName;
 
-	/** Same refactor path the details panel uses (via PreEdit/PostEditChange) — keeps GoTos pointing at the new name. */
-	if (UScriptableGraph* Graph = Event->GetTypedOuter<UScriptableGraph>())
-	{
-		UScriptableNode_ReceiveEvent::ApplyTargetReferenceRename(Graph, OldName, NewNameAsName);
-	}
+	/** Drive the change through PreEdit/PostEditChange so it (a) routes through ApplyTargetReferenceRename to
+	 * fix local GoTos, and (b) broadcasts FCoreUObjectDelegates::OnObjectPropertyChanged so embedding SubGraph
+	 * nodes in other open graphs refresh their event-input pins. */
+	FProperty* EventNameProp = UScriptableNode_ReceiveEvent::StaticClass()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(UScriptableNode_ReceiveEvent, EventName));
+	Event->PreEditChange(EventNameProp);
+	Event->EventName = NewNameAsName;
+	FPropertyChangedEvent ChangeEvent(EventNameProp);
+	Event->PostEditChangeProperty(ChangeEvent);
 }
 
 FLinearColor UScriptableEdGraphNode_ReceiveEvent::GetNodeTitleColor() const

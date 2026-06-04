@@ -5,6 +5,7 @@
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Entry.h"
+#include "ScriptableNodes/ScriptableNode_SubGraph.h"
 #include "Core/KzBagOps.h"
 
 #if WITH_EDITOR
@@ -137,6 +138,9 @@ void UScriptableGraph::PruneOrphanConnections()
 			UScriptableNode* const* Found = NodesByGuid.Find(Ref.NodeID);
 			if (!Found || !*Found) return false;
 			const UScriptableNode* Node = *Found;
+			/** SubGraph's pin set is driven by a foreign asset; keeping connections to vanished pins (rather than
+			 * silently dropping them) lets the editor render them as orphans on reload so the user can decide. */
+			if (Node->IsA<UScriptableNode_SubGraph>()) return true;
 			const TArray<FName> Pins = bExpectOutput ? Node->GetOutputPins() : Node->GetInputPins();
 			return Pins.Contains(Ref.PinName);
 		};

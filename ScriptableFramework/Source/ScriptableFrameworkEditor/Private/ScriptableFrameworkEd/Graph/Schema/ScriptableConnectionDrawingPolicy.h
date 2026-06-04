@@ -13,4 +13,8 @@ class FScriptableConnectionDrawingPolicy : public FConnectionDrawingPolicy
 {
 public:
 	FScriptableConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements);
+
+	//~ FConnectionDrawingPolicy interface
+	virtual void DetermineWiringStyle(UEdGraphPin* OutputPin, UEdGraphPin* InputPin, FConnectionParams& Params) override;
+	//~ End of FConnectionDrawingPolicy interface
 };

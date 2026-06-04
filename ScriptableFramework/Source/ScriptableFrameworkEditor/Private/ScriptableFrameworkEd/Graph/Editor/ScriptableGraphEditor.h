@@ -9,6 +9,7 @@
 #include "Textures/SlateIcon.h"
 
 struct FEdGraphEditAction;
+class FObjectPostSaveContext;
 
 class UScriptableGraph;
 class UScriptableNode;
@@ -83,6 +84,9 @@ private:
 
 	/** Reconstructs the ed-node whose runtime node changed, keeping dynamic titles/pins in sync with details-panel edits. */
 	void OnRuntimeNodePropertyChanged(UObject* InObject, FPropertyChangedEvent& InEvent);
+
+	/** Saving a foreign UScriptableGraph rebuilds every embedded SubGraph node that references it; complements the live property-change path for edits OnObjectPropertyChanged misses (e.g. ReceiveEvent add/remove). */
+	void OnPackageSaved(const FString& PackageFileName, UPackage* SavedPackage, FObjectPostSaveContext SaveContext);
 
 	/** Removes the right-clicked Sequence output pin (no-op if not a removable branch). Reads the pin from the widget's selection, since command executors don't receive it. */
 	void OnRemoveSequencePin();
@@ -185,6 +189,9 @@ private:
 	/** Applies validation issues onto each ed-node's bHasCompilerMessage/ErrorType/ErrorMsg, then triggers a redraw. */
 	void ApplyValidationToErrorBanners(const TArray<FKzValidationIssue>& Issues);
 
+	/** Re-runs validation and refreshes per-node ERROR!/WARNING! banners; cheap variant of HandleRunValidation without details-panel rebuilds, suitable for live edit hooks. */
+	void RefreshErrorBanners();
+
 	/** Driven by bIsDirtySinceLastCompile and Graph->bLastCompileFailed: yellow > red > green. */
 	FSlateIcon GetCompileButtonIcon() const;
 	FText GetCompileButtonTooltip() const;
@@ -250,6 +257,9 @@ private:
 
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
+
+	/** Handle to UPackage::PackageSavedWithContextEvent, kept so we can unsubscribe at destruction. */
+	FDelegateHandle OnPackageSavedHandle;
 
 	/** Handle to UEdGraph::OnGraphChanged so we can detect topology/connection edits and unsubscribe at destruction. */
 	FDelegateHandle GraphChangedHandle;

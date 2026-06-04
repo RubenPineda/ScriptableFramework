@@ -20,7 +20,11 @@ public:
 protected:
 	//~ SGraphPin interface
 	virtual TSharedRef<SWidget> GetDefaultValueWidget() override;
-	virtual FSlateColor GetPinColor() const override { return FLinearColor::White; }
+	virtual FSlateColor GetPinColor() const override
+	{
+		/** Orphan pins (connection target vanished from the runtime) render red, matching BP. */
+		return (GraphPinObj && GraphPinObj->bOrphanedPin) ? FLinearColor::Red : FLinearColor::White;
+	}
 	//~ End of SGraphPin interface
 
 	/** Resolves the label visibility by asking the owning UScriptableEdGraphNode. */

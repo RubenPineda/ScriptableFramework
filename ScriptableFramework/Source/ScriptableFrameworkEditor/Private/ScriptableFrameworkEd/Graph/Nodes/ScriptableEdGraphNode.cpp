@@ -82,6 +82,7 @@ void UScriptableEdGraphNode::ReconstructNode()
 
 	AllocateDefaultPins();
 
+	TArray<UEdGraphPin*> PinsToDestroy;
 	for (UEdGraphPin* OldPin : OldPins)
 	{
 		if (!OldPin) continue;
@@ -92,23 +93,33 @@ void UScriptableEdGraphNode::ReconstructNode()
 			{
 				if (Linked) NewPin->MakeLinkTo(Linked);
 			}
-		}
 
-		// Sever the old pin from its peers manually to avoid triggering the Schema.
-		// Calling BreakAllPinLinks here would corrupt Asset->Connections during reconstruction.
-		for (UEdGraphPin* Linked : OldPin->LinkedTo)
-		{
-			if (Linked)
+			// Sever the old pin from its peers manually to avoid triggering the Schema.
+			// Calling BreakAllPinLinks here would corrupt Asset->Connections during reconstruction.
+			for (UEdGraphPin* Linked : OldPin->LinkedTo)
 			{
-				Linked->LinkedTo.Remove(OldPin);
+				if (Linked) Linked->LinkedTo.Remove(OldPin);
 			}
+			OldPin->LinkedTo.Empty();
+			PinsToDestroy.Add(OldPin);
 		}
-		OldPin->LinkedTo.Empty();
+		else if (!OldPin->LinkedTo.IsEmpty())
+		{
+			/** BP-style orphan: the runtime no longer exposes a pin with this name but the user still has
+			 * wires attached. Keep the pin visible (rendered red, including its wires) so the user can
+			 * either restore the missing event/output in the sub-asset or rewire/delete explicitly. */
+			OldPin->bOrphanedPin = true;
+			Pins.Add(OldPin);
+		}
+		else
+		{
+			PinsToDestroy.Add(OldPin);
+		}
 	}
 
-	for (UEdGraphPin* OldPin : OldPins)
+	for (UEdGraphPin* OldPin : PinsToDestroy)
 	{
-		if (OldPin) DestroyPin(OldPin);
+		DestroyPin(OldPin);
 	}
 
 	ApplyPinVisibility();
@@ -121,9 +132,29 @@ void UScriptableEdGraphNode::ReconstructNode()
 
 void UScriptableEdGraphNode::ApplyPinVisibility()
 {
+	/** Orphan pins exist only to keep dangling wires visible; once they have no peers left they're noise. */
+	TArray<UEdGraphPin*> OrphansToDestroy;
+	for (UEdGraphPin* Pin : Pins)
+	{
+		if (Pin && Pin->bOrphanedPin && Pin->LinkedTo.IsEmpty())
+		{
+			OrphansToDestroy.Add(Pin);
+		}
+	}
+	for (UEdGraphPin* Orphan : OrphansToDestroy)
+	{
+		Pins.Remove(Orphan);
+		DestroyPin(Orphan);
+	}
+
 	for (UEdGraphPin* Pin : Pins)
 	{
 		if (!Pin) continue;
 		Pin->bHidden = bHideUnconnectedPins && Pin->LinkedTo.IsEmpty();
+	}
+
+	if (!OrphansToDestroy.IsEmpty())
+	{
+		if (UEdGraph* OwningGraph = GetGraph()) OwningGraph->NotifyGraphChanged();
 	}
 }
