@@ -948,6 +948,9 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(SfCommands.DistributeNodesVertically,   FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnDistributeNodesVertically),   CanDistribute);
 	Commands->MapAction(SfCommands.ZoomToSelection,  FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnZoomToSelection),
 		FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() > 0; }));
+
+	Commands->MapAction(SfCommands.ToggleBreakpoint, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnToggleBreakpoint),
+		FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() > 0; }));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -1481,6 +1484,34 @@ void FScriptableGraphEditor::OnZoomToSelection()
 	if (GraphEditorWidget.IsValid())
 	{
 		GraphEditorWidget->ZoomToFit(/*bOnlyTargetSelection*/ true);
+	}
+}
+
+void FScriptableGraphEditor::OnToggleBreakpoint()
+{
+	UScriptableGraph* GraphAsset = EditedGraph.Get();
+	if (!GraphAsset || !GraphEditorWidget.IsValid()) return;
+
+	const FGraphPanelSelectionSet Selection = GraphEditorWidget->GetSelectedNodes();
+	if (Selection.IsEmpty()) return;
+
+	const FScopedTransaction Transaction(LOCTEXT("ToggleBreakpointTx", "Toggle Breakpoint"));
+	GraphAsset->Modify();
+
+	bool bChanged = false;
+	for (UObject* Selected : Selection)
+	{
+		const UScriptableEdGraphNode* SfNode = Cast<UScriptableEdGraphNode>(Selected);
+		if (!SfNode || !SfNode->GetRuntimeNode()) continue;
+		const FGuid Id = SfNode->GetRuntimeNode()->GetBindingID();
+		if (GraphAsset->Breakpoints.Contains(Id)) GraphAsset->Breakpoints.Remove(Id);
+		else GraphAsset->Breakpoints.Add(Id, true);
+		bChanged = true;
+	}
+
+	if (bChanged && GraphAsset->EdGraph)
+	{
+		GraphAsset->EdGraph->NotifyGraphChanged();
 	}
 }
 
@@ -2157,6 +2188,14 @@ FText FScriptableGraphEditor::GetCompileButtonTooltip() const
 		return LOCTEXT("CompileBtnTip_Failed", "Last compile failed. Click to recompile and see the issues.");
 	}
 	return LOCTEXT("CompileBtnTip_Good", "Graph is up to date. Click to recompile.");
+}
+
+void FScriptableGraphEditor::JumpToNode(UEdGraphNode* Node)
+{
+	if (Node && GraphEditorWidget.IsValid())
+	{
+		GraphEditorWidget->JumpToNode(Node, /*bRequestRename*/ false, /*bSelectNode*/ true);
+	}
 }
 
 TArray<FKzValidationIssue> FScriptableGraphEditor::HandleRunValidation()

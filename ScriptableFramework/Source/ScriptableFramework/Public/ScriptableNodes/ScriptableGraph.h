@@ -55,6 +55,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Debug")
 	EScriptableTraceLevel DefaultNodeTraceLevel = EScriptableTraceLevel::Off;
 
+	/**
+	 * BindingIDs of nodes that carry a breakpoint, mapped to their enabled flag (true = pause on hit,
+	 * false = the breakpoint still exists but is ignored). UE 5.7's BP-centric FKismetDebugUtilities API
+	 * doesn't apply to us so we store directly. Presence in the map = has breakpoint.
+	 */
+	UPROPERTY()
+	TMap<FGuid, bool> Breakpoints;
+
 	//~ UObject interface
 	virtual void PostInitProperties() override;
 	virtual void PostLoad() override;

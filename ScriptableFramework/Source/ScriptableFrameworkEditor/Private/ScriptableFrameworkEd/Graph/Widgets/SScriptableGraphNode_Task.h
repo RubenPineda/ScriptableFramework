@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 
 class UScriptableEdGraphNode_Task;
 
@@ -11,7 +11,7 @@ class UScriptableEdGraphNode_Task;
  * Slate widget for UScriptableEdGraphNode_Task. Adds a top-right "xN" / "x∞" overlay badge when the
  * wrapped task has Loop enabled, mirroring the Loop pill shown in the details panel.
  */
-class SScriptableGraphNode_Task : public SGraphNode
+class SScriptableGraphNode_Task : public SScriptableGraphNode_Base
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphNode_Task) {}

@@ -46,4 +46,7 @@ public:
 
 	/** Zoom and pan the graph view to fit the current selection (F). */
 	TSharedPtr<FUICommandInfo> ZoomToSelection;
+
+	/** Toggle breakpoint on the selected node(s) (F9). BP behaviour: add when missing, remove when present. */
+	TSharedPtr<FUICommandInfo> ToggleBreakpoint;
 };

@@ -35,6 +35,9 @@ public:
 	/** Initializes the editor and opens the toolkit window for the given graph asset. */
 	void Initialize(const EToolkitMode::Type Mode, const TSharedPtr<IToolkitHost>& InitToolkitHost, UScriptableGraph* InGraph);
 
+	/** Pans and selects the given ed-node. External code (e.g. the breakpoint handler) uses this to focus a specific node. */
+	void JumpToNode(class UEdGraphNode* Node);
+
 	//~ IToolkit interface
 	virtual FName GetToolkitFName() const override;
 	virtual FText GetBaseToolkitName() const override;
@@ -137,6 +140,9 @@ private:
 
 	/** Pan and zoom the graph view to fit the current selection. No-op when nothing is selected. */
 	void OnZoomToSelection();
+
+	/** BP-style F9: each selected scriptable node toggles between "no breakpoint" and "enabled breakpoint". */
+	void OnToggleBreakpoint();
 
 	/** Spawns the given runtime UScriptableNode subclass at the current cursor position in graph space.
 	 * Called by FScriptableGraphSpawnInputProcessor when the user clicks while holding a shortcut key. */

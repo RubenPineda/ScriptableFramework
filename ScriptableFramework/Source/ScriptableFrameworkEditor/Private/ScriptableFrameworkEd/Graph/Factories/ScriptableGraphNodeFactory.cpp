@@ -14,6 +14,8 @@
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_OR.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_GoTo.h"
 #include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Finish.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "SGraphNodeKnot.h"
 
 TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Node) const
@@ -51,6 +53,12 @@ TSharedPtr<SGraphNode> FScriptableGraphNodeFactory::CreateNode(UEdGraphNode* Nod
 	if (UScriptableEdGraphNode_Finish* FinishNode = Cast<UScriptableEdGraphNode_Finish>(Node))
 	{
 		return SNew(SScriptableGraphNode_Finish, FinishNode);
+	}
+
+	/** Fallback for ed-nodes without a custom widget (Entry/Exit/Branch/SubGraph/ReceiveEvent/...). The base adds the breakpoint overlay so every scriptable node can show it. */
+	if (Cast<UScriptableEdGraphNode>(Node))
+	{
+		return SNew(SScriptableGraphNode_Base, Node);
 	}
 
 	return nullptr;

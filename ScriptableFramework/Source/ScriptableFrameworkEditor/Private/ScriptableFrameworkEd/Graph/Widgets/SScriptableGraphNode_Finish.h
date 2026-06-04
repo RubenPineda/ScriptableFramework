@@ -3,13 +3,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 
 class UScriptableEdGraphNode;
 class UScriptableNode_Finish;
 
 /** On-node dropdown listing every available output (graph's Outputs + Exit built-ins). Mirrors GoTo. */
-class SScriptableGraphNode_Finish : public SGraphNode
+class SScriptableGraphNode_Finish : public SScriptableGraphNode_Base
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphNode_Finish) {}

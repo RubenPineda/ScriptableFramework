@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 
 class UScriptableEdGraphNode;
 class UScriptableNode_OR;
@@ -12,7 +12,7 @@ class UScriptableNode_OR;
  * Slate widget for UScriptableEdGraphNode_OR. Adds the K2-style "Add pin" affordance on the input
  * side. Mirrors SScriptableGraphNode_AND.
  */
-class SScriptableGraphNode_OR : public SGraphNode
+class SScriptableGraphNode_OR : public SScriptableGraphNode_Base
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphNode_OR) {}

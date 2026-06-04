@@ -32,6 +32,8 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "EdGraph/EdGraph.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphPinFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
@@ -84,10 +86,12 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	PostLoadedHandle = UScriptableGraph::OnPostLoaded.AddRaw(this, &FScriptableFrameworkEditorModule::HandleGraphPostLoaded);
 	BeginPIEHandle = FEditorDelegates::BeginPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleBeginPIE);
 	EndPIEHandle = FEditorDelegates::EndPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleEndPIE);
+	NodeActivatedHandle = UScriptableNode::OnNodeActivatedEditor.AddRaw(this, &FScriptableFrameworkEditorModule::HandleNodeActivated);
 }
 
 void FScriptableFrameworkEditorModule::OnShutdownModule()
 {
+	UScriptableNode::OnNodeActivatedEditor.Remove(NodeActivatedHandle);
 	FEditorDelegates::EndPIE.Remove(EndPIEHandle);
 	FEditorDelegates::BeginPIE.Remove(BeginPIEHandle);
 	UScriptableGraph::OnPostLoaded.Remove(PostLoadedHandle);
@@ -138,6 +142,50 @@ void FScriptableFrameworkEditorModule::HandleGraphPostLoaded(UScriptableGraph* A
 void FScriptableFrameworkEditorModule::HandleBeginPIE(const bool bSimulating)
 {
 	CompileBlockedDuringPIE.Reset();
+}
+
+void FScriptableFrameworkEditorModule::HandleNodeActivated(UScriptableNode* Node)
+{
+	if (!Node || !GEditor) return;
+
+	const UScriptableGraph* Asset = Node->FindOwningAsset();
+	if (!Asset || !Asset->EdGraph) return;
+
+	/** Check the asset's breakpoint table — must exist AND be enabled to trigger the pause. */
+	const FGuid TargetId = Node->GetBindingID();
+	const bool* EnabledPtr = Asset->Breakpoints.Find(TargetId);
+	if (!EnabledPtr || !*EnabledPtr) return;
+
+	/** Find the source ed-node to focus the editor on it. */
+	UEdGraphNode* MatchingEdNode = nullptr;
+	for (UEdGraphNode* EdNode : Asset->EdGraph->Nodes)
+	{
+		const UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+		if (SfEd && SfEd->GetRuntimeNode() && SfEd->GetRuntimeNode()->GetBindingID() == TargetId)
+		{
+			MatchingEdNode = EdNode;
+			break;
+		}
+	}
+
+	/** Engine's BP-style pause toggle. Engine then drives PIE viewport into the paused state next tick. */
+	if (UWorld* PlayWorld = GEditor->PlayWorld)
+	{
+		PlayWorld->bDebugPauseExecution = true;
+	}
+
+	UAssetEditorSubsystem* Sub = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+	if (!Sub) return;
+
+	UScriptableGraph* MutableAsset = const_cast<UScriptableGraph*>(Asset);
+	Sub->OpenEditorForAsset(MutableAsset);
+	if (IAssetEditorInstance* EditorInst = Sub->FindEditorForAsset(MutableAsset, /*bFocusIfOpen*/ true))
+	{
+		if (FScriptableGraphEditor* GraphEditor = static_cast<FScriptableGraphEditor*>(EditorInst))
+		{
+			GraphEditor->JumpToNode(MatchingEdNode);
+		}
+	}
 }
 
 void FScriptableFrameworkEditorModule::HandleEndPIE(const bool bSimulating)

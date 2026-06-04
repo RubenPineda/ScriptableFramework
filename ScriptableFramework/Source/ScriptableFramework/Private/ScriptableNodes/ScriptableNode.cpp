@@ -8,6 +8,10 @@
 const FName UScriptableNode::StopInputName = TEXT("Stop");
 const FName UScriptableNode::StoppedOutputName = TEXT("Stopped");
 
+#if WITH_EDITOR
+UScriptableNode::FOnNodeActivatedEditor UScriptableNode::OnNodeActivatedEditor;
+#endif
+
 namespace
 {
 	/** -1 = use per-node/graph setting. 0=Off, 1=Log, 2=Verbose. Lets the user force trace verbosity mid-PIE. */
@@ -73,6 +77,10 @@ void UScriptableNode::ActivateInput(FName InputName)
 		const FString AssetName = Asset ? Asset->GetName() : TEXT("<unknown>");
 		UE_LOG(LogScriptableObject, Log, TEXT("[%s.%s] activate input '%s'"), *AssetName, *GetTraceLabel(), *InputName.ToString());
 	}
+
+#if WITH_EDITOR
+	OnNodeActivatedEditor.Broadcast(this);
+#endif
 
 	ActiveInputPins.Add(InputName);
 

@@ -69,6 +69,12 @@ public:
 	/** Fired when an output pin is fired and propagated. The runner subscribes to follow wires. */
 	FScriptableNodePinFiredNative OnPinFiredNative;
 
+#if WITH_EDITOR
+	/** Broadcast at the top of ActivateInput so the editor module can check breakpoints and pause PIE. */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnNodeActivatedEditor, UScriptableNode* /*Node*/);
+	static FOnNodeActivatedEditor OnNodeActivatedEditor;
+#endif
+
 	/** Fired when the node has no active pins left. The runner subscribes to detect node completion. */
 	FScriptableNodeInactiveNative OnNodeInactiveNative;
 

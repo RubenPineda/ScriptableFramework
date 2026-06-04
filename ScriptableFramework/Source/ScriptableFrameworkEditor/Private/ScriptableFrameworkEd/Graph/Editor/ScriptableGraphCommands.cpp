@@ -40,6 +40,7 @@ void FScriptableGraphCommands::RegisterCommands()
 	UI_COMMAND(DistributeNodesHorizontally, "Distribute Horizontally", "Evenly distribute selected nodes along the X axis between the leftmost and rightmost.", EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::H));
 	UI_COMMAND(DistributeNodesVertically,   "Distribute Vertically",   "Evenly distribute selected nodes along the Y axis between the topmost and bottommost.",  EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::V));
 	UI_COMMAND(ZoomToSelection,  "Zoom to Selection", "Pan and zoom the graph view to fit the current selection.", EUserInterfaceActionType::Button, FInputChord(EKeys::F));
+	UI_COMMAND(ToggleBreakpoint, "Toggle Breakpoint", "Add or remove a breakpoint on the selected node(s).", EUserInterfaceActionType::Button, FInputChord(EKeys::F9));
 }
 
 #undef LOCTEXT_NAMESPACE

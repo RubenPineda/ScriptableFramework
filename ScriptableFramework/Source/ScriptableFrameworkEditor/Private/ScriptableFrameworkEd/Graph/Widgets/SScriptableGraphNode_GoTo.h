@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 
 class UScriptableEdGraphNode;
 class UScriptableNode_GoTo;
@@ -12,7 +12,7 @@ class UScriptableNode_GoTo;
  * Slate widget for UScriptableEdGraphNode_GoTo. Adds an on-node dropdown listing every ReceiveEvent
  * name in the graph; picking one sets the node's TargetEvent and updates its "Go to X" title.
  */
-class SScriptableGraphNode_GoTo : public SGraphNode
+class SScriptableGraphNode_GoTo : public SScriptableGraphNode_Base
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphNode_GoTo) {}

@@ -3,13 +3,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SGraphNode.h"
+#include "ScriptableFrameworkEd/Graph/Widgets/SScriptableGraphNode_Base.h"
 
 class UScriptableEdGraphNode;
 class UScriptableNode_Sequence;
 
 /** Slate widget for graph nodes wrapping a UScriptableNode_Sequence. */
-class SScriptableGraphNode_Sequence : public SGraphNode
+class SScriptableGraphNode_Sequence : public SScriptableGraphNode_Base
 {
 public:
 	SLATE_BEGIN_ARGS(SScriptableGraphNode_Sequence) {}

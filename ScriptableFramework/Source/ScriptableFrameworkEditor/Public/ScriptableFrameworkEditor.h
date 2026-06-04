@@ -6,6 +6,7 @@
 
 struct FScriptableTypeCache;
 class UScriptableGraph;
+class UScriptableNode;
 
 class FScriptableFrameworkEditorModule : public FKzLibEditorModule_Base
 {
@@ -20,11 +21,13 @@ private:
 	FDelegateHandle PostLoadedHandle;
 	FDelegateHandle BeginPIEHandle;
 	FDelegateHandle EndPIEHandle;
+	FDelegateHandle NodeActivatedHandle;
 
 	void HandleLaunchBlocked(UScriptableGraph* Asset);
 	void HandleGraphPostLoaded(UScriptableGraph* Asset);
 	void HandleBeginPIE(const bool bSimulating);
 	void HandleEndPIE(const bool bSimulating);
+	void HandleNodeActivated(UScriptableNode* Node);
 
 protected:
 	virtual void OnStartupModule() override;

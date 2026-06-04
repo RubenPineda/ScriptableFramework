@@ -14,6 +14,7 @@
 #include "Engine/Blueprint.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
+#include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
 #include "ScopedTransaction.h"
 
 #include "EdGraph/EdGraph.h"
@@ -370,6 +371,77 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 						return SfNode && SfNode->bHideUnconnectedPins;
 					})),
 			EUserInterfaceActionType::ToggleButton);
+	}
+
+	/** Breakpoint section, BP-style: Toggle + (Add | Remove + Enable/Disable) shown based on current state. */
+	if (WeakSfNode.IsValid() && WeakSfNode->GetRuntimeNode())
+	{
+		const UScriptableGraph* GraphAsset = WeakSfNode->GetTypedOuter<UScriptableGraph>();
+		const FGuid NodeId = WeakSfNode->GetRuntimeNode()->GetBindingID();
+		const bool* EnabledPtr = GraphAsset ? GraphAsset->Breakpoints.Find(NodeId) : nullptr;
+		const bool bHasBP = EnabledPtr != nullptr;
+		const bool bEnabled = bHasBP && *EnabledPtr;
+
+		FToolMenuSection& BreakpointSection = Menu->AddSection(TEXT("ScriptableNodeBreakpoint"), LOCTEXT("BreakpointSection", "Breakpoints"));
+
+		/** Toggle uses the shared command so its F9 chord shows in the menu and the same handler runs for shortcut + click. */
+		BreakpointSection.AddMenuEntry(FScriptableGraphCommands::Get().ToggleBreakpoint);
+
+		if (!bHasBP)
+		{
+			BreakpointSection.AddMenuEntry(
+				"AddBreakpoint",
+				LOCTEXT("AddBreakpoint", "Add Breakpoint"),
+				LOCTEXT("AddBreakpointTip", "Add a breakpoint on this node (enabled)."),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WeakSfNode]()
+					{
+						UScriptableEdGraphNode* SfNode = WeakSfNode.Get();
+						if (!SfNode || !SfNode->GetRuntimeNode()) return;
+						UScriptableGraph* GA = SfNode->GetTypedOuter<UScriptableGraph>();
+						if (!GA) return;
+						const FScopedTransaction Tx(NSLOCTEXT("ScriptableEdGraphSchema", "AddBPTx", "Add Breakpoint"));
+						GA->Modify();
+						GA->Breakpoints.Add(SfNode->GetRuntimeNode()->GetBindingID(), true);
+						if (UEdGraph* OG = SfNode->GetGraph()) OG->NotifyGraphChanged();
+					})));
+		}
+		else
+		{
+			BreakpointSection.AddMenuEntry(
+				"RemoveBreakpoint",
+				LOCTEXT("RemoveBreakpoint", "Remove Breakpoint"),
+				LOCTEXT("RemoveBreakpointTip", "Remove the breakpoint from this node."),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WeakSfNode]()
+					{
+						UScriptableEdGraphNode* SfNode = WeakSfNode.Get();
+						if (!SfNode || !SfNode->GetRuntimeNode()) return;
+						UScriptableGraph* GA = SfNode->GetTypedOuter<UScriptableGraph>();
+						if (!GA) return;
+						const FScopedTransaction Tx(NSLOCTEXT("ScriptableEdGraphSchema", "RemoveBPTx", "Remove Breakpoint"));
+						GA->Modify();
+						GA->Breakpoints.Remove(SfNode->GetRuntimeNode()->GetBindingID());
+						if (UEdGraph* OG = SfNode->GetGraph()) OG->NotifyGraphChanged();
+					})));
+
+			BreakpointSection.AddMenuEntry(
+				bEnabled ? "DisableBreakpoint" : "EnableBreakpoint",
+				bEnabled ? LOCTEXT("DisableBreakpoint", "Disable Breakpoint") : LOCTEXT("EnableBreakpoint", "Enable Breakpoint"),
+				bEnabled ? LOCTEXT("DisableBreakpointTip", "Keep the breakpoint but stop pausing on hits.") : LOCTEXT("EnableBreakpointTip", "Resume pausing on this breakpoint."),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WeakSfNode, bEnabled]()
+					{
+						UScriptableEdGraphNode* SfNode = WeakSfNode.Get();
+						if (!SfNode || !SfNode->GetRuntimeNode()) return;
+						UScriptableGraph* GA = SfNode->GetTypedOuter<UScriptableGraph>();
+						if (!GA) return;
+						const FScopedTransaction Tx(NSLOCTEXT("ScriptableEdGraphSchema", "FlipBPTx", "Flip Breakpoint"));
+						GA->Modify();
+						if (bool* B = GA->Breakpoints.Find(SfNode->GetRuntimeNode()->GetBindingID())) *B = !bEnabled;
+						if (UEdGraph* OG = SfNode->GetGraph()) OG->NotifyGraphChanged();
+					})));
+		}
 	}
 
 	Super::GetContextMenuActions(Menu, Context);
