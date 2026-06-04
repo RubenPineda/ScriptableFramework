@@ -25,6 +25,14 @@ UScriptableObject* UScriptableNode_Task::GetBindingProxy() const
 	return Task;
 }
 
+FString UScriptableNode_Task::GetTraceLabel() const
+{
+	if (!Task) return TEXT("Task(empty)");
+	FString TaskClass = Task->GetClass()->GetName();
+	TaskClass.RemoveFromStart(TEXT("ScriptableTask_"));
+	return FString::Printf(TEXT("Task(%s)"), *TaskClass);
+}
+
 void UScriptableNode_Task::OnRegister()
 {
 	Super::OnRegister();

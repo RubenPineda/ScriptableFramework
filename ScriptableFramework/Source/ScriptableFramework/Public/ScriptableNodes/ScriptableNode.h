@@ -13,6 +13,15 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeInactiveNative, UScriptableNo
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeRequestEventNative, FName /*EventName*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FScriptableNodeRequestFinishGraphNative, FName /*OutputName*/);
 
+/** Per-node runtime trace verbosity. Off = silent. Log = input activations. Verbose = inputs + output fires. */
+UENUM()
+enum class EScriptableTraceLevel : uint8
+{
+	Off     UMETA(DisplayName = "Off"),
+	Log     UMETA(DisplayName = "Log"),
+	Verbose UMETA(DisplayName = "Verbose"),
+};
+
 /**
  * Base class for any node inside a UScriptableGraph: defines the pin-state model and activation protocol.
  * Subclasses declare inputs/outputs and implement ProcessInput; the base manages pin sets, fires delegates,
@@ -77,6 +86,22 @@ public:
 
 	/** Returns the inner object that carries this node's bindable data (e.g. the hosted task), or null if the node exposes none. The graph registers proxies so a node's Input can read a sibling node's Output. */
 	virtual UScriptableObject* GetBindingProxy() const { return nullptr; }
+
+	/**
+	 * Runtime trace verbosity for this node. Off by default. Authors flip it on the asset to follow a
+	 * specific node's flow in the output log without recompiling.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Debug", meta = (NoBinding))
+	EScriptableTraceLevel TraceLevel = EScriptableTraceLevel::Off;
+
+	/** Max-verbosity of (own TraceLevel, owning Graph's DefaultNodeTraceLevel, scriptable.TraceLevel CVar). */
+	EScriptableTraceLevel GetEffectiveTraceLevel() const;
+
+	/** Short label used by trace logs. Base strips the "ScriptableNode_" prefix; subclasses override to add context (e.g. the wrapped task class for Task wrappers). */
+	virtual FString GetTraceLabel() const;
+
+	/** Walks the outer chain to find the source UScriptableGraph asset. Works at edit time (asset is the direct outer) and at runtime (outer chain reaches UScriptableGraphInstance whose Asset points back). */
+	const class UScriptableGraph* FindOwningAsset() const;
 
 protected:
 	/** Reaction to a consumed input (default no-op). Subclasses must MarkInputInactive on the input they consume. */

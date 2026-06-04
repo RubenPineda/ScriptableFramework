@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "ScriptableObjectAsset.h"
 #include "ScriptableNodes/ScriptableGraphConnection.h"
+#include "ScriptableNodes/ScriptableNode.h"
 #include "StructUtils/PropertyBag.h"
 #include "ScriptableGraph.generated.h"
 
@@ -49,6 +50,10 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, Category = "Outputs", meta = (NoElementDuplicate))
 	TArray<FName> Outputs;
+
+	/** Asset-wide floor for node trace verbosity. Each node's effective level is the max of its own TraceLevel, this default, and the scriptable.TraceLevel CVar. */
+	UPROPERTY(EditDefaultsOnly, Category = "Debug")
+	EScriptableTraceLevel DefaultNodeTraceLevel = EScriptableTraceLevel::Off;
 
 	//~ UObject interface
 	virtual void PostInitProperties() override;

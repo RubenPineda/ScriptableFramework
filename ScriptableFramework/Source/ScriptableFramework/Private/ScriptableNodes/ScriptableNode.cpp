@@ -1,9 +1,54 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptableNodes/ScriptableGraphInstance.h"
+#include "HAL/IConsoleManager.h"
 
 const FName UScriptableNode::StopInputName = TEXT("Stop");
 const FName UScriptableNode::StoppedOutputName = TEXT("Stopped");
+
+namespace
+{
+	/** -1 = use per-node/graph setting. 0=Off, 1=Log, 2=Verbose. Lets the user force trace verbosity mid-PIE. */
+	int32 GScriptableTraceLevelOverride = -1;
+	FAutoConsoleVariableRef CVarScriptableTraceLevel(
+		TEXT("scriptable.TraceLevel"),
+		GScriptableTraceLevelOverride,
+		TEXT("Global override for UScriptableNode trace verbosity. -1=Use asset settings, 0=Off, 1=Log, 2=Verbose. Max-verbosity wins."),
+		ECVF_Default);
+}
+
+const UScriptableGraph* UScriptableNode::FindOwningAsset() const
+{
+	if (const UScriptableGraph* Asset = GetTypedOuter<UScriptableGraph>()) return Asset;
+	if (const UScriptableGraphInstance* Inst = GetTypedOuter<UScriptableGraphInstance>()) return Inst->GetAsset();
+	return nullptr;
+}
+
+FString UScriptableNode::GetTraceLabel() const
+{
+	FString Label = GetClass()->GetName();
+	Label.RemoveFromStart(TEXT("ScriptableNode_"));
+	return Label;
+}
+
+EScriptableTraceLevel UScriptableNode::GetEffectiveTraceLevel() const
+{
+	uint8 Best = static_cast<uint8>(TraceLevel);
+
+	if (GScriptableTraceLevelOverride >= 0)
+	{
+		Best = FMath::Max(Best, static_cast<uint8>(FMath::Clamp(GScriptableTraceLevelOverride, 0, 2)));
+	}
+
+	if (const UScriptableGraph* Asset = FindOwningAsset())
+	{
+		Best = FMath::Max(Best, static_cast<uint8>(Asset->DefaultNodeTraceLevel));
+	}
+
+	return static_cast<EScriptableTraceLevel>(Best);
+}
 
 TArray<FName> UScriptableNode::GetOutputPins() const
 {
@@ -21,6 +66,14 @@ TArray<FName> UScriptableNode::GetOutputPins() const
 
 void UScriptableNode::ActivateInput(FName InputName)
 {
+	const EScriptableTraceLevel Effective = GetEffectiveTraceLevel();
+	if (Effective != EScriptableTraceLevel::Off)
+	{
+		const UScriptableGraph* Asset = FindOwningAsset();
+		const FString AssetName = Asset ? Asset->GetName() : TEXT("<unknown>");
+		UE_LOG(LogScriptableObject, Log, TEXT("[%s.%s] activate input '%s'"), *AssetName, *GetTraceLabel(), *InputName.ToString());
+	}
+
 	ActiveInputPins.Add(InputName);
 
 	if (CanProcessInput(InputName))
@@ -55,6 +108,13 @@ void UScriptableNode::MarkOutputInactive(FName OutputName)
 
 void UScriptableNode::FireOutput(FName OutputName)
 {
+	if (GetEffectiveTraceLevel() == EScriptableTraceLevel::Verbose)
+	{
+		const UScriptableGraph* Asset = FindOwningAsset();
+		const FString AssetName = Asset ? Asset->GetName() : TEXT("<unknown>");
+		UE_LOG(LogScriptableObject, Log, TEXT("[%s.%s] fire output '%s'"), *AssetName, *GetTraceLabel(), *OutputName.ToString());
+	}
+
 	// Broadcast first so the runner can enqueue downstream activations while this output is still "active".
 	OnPinFiredNative.Broadcast(this, OutputName);
 
