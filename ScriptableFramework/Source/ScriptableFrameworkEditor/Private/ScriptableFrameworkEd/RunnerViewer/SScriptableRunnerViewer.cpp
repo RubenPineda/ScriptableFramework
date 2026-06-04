@@ -216,7 +216,7 @@ namespace
 		return Asset->GetName();
 	}
 
-	FString GetNodeLabel(const UScriptableNode* Node)
+	FString GetRunnerNodeLabel(const UScriptableNode* Node)
 	{
 		if (!Node) return TEXT("<gone>");
 		return Node->GetTraceLabel();
@@ -345,7 +345,7 @@ void SScriptableRunnerViewer::PopulateActiveNodes(FRowPtr Row)
 				.ContentPadding(FMargin(2, 0))
 				.OnClicked_Lambda([this, WeakNode, WeakInst]() { OnJumpToNode(WeakNode, WeakInst); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("  - %s"), *GetNodeLabel(Node))))
+					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("  - %s"), *GetRunnerNodeLabel(Node))))
 				]
 		];
 	}
@@ -378,7 +378,7 @@ void SScriptableRunnerViewer::PopulateFires(FRowPtr Row)
 					SNew(STextBlock)
 						.ColorAndOpacity(FSlateColor::UseSubduedForeground())
 						.Text(FText::FromString(FString::Printf(TEXT("  %s . %s"),
-							*GetNodeLabel(WeakFireNode.Get()),
+							*GetRunnerNodeLabel(WeakFireNode.Get()),
 							*CapturedOutputName.ToString())))
 				]
 		];
