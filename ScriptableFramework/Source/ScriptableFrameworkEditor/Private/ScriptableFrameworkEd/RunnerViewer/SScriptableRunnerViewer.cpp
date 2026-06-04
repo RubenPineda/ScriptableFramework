@@ -229,6 +229,7 @@ TSharedRef<ITableRow> SScriptableRunnerViewer::GenerateRunnerRow(FRowPtr Row, co
 
 	const FString AssetName = Inst ? GetAssetLabel(Inst->GetAsset()) : TEXT("?");
 	const FString OwnerName = Inst ? GetOwnerLabel(Inst->GetOwner()) : TEXT("?");
+	const FName RunnerId   = Inst ? Inst->GetId() : NAME_None;
 
 	TSharedRef<SVerticalBox> ActiveBox = SNew(SVerticalBox);
 	TSharedRef<SVerticalBox> FiresBox  = SNew(SVerticalBox);
@@ -257,7 +258,9 @@ TSharedRef<ITableRow> SScriptableRunnerViewer::GenerateRunnerRow(FRowPtr Row, co
 						[
 							SNew(STextBlock)
 								.Font(FAppStyle::GetFontStyle("DetailsView.CategoryFontStyle"))
-								.Text(FText::FromString(FString::Printf(TEXT("%s  (owner: %s)"), *AssetName, *OwnerName)))
+								.Text(FText::FromString(RunnerId.IsNone()
+									? FString::Printf(TEXT("%s  (owner: %s)"), *AssetName, *OwnerName)
+									: FString::Printf(TEXT("%s  [%s]  (owner: %s)"), *AssetName, *RunnerId.ToString(), *OwnerName)))
 						]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0).VAlign(VAlign_Center)
 						[

@@ -30,7 +30,7 @@ public:
 	 * Launches a runtime instance of this graph and returns it. Plain C++ entry point used by the
 	 * async "Run Scriptable Graph" node (UAsyncRunScriptableGraph); not exposed to Blueprint directly.
 	 */
-	static UScriptableGraphInstance* Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext);
+	static UScriptableGraphInstance* Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext, FName Id = NAME_None);
 
 	/** All nodes living in this graph. Instanced so editor-created nodes are owned by the asset. */
 	UPROPERTY(Instanced)

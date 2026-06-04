@@ -23,8 +23,8 @@ public:
 	 * Runs a UScriptableGraph asset. Started fires immediately with the live runner (use it to send
 	 * events or mutate context while it runs); Finished fires when the graph completes, with the same runner.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Graph", AutoCreateRefTerm = "Context"))
-	static UAsyncRunScriptableGraph* RunScriptableGraph(UObject* Owner, UScriptableGraph* Graph, const FScriptableContext& Context);
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph", meta = (DefaultToSelf = "Owner", BlueprintInternalUseOnly = "true", DisplayName = "Run Scriptable Graph", AutoCreateRefTerm = "Context", AdvancedDisplay = "Id"))
+	static UAsyncRunScriptableGraph* RunScriptableGraph(UObject* Owner, UScriptableGraph* Graph, const FScriptableContext& Context, FName Id);
 
 	/** Fired right after the graph launches. Carries the live runner. */
 	UPROPERTY(BlueprintAssignable)
@@ -53,4 +53,8 @@ protected:
 	/** Values to seed the graph context with at launch. */
 	UPROPERTY()
 	FScriptableContext LaunchContext;
+
+	/** Optional caller-supplied identifier for this run; surfaced by debug UI and queried by CancelRunnersById. */
+	UPROPERTY()
+	FName LaunchId;
 };

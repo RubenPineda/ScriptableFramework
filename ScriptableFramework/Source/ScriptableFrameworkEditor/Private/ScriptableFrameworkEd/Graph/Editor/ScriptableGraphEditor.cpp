@@ -2207,6 +2207,23 @@ void FScriptableGraphEditor::BuildSaveOnCompileMenu(FMenuBuilder& MenuBuilder)
 	}
 }
 
+namespace
+{
+	/** "<Id> (<Owner>)" when both, else whichever is available, else the instance object name. Shared between toolbar label and combo entries. */
+	FString FormatRunnerLabel(const UScriptableGraphInstance* Inst)
+	{
+		if (!Inst) return FString(TEXT("?"));
+		const UObject* Owner = Inst->GetOwner();
+		const FName Id = Inst->GetId();
+		const bool bHasId = !Id.IsNone();
+		const bool bHasOwner = Owner != nullptr;
+		if (bHasId && bHasOwner) return FString::Printf(TEXT("%s (%s)"), *Id.ToString(), *Owner->GetName());
+		if (bHasOwner)           return Owner->GetName();
+		if (bHasId)              return Id.ToString();
+		return Inst->GetName();
+	}
+}
+
 FText FScriptableGraphEditor::GetDebugObjectLabel() const
 {
 	const UScriptableGraph* Graph = EditedGraph.Get();
@@ -2215,9 +2232,7 @@ FText FScriptableGraphEditor::GetDebugObjectLabel() const
 	{
 		return LOCTEXT("NoDebugObject", "No debug object selected");
 	}
-	const UObject* Owner = Debug->GetOwner();
-	const FString OwnerName = Owner ? Owner->GetName() : TEXT("<no owner>");
-	return FText::FromString(OwnerName);
+	return FText::FromString(FormatRunnerLabel(Debug));
 }
 
 TSharedRef<SWidget> FScriptableGraphEditor::BuildDebugObjectMenu()
@@ -2270,8 +2285,7 @@ TSharedRef<SWidget> FScriptableGraphEditor::BuildDebugObjectMenu()
 		UScriptableGraphInstance* Inst = WeakInst.Get();
 		if (!Inst) continue;
 
-		const UObject* Owner = Inst->GetOwner();
-		const FString Label = Owner ? Owner->GetName() : Inst->GetName();
+		const FString Label = FormatRunnerLabel(Inst);
 
 		MenuBuilder.AddMenuEntry(
 			FText::FromString(Label),

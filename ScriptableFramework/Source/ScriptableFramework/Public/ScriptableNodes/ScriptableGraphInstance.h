@@ -28,8 +28,8 @@ class SCRIPTABLEFRAMEWORK_API UScriptableGraphInstance : public UObject
 	GENERATED_BODY()
 
 public:
-	/** Sets up runtime state from the asset and starts execution by activating the Entry node. */
-	void Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext);
+	/** Sets up runtime state from the asset and starts execution by activating the Entry node. InId is an optional human-readable label used by debug surfaces and by subsystem queries (CancelRunnersById). */
+	void Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext, FName InId = NAME_None);
 
 	/** Wakes every matching UScriptableNode_ReceiveEvent (parallel fan-out; no match = no-op). Re-entrant: appends to the in-flight drain if one is running, else starts a new one. Game-thread only. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
@@ -73,6 +73,10 @@ public:
 
 	/** Object that requested the run. Used by the runner viewer to surface "who's running this graph". */
 	UObject* GetOwner() const { return Owner; }
+
+	/** Optional caller-supplied identifier for this run. NAME_None when not supplied. Debug surfaces and batch-cancel queries key on this. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	FName GetId() const { return Id; }
 
 	/** Read-only view of the nodes currently running. Used by the runner viewer to list and the canvas overlay to highlight. */
 	const TSet<TObjectPtr<UScriptableNode>>& GetActiveNodes() const { return ActiveNodes; }
@@ -124,6 +128,10 @@ private:
 	/** Owner provided to nodes when they Register. */
 	UPROPERTY()
 	TObjectPtr<UObject> Owner;
+
+	/** Optional caller-supplied identifier. Used by debug surfaces (runner viewer, debug object combo) and by CancelRunnersById. */
+	UPROPERTY()
+	FName Id;
 
 	/** Deep-copies of the asset's nodes, parented to this runner. */
 	UPROPERTY(Transient)

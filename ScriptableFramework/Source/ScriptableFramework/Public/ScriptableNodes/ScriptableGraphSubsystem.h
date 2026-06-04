@@ -24,7 +24,7 @@ class SCRIPTABLEFRAMEWORK_API UScriptableGraphSubsystem : public UWorldSubsystem
 
 public:
 	/** Canonical entry point: creates a runner, registers it, and launches it. Returns null if the world can't be resolved. */
-	static UScriptableGraphInstance* RunGraph(const UObject* WorldContext, UScriptableGraph* Asset, UObject* Owner, const FScriptableContext& Context);
+	static UScriptableGraphInstance* RunGraph(const UObject* WorldContext, UScriptableGraph* Asset, UObject* Owner, const FScriptableContext& Context, FName Id = NAME_None);
 
 	/** Resolves the subsystem from any world context object, or null if there is no world. */
 	static UScriptableGraphSubsystem* Get(const UObject* WorldContext);
@@ -47,6 +47,10 @@ public:
 	/** Cancel a specific runner. Same semantics as CancelAllRunners (Exit cleanup if declared). No-op if null or already finished. */
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	void CancelRunner(UScriptableGraphInstance* Runner);
+
+	/** Cancel every live graph runner whose Id matches. No-op for NAME_None. Same cancel semantics as CancelAllRunners. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	void CancelRunnersById(FName Id);
 
 	//~ USubsystem interface
 	virtual void Deinitialize() override;

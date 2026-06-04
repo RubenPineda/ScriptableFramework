@@ -14,7 +14,7 @@ UScriptableGraphSubsystem* UScriptableGraphSubsystem::Get(const UObject* WorldCo
 	return World ? World->GetSubsystem<UScriptableGraphSubsystem>() : nullptr;
 }
 
-UScriptableGraphInstance* UScriptableGraphSubsystem::RunGraph(const UObject* WorldContext, UScriptableGraph* Asset, UObject* Owner, const FScriptableContext& Context)
+UScriptableGraphInstance* UScriptableGraphSubsystem::RunGraph(const UObject* WorldContext, UScriptableGraph* Asset, UObject* Owner, const FScriptableContext& Context, FName Id)
 {
 	if (!Asset) return nullptr;
 
@@ -30,7 +30,7 @@ UScriptableGraphInstance* UScriptableGraphSubsystem::RunGraph(const UObject* Wor
 	if (!Runner) return nullptr;
 
 	Subsystem->RegisterRunner(Runner);
-	Runner->Launch(Asset, Owner, Context);
+	Runner->Launch(Asset, Owner, Context, Id);
 	return Runner;
 }
 
@@ -60,6 +60,18 @@ void UScriptableGraphSubsystem::CancelRunner(UScriptableGraphInstance* Runner)
 	if (!Runner) return;
 	if (!ActiveRunners.Contains(Runner)) return;
 	Runner->Cancel();
+}
+
+void UScriptableGraphSubsystem::CancelRunnersById(FName Id)
+{
+	if (Id.IsNone()) return;
+
+	/** Snapshot copy: Cancel routes through Finish → Unregister, which mutates ActiveRunners. */
+	const TArray<TObjectPtr<UScriptableGraphInstance>> Copy = ActiveRunners;
+	for (const TObjectPtr<UScriptableGraphInstance>& Runner : Copy)
+	{
+		if (Runner && Runner->GetId() == Id) Runner->Cancel();
+	}
 }
 
 void UScriptableGraphSubsystem::CancelRunnersForOwner(UObject* Owner)

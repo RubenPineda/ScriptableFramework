@@ -16,12 +16,12 @@ UScriptableGraph::UScriptableGraph()
 {
 }
 
-UScriptableGraphInstance* UScriptableGraph::Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext)
+UScriptableGraphInstance* UScriptableGraph::Run(UScriptableGraph* Graph, UObject* Owner, const FScriptableContext& InContext, FName Id)
 {
 	if (!Graph || !Owner) return nullptr;
 
 	// Owner doubles as both the world context (to resolve the subsystem) and the graph's runtime owner.
-	return UScriptableGraphSubsystem::RunGraph(Owner, Graph, Owner, InContext);
+	return UScriptableGraphSubsystem::RunGraph(Owner, Graph, Owner, InContext, Id);
 }
 
 void UScriptableGraph::PostInitProperties()

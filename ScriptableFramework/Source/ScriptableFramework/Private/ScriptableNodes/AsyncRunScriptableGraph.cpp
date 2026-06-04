@@ -4,13 +4,14 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableNodes/ScriptableGraphInstance.h"
 
-UAsyncRunScriptableGraph* UAsyncRunScriptableGraph::RunScriptableGraph(UObject* Owner, UScriptableGraph* Graph, const FScriptableContext& Context)
+UAsyncRunScriptableGraph* UAsyncRunScriptableGraph::RunScriptableGraph(UObject* Owner, UScriptableGraph* Graph, const FScriptableContext& Context, FName Id)
 {
 	UAsyncRunScriptableGraph* Node = NewObject<UAsyncRunScriptableGraph>(Owner);
 
 	Node->GraphOwner = Owner;
 	Node->GraphAsset = Graph;
 	Node->LaunchContext = Context;
+	Node->LaunchId = Id;
 
 	if (Owner)
 	{
@@ -30,7 +31,7 @@ void UAsyncRunScriptableGraph::Activate()
 		return;
 	}
 
-	Runner = UScriptableGraph::Run(GraphAsset, GraphOwner, LaunchContext);
+	Runner = UScriptableGraph::Run(GraphAsset, GraphOwner, LaunchContext, LaunchId);
 	if (!Runner)
 	{
 		SetReadyToDestroy();

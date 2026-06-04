@@ -10,7 +10,7 @@
 #include "ScriptableContext.h"
 #include "ScriptableObject.h"
 
-void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext)
+void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext, FName InId)
 {
 	if (!InAsset || !InOwner) return;
 
@@ -26,6 +26,7 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 
 	Asset = InAsset;
 	Owner = InOwner;
+	Id = InId;
 
 	// Register with the world subsystem: it owns the live-runner set (keeping us alive while we run)
 	// and cancels us on world teardown. No subsystem means the owner has no world (CDO/transient) -> abort.
