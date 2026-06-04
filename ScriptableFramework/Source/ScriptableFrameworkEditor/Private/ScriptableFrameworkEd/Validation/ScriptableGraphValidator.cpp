@@ -168,14 +168,18 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 		EventNameToNodeIds.FindOrAdd(Receive->EventName).Add(Id);
 	}
 
-	/** Duplicate event names collide at dispatch: only one node fires per broadcast, silently dropping the rest. */
+	/**
+	 * Duplicate event names are a legitimate fan-out pattern (FireEvent broadcasts to every match in
+	 * parallel by design), so surface as Info — visible in the panel so accidental dups are noticed,
+	 * but not enough to flip bLastCompileFailed or paint WARNING! on the nodes.
+	 */
 	for (const TPair<FName, TArray<FGuid>>& Pair : EventNameToNodeIds)
 	{
 		if (Pair.Value.Num() <= 1) continue;
 		for (const FGuid& Id : Pair.Value)
 		{
-			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
-				FText::Format(LOCTEXT("DuplicateEventName", "Multiple ReceiveEvent nodes declare the event '{0}'."), FText::FromName(Pair.Key)),
+			OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Info,
+				FText::Format(LOCTEXT("DuplicateEventName", "Multiple ReceiveEvent nodes declare '{0}'. FireEvent will trigger them in parallel."), FText::FromName(Pair.Key)),
 				GValidatorId, Id));
 		}
 	}
