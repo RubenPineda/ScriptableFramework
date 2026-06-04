@@ -31,8 +31,22 @@ public:
 
 #if WITH_EDITOR
 	virtual FText GetDisplayTitle() const override;
+
+	//~ UObject interface
+	virtual void PreEditChange(FProperty* PropertyAboutToChange) override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+	//~ End of UObject interface
+
+	/** Walks Graph->Nodes and rewrites every UScriptableNode_GoTo whose TargetEvent equals OldName. Shared by F2 rename and PostEditChange so both paths refactor consistently. */
+	static void ApplyTargetReferenceRename(class UScriptableGraph* Graph, FName OldName, FName NewName);
 #endif
 
 	/** Called by FireEvent when EventName matches: arms and fires the single output. Mirrors UScriptableNode_Entry::Activate. */
 	void Trigger();
+
+#if WITH_EDITORONLY_DATA
+private:
+	/** Snapshot taken in PreEditChange so PostEditChangeProperty can see the prior value and refactor GoTos. */
+	FName PreviousEventName_ForRename;
+#endif
 };
