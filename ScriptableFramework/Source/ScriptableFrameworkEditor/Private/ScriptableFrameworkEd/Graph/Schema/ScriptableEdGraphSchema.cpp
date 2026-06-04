@@ -8,8 +8,10 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableNode_Reroute.h"
 #include "ScriptableTasks/ScriptableActionAsset.h"
+#include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "Engine/Blueprint.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphEditorHelpers.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNodeRegistry.h"
 #include "ScopedTransaction.h"
@@ -43,13 +45,37 @@ namespace
 		return true;
 	}
 
+	/**
+	 * Returns the BP's native ancestor without loading the asset. Reads the asset-registry tag set
+	 * by UBlueprint and resolves it against the already-loaded UClass registry. Literal FName because
+	 * the FBlueprintTags namespace ships with different members across engine versions.
+	 */
+	const UClass* ResolveBlueprintNativeParent(const FAssetData& Asset)
+	{
+		if (!Asset.GetClass() || !Asset.GetClass()->IsChildOf(UBlueprint::StaticClass())) return nullptr;
+
+		static const FName NativeParentClassTag(TEXT("NativeParentClass"));
+		FString NativeParentPath;
+		if (!Asset.GetTagValue(NativeParentClassTag, NativeParentPath)) return nullptr;
+
+		const FString CleanPath = FPackageName::ExportTextPathToObjectPath(NativeParentPath);
+		return FindObject<UClass>(nullptr, *CleanPath);
+	}
+
 	/** Returns true if the schema can spawn a node from the given asset. Used both for the hover-message decision (green / red icon) and the actual drop dispatch. */
 	bool IsScriptableDroppable(const FAssetData& Asset)
 	{
 		const UClass* AssetClass = Asset.GetClass();
 		if (!AssetClass) return false;
-		return AssetClass->IsChildOf(UScriptableActionAsset::StaticClass())
-			|| AssetClass->IsChildOf(UScriptableGraph::StaticClass());
+		if (AssetClass->IsChildOf(UScriptableActionAsset::StaticClass())) return true;
+		if (AssetClass->IsChildOf(UScriptableGraph::StaticClass())) return true;
+
+		/** BP of UScriptableTask: spawns a Task node carrying an instance of the BP class. */
+		if (const UClass* NativeParent = ResolveBlueprintNativeParent(Asset))
+		{
+			if (NativeParent->IsChildOf(UScriptableTask::StaticClass())) return true;
+		}
+		return false;
 	}
 }
 
@@ -367,7 +393,7 @@ void UScriptableEdGraphSchema::GetAssetsGraphHoverMessage(const TArray<FAssetDat
 	if (NumDroppable == 0)
 	{
 		OutOkIcon = false;
-		OutTooltipText = TEXT("Drop a Scriptable Action or Scriptable Graph asset to add it as a node.");
+		OutTooltipText = TEXT("Drop a Scriptable Action, Scriptable Graph, or Scriptable Task blueprint to add it as a node.");
 		return;
 	}
 
@@ -433,6 +459,15 @@ void UScriptableEdGraphSchema::DroppedAssetsOnGraph(const TArray<FAssetData>& As
 					}
 				}
 			}
+		}
+		else if (AssetClass->IsChildOf(UBlueprint::StaticClass()))
+		{
+			/** BP of UScriptableTask: spawn a Task node with the BP class as the inner Task. SpawnTaskNode does the NewObject + node setup. */
+			UBlueprint* BP = Cast<UBlueprint>(Asset.GetAsset());
+			if (!BP || !BP->GeneratedClass) continue;
+			if (!BP->GeneratedClass->IsChildOf(UScriptableTask::StaticClass())) continue;
+
+			SpawnedNode = ScriptableGraphEditorHelpers::SpawnTaskNode(Graph, BP->GeneratedClass.Get(), Cursor, /*FromPin*/ nullptr, /*bSelectNewNode*/ true);
 		}
 
 		if (SpawnedNode)
