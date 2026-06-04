@@ -33,7 +33,12 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
+#include "ScriptableFrameworkEd/RunnerViewer/SScriptableRunnerViewer.h"
 #include "EdGraph/EdGraph.h"
+#include "Framework/Docking/TabManager.h"
+#include "Widgets/Docking/SDockTab.h"
+#include "WorkspaceMenuStructure.h"
+#include "WorkspaceMenuStructureModule.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphPinFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphNodeFactory.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableGraphCommands.h"
@@ -87,10 +92,28 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 	BeginPIEHandle = FEditorDelegates::BeginPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleBeginPIE);
 	EndPIEHandle = FEditorDelegates::EndPIE.AddRaw(this, &FScriptableFrameworkEditorModule::HandleEndPIE);
 	NodeActivatedHandle = UScriptableNode::OnNodeActivatedEditor.AddRaw(this, &FScriptableFrameworkEditorModule::HandleNodeActivated);
+
+	/** Global "Scriptable Runners" tab. Spawnable from Window menu (via the FTabSpawnerEntry). */
+	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
+		TEXT("ScriptableRunners"),
+		FOnSpawnTab::CreateLambda([](const FSpawnTabArgs&)
+			{
+				return SNew(SDockTab)
+					.TabRole(ETabRole::NomadTab)
+					.Label(NSLOCTEXT("ScriptableFrameworkEditor", "ScriptableRunnersTab", "Scriptable Runners"))
+					[
+						SNew(SScriptableRunnerViewer)
+					];
+			}))
+		.SetDisplayName(NSLOCTEXT("ScriptableFrameworkEditor", "ScriptableRunnersTabLabel", "Scriptable Runners"))
+		.SetTooltipText(NSLOCTEXT("ScriptableFrameworkEditor", "ScriptableRunnersTabTip", "Live view of every active scriptable graph runner across PIE worlds."))
+		.SetGroup(FModuleManager::LoadModuleChecked<FWorkspaceMenuStructureModule>("WorkspaceMenuStructure").GetWorkspaceMenuStructure().GetDeveloperToolsDebugCategory())
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Server"));
 }
 
 void FScriptableFrameworkEditorModule::OnShutdownModule()
 {
+	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TEXT("ScriptableRunners"));
 	UScriptableNode::OnNodeActivatedEditor.Remove(NodeActivatedHandle);
 	FEditorDelegates::EndPIE.Remove(EndPIEHandle);
 	FEditorDelegates::BeginPIE.Remove(BeginPIEHandle);

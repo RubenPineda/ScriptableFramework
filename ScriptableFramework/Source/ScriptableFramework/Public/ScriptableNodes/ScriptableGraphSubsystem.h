@@ -44,6 +44,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
 	TArray<UScriptableGraphInstance*> GetActiveRunners() const;
 
+	/** Cancel a specific runner. Same semantics as CancelAllRunners (Exit cleanup if declared). No-op if null or already finished. */
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Graph")
+	void CancelRunner(UScriptableGraphInstance* Runner);
+
 	//~ USubsystem interface
 	virtual void Deinitialize() override;
 	//~ End of USubsystem interface

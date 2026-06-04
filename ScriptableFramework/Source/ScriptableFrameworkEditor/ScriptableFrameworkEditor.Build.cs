@@ -34,7 +34,8 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"DeveloperSettings",
 				"ToolMenus",
 				"GraphEditor",
-				"KzLib"
+				"KzLib",
+				"WorkspaceMenuStructure"
 			});
 	}
 }

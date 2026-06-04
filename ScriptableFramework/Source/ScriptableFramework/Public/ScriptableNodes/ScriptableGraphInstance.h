@@ -71,6 +71,15 @@ public:
 	/** Source graph asset. */
 	UScriptableGraph* GetAsset() const { return Asset; }
 
+	/** Object that requested the run. Used by the runner viewer to surface "who's running this graph". */
+	UObject* GetOwner() const { return Owner; }
+
+	/** Read-only view of the nodes currently running. Used by the runner viewer to list and the canvas overlay to highlight. */
+	const TSet<TObjectPtr<UScriptableNode>>& GetActiveNodes() const { return ActiveNodes; }
+
+	/** Every duplicated node this runner owns. Used by the viewer to subscribe to OnPinFiredNative on each. */
+	const TArray<TObjectPtr<UScriptableNode>>& GetNodes() const { return Nodes; }
+
 	/**
 	 * Exit output captured at completion (set when Exit fires or a Finish requests).
 	 * NAME_None until committed.

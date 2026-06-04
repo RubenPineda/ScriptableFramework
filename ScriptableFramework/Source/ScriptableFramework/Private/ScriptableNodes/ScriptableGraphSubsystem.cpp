@@ -55,6 +55,13 @@ void UScriptableGraphSubsystem::CancelAllRunners()
 	}
 }
 
+void UScriptableGraphSubsystem::CancelRunner(UScriptableGraphInstance* Runner)
+{
+	if (!Runner) return;
+	if (!ActiveRunners.Contains(Runner)) return;
+	Runner->Cancel();
+}
+
 void UScriptableGraphSubsystem::CancelRunnersForOwner(UObject* Owner)
 {
 	if (!Owner) return;
