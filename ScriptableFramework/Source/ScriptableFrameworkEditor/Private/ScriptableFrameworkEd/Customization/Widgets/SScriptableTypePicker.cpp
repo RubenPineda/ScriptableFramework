@@ -890,17 +890,37 @@ int32 SScriptableTypeSelector::FilterNodeTypesChildren(const TArray<FString>& Fi
 {
 	int32 NumFound = 0;
 
-	auto MatchFilter = [&FilterStrings](const TSharedPtr<FScriptableTypeItem>& SourceItem)
+	/**
+	 * Subsequence-based fuzzy match: every char of Filter must appear in Item in order, case-insensitive.
+	 * "lgmsg" matches "LogMessage". Empty Filter is a wildcard, empty Item never matches a non-empty Filter.
+	 */
+	auto FuzzyMatch = [](const FString& Filter, const FString& Item)
+	{
+		const int32 FilterLen = Filter.Len();
+		if (FilterLen == 0) return true;
+		const int32 ItemLen = Item.Len();
+		if (ItemLen == 0) return false;
+
+		int32 FilterIdx = 0;
+		for (int32 ItemIdx = 0; ItemIdx < ItemLen && FilterIdx < FilterLen; ++ItemIdx)
+		{
+			if (FChar::ToLower(Item[ItemIdx]) == FChar::ToLower(Filter[FilterIdx]))
+			{
+				++FilterIdx;
+			}
+		}
+		return FilterIdx == FilterLen;
+	};
+
+	/** AND across whitespace-separated tokens: every token must fuzzy-match the item name. */
+	auto MatchFilter = [&FilterStrings, &FuzzyMatch](const TSharedPtr<FScriptableTypeItem>& SourceItem)
 	{
 		const FString ItemName = SourceItem->Struct ? SourceItem->Struct->GetDisplayNameText().ToString() : SourceItem->GetCategoryName();
 		for (const FString& Filter : FilterStrings)
 		{
-			if (ItemName.Contains(Filter))
-			{
-				return true;
-			}
+			if (!FuzzyMatch(Filter, ItemName)) return false;
 		}
-		return false;
+		return true;
 	};
 
 	for (const TSharedPtr<FScriptableTypeItem>& SourceItem : SourceArray)
