@@ -307,6 +307,11 @@ void UScriptableEdGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNode
 
 	// The SGraphEditor attaches its FUICommandList (the one we filled in BindGraphCommands) to the
 	// menu, so referencing FGenericCommands entries resolves to our handlers without further wiring.
+
+	/** Top: refactor entries. Convert-to-SubGraph rides on the toolkit command list — CanExecute filters Entry-only selections out. */
+	FToolMenuSection& RefactorSection = Menu->AddSection(TEXT("ScriptableNodeRefactor"), LOCTEXT("NodeRefactorSection", "Refactor"));
+	RefactorSection.AddMenuEntry(FScriptableGraphCommands::Get().ConvertSelectionToSubGraph);
+
 	FToolMenuSection& Section = Menu->AddSection(TEXT("ScriptableNodeEdit"), LOCTEXT("NodeEditSection", "Edit"));
 	Section.AddMenuEntry(FGenericCommands::Get().Cut);
 	Section.AddMenuEntry(FGenericCommands::Get().Copy);

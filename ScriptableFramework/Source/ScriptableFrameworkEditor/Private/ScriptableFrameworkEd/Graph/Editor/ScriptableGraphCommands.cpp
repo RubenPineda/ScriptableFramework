@@ -41,6 +41,7 @@ void FScriptableGraphCommands::RegisterCommands()
 	UI_COMMAND(DistributeNodesVertically,   "Distribute Vertically",   "Evenly distribute selected nodes along the Y axis between the topmost and bottommost.",  EUserInterfaceActionType::Button, FInputChord(EModifierKey::Shift, EKeys::V));
 	UI_COMMAND(ZoomToSelection,  "Zoom to Selection", "Pan and zoom the graph view to fit the current selection.", EUserInterfaceActionType::Button, FInputChord(EKeys::F));
 	UI_COMMAND(ToggleBreakpoint, "Toggle Breakpoint", "Add or remove a breakpoint on the selected node(s).", EUserInterfaceActionType::Button, FInputChord(EKeys::F9));
+	UI_COMMAND(ConvertSelectionToSubGraph, "Convert to Sub-Graph", "Move the selected nodes into a new Scriptable Graph asset and replace them with a SubGraph node referencing it. Inbound wires become event inputs, outbound wires become outputs.", EUserInterfaceActionType::Button, FInputChord());
 }
 
 #undef LOCTEXT_NAMESPACE

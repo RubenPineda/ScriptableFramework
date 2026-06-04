@@ -66,6 +66,11 @@
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "ScriptableNodes/ScriptableNode_ReceiveEvent.h"
 #include "ScriptableNodes/ScriptableNode_SubGraph.h"
+#include "ScriptableNodes/ScriptableNode_Finish.h"
+#include "ScriptableNodes/ScriptableGraphConnection.h"
+#include "Factories/ScriptableGraphAssetFactory.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/SBoxPanel.h"
 
@@ -973,6 +978,10 @@ void FScriptableGraphEditor::BindGraphCommands()
 
 	Commands->MapAction(SfCommands.ToggleBreakpoint, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnToggleBreakpoint),
 		FCanExecuteAction::CreateLambda([this]() { return GraphEditorWidget.IsValid() && GraphEditorWidget->GetSelectedNodes().Num() > 0; }));
+
+	Commands->MapAction(SfCommands.ConvertSelectionToSubGraph,
+		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnConvertSelectionToSubGraph),
+		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanConvertSelectionToSubGraph));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -1596,7 +1605,11 @@ void FScriptableGraphEditor::OnNodeDoubleClicked(UEdGraphNode* Node)
 
 	if (const UScriptableEdGraphNode* EdNode = Cast<UScriptableEdGraphNode>(Node))
 	{
-		if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(EdNode->GetRuntimeNode()))
+		if (const UScriptableNode_SubGraph* SubGraphNode = Cast<UScriptableNode_SubGraph>(EdNode->GetRuntimeNode()))
+		{
+			AssetToOpen = SubGraphNode->SubGraphAsset;
+		}
+		else if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(EdNode->GetRuntimeNode()))
 		{
 			if (UScriptableTask* Task = TaskNode->Task)
 			{
@@ -2701,6 +2714,406 @@ void FScriptableGraphEditor::OnSearchResultClicked(TWeakObjectPtr<UScriptableNod
 	if (UEdGraphNode* EdNode = FindEdNodeByRuntimeId(Item->GetBindingID()))
 	{
 		GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
+	}
+}
+
+namespace
+{
+	/** Make a name unique against a set of already-used FNames by appending _N suffixes until it fits. */
+	FName MakeUniqueAmong(FName Desired, const TSet<FName>& UsedNames, const TCHAR* FallbackBase)
+	{
+		FName Candidate = Desired.IsNone() ? FName(FallbackBase) : Desired;
+		if (!UsedNames.Contains(Candidate)) return Candidate;
+		for (int32 i = 1; i < 10000; ++i)
+		{
+			Candidate = FName(*FString::Printf(TEXT("%s_%d"), *Desired.ToString(), i));
+			if (!UsedNames.Contains(Candidate)) return Candidate;
+		}
+		return Desired;
+	}
+}
+
+bool FScriptableGraphEditor::CanConvertSelectionToSubGraph() const
+{
+	if (!GraphEditorWidget.IsValid()) return false;
+	const FGraphPanelSelectionSet& Selection = GraphEditorWidget->GetSelectedNodes();
+	if (Selection.IsEmpty()) return false;
+
+	/** Need at least one node that isn't Entry/Exit — those don't migrate, they only inform sub-asset layout. */
+	for (UObject* Obj : Selection)
+	{
+		const UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(Obj);
+		if (!SfEd) continue;
+		const UScriptableNode* Runtime = SfEd->GetRuntimeNode();
+		if (Runtime && !Runtime->IsA<UScriptableNode_Entry>() && !Runtime->IsA<UScriptableNode_Exit>()) return true;
+	}
+	return false;
+}
+
+void FScriptableGraphEditor::OnConvertSelectionToSubGraph()
+{
+	UScriptableGraph* SourceGraph = EditedGraph.Get();
+	if (!SourceGraph || !SourceGraph->EdGraph || !GraphEditorWidget.IsValid()) return;
+
+	/** 1. Gather selection. Entry/Exit are pseudo-selected: they don't migrate (Entry must stay in the source,
+	 * sub-asset already has its own), but their position and Outputs (Exit case) seed the sub-asset's layout. */
+	TArray<UScriptableEdGraphNode*> SelectedEd;
+	TArray<UScriptableNode*> SelectedRuntime;
+	TSet<FGuid> SelectedIds;
+	int64 SumX = 0, SumY = 0;
+	int32 PosCount = 0;
+
+	bool bEntryPseudoSelected = false;
+	FIntPoint SourceEntryPos(0, 0);
+	bool bExitPseudoSelected = false;
+	FIntPoint SourceExitPos(0, 0);
+
+	for (UObject* Obj : GraphEditorWidget->GetSelectedNodes())
+	{
+		UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(Obj);
+		if (!SfEd) continue;
+		UScriptableNode* Runtime = SfEd->GetRuntimeNode();
+		if (!Runtime) continue;
+
+		if (Runtime->IsA<UScriptableNode_Entry>())
+		{
+			bEntryPseudoSelected = true;
+			SourceEntryPos = FIntPoint(SfEd->NodePosX, SfEd->NodePosY);
+			continue;
+		}
+		if (Runtime->IsA<UScriptableNode_Exit>())
+		{
+			bExitPseudoSelected = true;
+			SourceExitPos = FIntPoint(SfEd->NodePosX, SfEd->NodePosY);
+			continue;
+		}
+
+		SelectedEd.Add(SfEd);
+		SelectedRuntime.Add(Runtime);
+		SelectedIds.Add(Runtime->GetBindingID());
+		SumX += SfEd->NodePosX;
+		SumY += SfEd->NodePosY;
+		++PosCount;
+	}
+	if (SelectedRuntime.IsEmpty()) return;
+
+	const int32 CentroidX = PosCount > 0 ? static_cast<int32>(SumX / PosCount) : 0;
+	const int32 CentroidY = PosCount > 0 ? static_cast<int32>(SumY / PosCount) : 0;
+
+	/** 2. Save-As dialog for the new sub-asset. Cancel aborts the whole op. */
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+	const FString DefaultPath = FPaths::GetPath(SourceGraph->GetPathName());
+	UScriptableGraphAssetFactory* Factory = NewObject<UScriptableGraphAssetFactory>();
+	UObject* CreatedAsset = AssetTools.CreateAssetWithDialog(TEXT("NewSubGraph"), DefaultPath, UScriptableGraph::StaticClass(), Factory, NAME_None);
+	UScriptableGraph* SubAsset = Cast<UScriptableGraph>(CreatedAsset);
+	if (!SubAsset) return;
+
+	/** 3. Partition source's Connections by which side of the selection each endpoint lies on. */
+	TArray<FScriptableGraphConnection> Internal;
+	TArray<FScriptableGraphConnection> Inbound;
+	TArray<FScriptableGraphConnection> Outbound;
+	for (const FScriptableGraphConnection& C : SourceGraph->Connections)
+	{
+		const bool bFromSel = SelectedIds.Contains(C.From.NodeID);
+		const bool bToSel = SelectedIds.Contains(C.To.NodeID);
+		if (bFromSel && bToSel) Internal.Add(C);
+		else if (bToSel) Inbound.Add(C);
+		else if (bFromSel) Outbound.Add(C);
+	}
+
+	const FGuid SourceEntryId = SourceGraph->EntryNodeID;
+	FGuid SourceExitId;
+	for (const TObjectPtr<UScriptableNode>& Node : SourceGraph->Nodes)
+	{
+		if (Node && Node->IsA<UScriptableNode_Exit>()) { SourceExitId = Node->GetBindingID(); break; }
+	}
+
+	/**
+	 * Sub-asset construction runs OUTSIDE the source's transaction: cross-package Rename undo is unreliable
+	 * and rolling back the sub-asset on Ctrl-Z would orphan its package file (already on disk via the Save-As
+	 * dialog). Instead we clone the selected nodes into the sub-asset; the originals remain intact in the source
+	 * (Ctrl-Z restores them with their positions because we never touched the originals' properties).
+	 */
+	if (!SubAsset->EdGraph)
+	{
+		UScriptableEdGraph* SubEdGraph = NewObject<UScriptableEdGraph>(SubAsset, UScriptableEdGraph::StaticClass(), NAME_None, RF_Transactional);
+		SubEdGraph->Schema = UScriptableEdGraphSchema::StaticClass();
+		SubAsset->EdGraph = SubEdGraph;
+	}
+
+	/** Clone each selected node into the sub-asset. DuplicateObject preserves UPROPERTYs including BindingID,
+	 * so connection refs by NodeID still resolve to the clones inside the sub-asset. Visual-only state on the
+	 * ed-node (hide-unconnected toggle, comment bubble, NodeComment) is copied over after the spawn since
+	 * SpawnEdNodeForRuntime builds a fresh ed-node. */
+	for (int32 i = 0; i < SelectedRuntime.Num(); ++i)
+	{
+		UScriptableNode* Original = SelectedRuntime[i];
+		UScriptableEdGraphNode* OriginalEd = SelectedEd[i];
+		UScriptableNode* Cloned = DuplicateObject<UScriptableNode>(Original, SubAsset);
+		if (!Cloned) continue;
+		SubAsset->Nodes.Add(Cloned);
+		UScriptableEdGraphNode* ClonedEd = ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SubAsset->EdGraph, Cloned, FVector2f(OriginalEd->NodePosX, OriginalEd->NodePosY));
+		if (ClonedEd)
+		{
+			ClonedEd->bHideUnconnectedPins = OriginalEd->bHideUnconnectedPins;
+			ClonedEd->NodeComment = OriginalEd->NodeComment;
+			ClonedEd->bCommentBubblePinned = OriginalEd->bCommentBubblePinned;
+			ClonedEd->bCommentBubbleVisible = OriginalEd->bCommentBubbleVisible;
+			ClonedEd->ApplyPinVisibility();
+		}
+	}
+
+	/** Move internal connections verbatim — BindingIDs in clones match the originals' IDs. */
+	for (const FScriptableGraphConnection& C : Internal)
+	{
+		SubAsset->Connections.Add(C);
+	}
+
+	auto FindSubEdNodeForRuntime = [SubAsset](const FGuid& RuntimeID) -> UScriptableEdGraphNode*
+		{
+			for (UEdGraphNode* EdNode : SubAsset->EdGraph->Nodes)
+			{
+				UScriptableEdGraphNode* SfEd = Cast<UScriptableEdGraphNode>(EdNode);
+				if (SfEd && SfEd->GetRuntimeNode() && SfEd->GetRuntimeNode()->GetBindingID() == RuntimeID) return SfEd;
+			}
+			return nullptr;
+		};
+
+	int32 MigratedMinX = INT_MAX, MigratedMaxX = INT_MIN;
+	for (const UScriptableEdGraphNode* SfEd : SelectedEd)
+	{
+		MigratedMinX = FMath::Min(MigratedMinX, SfEd->NodePosX);
+		MigratedMaxX = FMath::Max(MigratedMaxX, SfEd->NodePosX);
+	}
+	const int32 LeftAnchor = MigratedMinX == INT_MAX ? 0 : MigratedMinX;
+	const int32 RightAnchor = MigratedMaxX == INT_MIN ? 0 : MigratedMaxX;
+
+	/** Position the sub-asset's auto-created Entry at the source Entry's coordinates IF the user pseudo-selected it.
+	 * Without that signal we leave Entry's ed-node unspawned so the editor places it at the default (0,0) on first open. */
+	if (bEntryPseudoSelected)
+	{
+		UScriptableNode* SubEntryRuntime = nullptr;
+		for (const TObjectPtr<UScriptableNode>& N : SubAsset->Nodes)
+		{
+			if (N && N->GetBindingID() == SubAsset->EntryNodeID) { SubEntryRuntime = N; break; }
+		}
+		if (SubEntryRuntime && !FindSubEdNodeForRuntime(SubAsset->EntryNodeID))
+		{
+			ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SubAsset->EdGraph, SubEntryRuntime, FVector2f(SourceEntryPos.X, SourceEntryPos.Y));
+		}
+	}
+
+	auto EnsureSubExit = [&](const FVector2f& Location) -> UScriptableNode_Exit*
+		{
+			for (const TObjectPtr<UScriptableNode>& N : SubAsset->Nodes)
+			{
+				if (UScriptableNode_Exit* E = Cast<UScriptableNode_Exit>(N)) return E;
+			}
+			UScriptableNode_Exit* NewExit = NewObject<UScriptableNode_Exit>(SubAsset, NAME_None, RF_Transactional);
+			SubAsset->Nodes.Add(NewExit);
+			ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SubAsset->EdGraph, NewExit, Location);
+			return NewExit;
+		};
+
+	/** Exit pseudo-selected: mirror the source's whole Outputs list so the sub-asset's Exit has the same pin shape
+	 * the user laid out, and pre-spawn it at the source Exit's position. */
+	if (bExitPseudoSelected)
+	{
+		for (const FName& Out : SourceGraph->Outputs)
+		{
+			if (!Out.IsNone()) SubAsset->Outputs.AddUnique(Out);
+		}
+		EnsureSubExit(FVector2f(SourceExitPos.X, SourceExitPos.Y));
+	}
+
+	/** Inbound: dedupe by (TargetNodeID, TargetPinName). Inbounds from the source's Entry/Exit short-circuit
+	 * onto the sub-asset's own Entry/Exit; everything else gets a ReceiveEvent per unique target pin. */
+	TMap<FScriptableGraphPinRef, FName> InboundEventName;
+	TSet<FName> UsedEventNames;
+	UsedEventNames.Add(UScriptableNode_SubGraph::InInputName);
+	UsedEventNames.Add(UScriptableNode_SubGraph::CancelInputName);
+	for (const FScriptableGraphConnection& C : Inbound)
+	{
+		if (C.From.NodeID == SourceEntryId)
+		{
+			FScriptableGraphConnection Wire;
+			Wire.From.NodeID = SubAsset->EntryNodeID;
+			Wire.From.PinName = UScriptableNode_Entry::OutOutputName;
+			Wire.To = C.To;
+			SubAsset->Connections.Add(Wire);
+			continue;
+		}
+
+		if (SourceExitId.IsValid() && C.From.NodeID == SourceExitId)
+		{
+			/** When Exit wasn't pseudo-selected, this is the fallback path: spawn it near the right edge of the migrated nodes. */
+			UScriptableNode_Exit* SubExit = EnsureSubExit(FVector2f(RightAnchor + 400, CentroidY));
+			if (C.From.PinName != UScriptableNode_Exit::FinishedOutputName && C.From.PinName != UScriptableNode_Exit::CancelledOutputName)
+			{
+				SubAsset->Outputs.AddUnique(C.From.PinName);
+			}
+			FScriptableGraphConnection Wire;
+			Wire.From.NodeID = SubExit->GetBindingID();
+			Wire.From.PinName = C.From.PinName;
+			Wire.To = C.To;
+			SubAsset->Connections.Add(Wire);
+			continue;
+		}
+
+		if (InboundEventName.Contains(C.To)) continue;
+		const FName EventName = MakeUniqueAmong(C.To.PinName, UsedEventNames, TEXT("Event"));
+		UsedEventNames.Add(EventName);
+
+		UScriptableNode_ReceiveEvent* Ev = NewObject<UScriptableNode_ReceiveEvent>(SubAsset, NAME_None, RF_Transactional);
+		Ev->EventName = EventName;
+		SubAsset->Nodes.Add(Ev);
+
+		FVector2f EvLoc(0.f, 0.f);
+		if (const UScriptableEdGraphNode* TargetEd = FindSubEdNodeForRuntime(C.To.NodeID))
+		{
+			EvLoc = FVector2f(TargetEd->NodePosX - 300, TargetEd->NodePosY);
+		}
+		ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SubAsset->EdGraph, Ev, EvLoc);
+
+		FScriptableGraphConnection Wire;
+		Wire.From.NodeID = Ev->GetBindingID();
+		Wire.From.PinName = UScriptableNode_ReceiveEvent::OutOutputName;
+		Wire.To = C.To;
+		SubAsset->Connections.Add(Wire);
+
+		InboundEventName.Add(C.To, EventName);
+	}
+
+	/** Outbound: dedupe by (SourceNodeID, SourcePinName). A source pin literally named "Completed" is the universal
+	 * task default — collapse it to a blank Finish (which fires the built-in "Finished" output) so we don't pollute
+	 * Outputs with a duplicate of what's already there. Named pins ("Wololo", "True", etc.) become custom outputs. */
+	TMap<FScriptableGraphPinRef, FName> OutboundOutputName;
+	TSet<FName> UsedOutputNames;
+	UsedOutputNames.Add(UScriptableNode_Exit::FinishedOutputName);
+	UsedOutputNames.Add(UScriptableNode_Exit::CancelledOutputName);
+	for (const FName& Existing : SubAsset->Outputs) UsedOutputNames.Add(Existing);
+
+	const FName DefaultCompletedPin = UScriptableTask::CompletedOutputName;
+
+	for (const FScriptableGraphConnection& C : Outbound)
+	{
+		if (OutboundOutputName.Contains(C.From)) continue;
+
+		const bool bIsDefaultCompletion = (C.From.PinName == DefaultCompletedPin);
+
+		FName OutputName;
+		if (bIsDefaultCompletion)
+		{
+			OutputName = UScriptableNode_Exit::FinishedOutputName;
+		}
+		else
+		{
+			OutputName = MakeUniqueAmong(C.From.PinName, UsedOutputNames, TEXT("Out"));
+			UsedOutputNames.Add(OutputName);
+			SubAsset->Outputs.AddUnique(OutputName);
+		}
+
+		UScriptableNode_Finish* Fin = NewObject<UScriptableNode_Finish>(SubAsset, NAME_None, RF_Transactional);
+		Fin->OutputName = bIsDefaultCompletion ? NAME_None : OutputName;
+		SubAsset->Nodes.Add(Fin);
+
+		FVector2f FinLoc(0.f, 0.f);
+		if (const UScriptableEdGraphNode* SourceEd = FindSubEdNodeForRuntime(C.From.NodeID))
+		{
+			FinLoc = FVector2f(SourceEd->NodePosX + 300, SourceEd->NodePosY);
+		}
+		ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SubAsset->EdGraph, Fin, FinLoc);
+
+		FScriptableGraphConnection Wire;
+		Wire.From = C.From;
+		Wire.To.NodeID = Fin->GetBindingID();
+		Wire.To.PinName = UScriptableNode_Finish::InInputName;
+		SubAsset->Connections.Add(Wire);
+
+		OutboundOutputName.Add(C.From, OutputName);
+	}
+
+	SubAsset->MarkPackageDirty();
+
+	/**
+	 * Source-side changes wrapped in their own transaction. Ctrl-Z reverts these (originals come back, SubGraph
+	 * node disappears) without trying to roll back the sub-asset package. The sub-asset stays as-is — the user
+	 * can save it or delete the asset file if they don't want it.
+	 */
+	const FScopedTransaction Tx(LOCTEXT("ConvertToSubGraphTx", "Convert to Sub-Graph"));
+	SourceGraph->Modify();
+	SourceGraph->EdGraph->Modify();
+
+	UScriptableNode_SubGraph* SubGraphNode = NewObject<UScriptableNode_SubGraph>(SourceGraph, NAME_None, RF_Transactional);
+	SubGraphNode->SubGraphAsset = SubAsset;
+	SourceGraph->Nodes.Add(SubGraphNode);
+
+	SourceGraph->Connections.RemoveAll([&SelectedIds](const FScriptableGraphConnection& C)
+		{
+			return SelectedIds.Contains(C.From.NodeID) || SelectedIds.Contains(C.To.NodeID);
+		});
+
+	TArray<FScriptableGraphConnection> EmittedInbound;
+	auto AddInboundParent = [&](const FScriptableGraphConnection& NewC)
+		{
+			if (EmittedInbound.ContainsByPredicate([&NewC](const FScriptableGraphConnection& X) { return X == NewC; })) return;
+			EmittedInbound.Add(NewC);
+			SourceGraph->Connections.Add(NewC);
+		};
+	for (const FScriptableGraphConnection& C : Inbound)
+	{
+		FScriptableGraphConnection NewC;
+		NewC.From = C.From;
+		NewC.To.NodeID = SubGraphNode->GetBindingID();
+		if (C.From.NodeID == SourceEntryId || (SourceExitId.IsValid() && C.From.NodeID == SourceExitId))
+		{
+			NewC.To.PinName = UScriptableNode_SubGraph::InInputName;
+		}
+		else
+		{
+			NewC.To.PinName = InboundEventName.FindRef(C.To);
+		}
+		AddInboundParent(NewC);
+	}
+	for (const FScriptableGraphConnection& C : Outbound)
+	{
+		FScriptableGraphConnection NewC;
+		NewC.From.NodeID = SubGraphNode->GetBindingID();
+		NewC.From.PinName = OutboundOutputName.FindRef(C.From);
+		NewC.To = C.To;
+		SourceGraph->Connections.Add(NewC);
+	}
+
+	/** Remove the originals from the source. Modify on each SfEd captures its pre-remove state (LinkedTo +
+	 * RuntimeNode pointer) so Ctrl-Z brings them back intact. ReconstructEdGraphFromAsset re-wires visual links
+	 * from SourceGraph->Connections below, so we don't bother clearing LinkedTo here. */
+	for (UScriptableEdGraphNode* SfEd : SelectedEd)
+	{
+		SfEd->Modify();
+		SourceGraph->EdGraph->Nodes.Remove(SfEd);
+	}
+	for (UScriptableNode* Original : SelectedRuntime)
+	{
+		SourceGraph->Nodes.Remove(Original);
+	}
+
+	UScriptableEdGraphNode* SubGraphEdNode = ScriptableGraphEditorHelpers::SpawnEdNodeForRuntime(SourceGraph->EdGraph, SubGraphNode, FVector2f(CentroidX, CentroidY));
+	if (SubGraphEdNode)
+	{
+		SubGraphEdNode->NodePosX = CentroidX;
+		SubGraphEdNode->NodePosY = CentroidY;
+	}
+
+	ReconstructEdGraphFromAsset();
+	MarkDirtySinceLastCompile();
+	RefreshErrorBanners();
+
+	if (GEditor)
+	{
+		if (UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+		{
+			AES->OpenEditorForAsset(SubAsset);
+		}
 	}
 }
 

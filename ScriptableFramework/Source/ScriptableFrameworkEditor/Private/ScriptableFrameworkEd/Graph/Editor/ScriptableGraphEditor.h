@@ -88,6 +88,10 @@ private:
 	/** Saving a foreign UScriptableGraph rebuilds every embedded SubGraph node that references it; complements the live property-change path for edits OnObjectPropertyChanged misses (e.g. ReceiveEvent add/remove). */
 	void OnPackageSaved(const FString& PackageFileName, UPackage* SavedPackage, FObjectPostSaveContext SaveContext);
 
+	/** Refactor the current selection (minus Entry) into a new UScriptableGraph asset + a SubGraph node that replaces them in the source graph. */
+	void OnConvertSelectionToSubGraph();
+	bool CanConvertSelectionToSubGraph() const;
+
 	/** Removes the right-clicked Sequence output pin (no-op if not a removable branch). Reads the pin from the widget's selection, since command executors don't receive it. */
 	void OnRemoveSequencePin();
 

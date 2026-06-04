@@ -49,4 +49,7 @@ public:
 
 	/** Toggle breakpoint on the selected node(s) (F9). BP behaviour: add when missing, remove when present. */
 	TSharedPtr<FUICommandInfo> ToggleBreakpoint;
+
+	/** Refactor selected nodes into a new UScriptableGraph sub-asset (Save As dialog) and replace them with a SubGraph node. */
+	TSharedPtr<FUICommandInfo> ConvertSelectionToSubGraph;
 };
