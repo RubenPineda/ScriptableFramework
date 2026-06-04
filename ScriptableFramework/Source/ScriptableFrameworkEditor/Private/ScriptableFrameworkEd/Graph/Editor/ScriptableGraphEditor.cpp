@@ -2105,8 +2105,8 @@ void FScriptableGraphEditor::ApplyValidationToErrorBanners(const TArray<FKzValid
 		{
 			SfEd->bHasCompilerMessage = true;
 			SfEd->ErrorType = Found->Severity;
-			/** Banner text mirrors BP's convention: short label, the full message lives in the panel. */
-			SfEd->ErrorMsg = Found->Severity == EMessageSeverity::Error ? TEXT("ERROR!") : TEXT("WARNING!");
+			/** Use the aggregated validator message so the banner's tooltip carries actionable detail instead of just "WARNING!" / "ERROR!". */
+			SfEd->ErrorMsg = Found->Message;
 		}
 		else
 		{
