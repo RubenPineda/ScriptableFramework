@@ -377,6 +377,8 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 
 	while (CurrentNode && !bFoundContext)
 	{
+		bool bFoundLocals = false;
+
 		// Try to find the FScriptableContainer structurally wrapping the CurrentNode
 		if (FScriptableContainer* Container = FindContainerForNode(CurrentNode))
 		{
@@ -392,15 +394,27 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 				ContextDesc.ID = ScriptableBindingSources::ContextStructID;
 
 				bFoundContext = true;
-				break;
 			}
+
+			// GetLocals() rebuilds the runtime bag's shape from LocalsDefinitions on demand, mirroring Context.
+			FInstancedPropertyBag& LocalsBag = Container->GetLocals();
+			if (LocalsBag.IsValid() && LocalsBag.GetNumPropertiesInBag() > 0)
+			{
+				FPropertyBindingBindableStructDescriptor& LocalsDesc = OutStructDescs.AddDefaulted_GetRef();
+				LocalsDesc.Name = FName(TEXT("Locals"));
+				LocalsDesc.Struct = LocalsBag.GetPropertyBagStruct();
+				LocalsDesc.ID = ScriptableBindingSources::LocalsStructID;
+				bFoundLocals = true;
+			}
+
+			if (bFoundContext || bFoundLocals) break;
 		}
 
-		// Fallback: assets that store children flat hold the Context bag as a field.
-		if (const UScriptableObjectAsset* ConstAsset = Cast<UScriptableObjectAsset>(CurrentNode))
+		// Graph fallback: UScriptableGraph holds Context as a flat field and exposes Locals via GetLocalsShape.
+		if (const UScriptableGraph* ConstGraph = Cast<UScriptableGraph>(CurrentNode))
 		{
-			UScriptableObjectAsset* Asset = const_cast<UScriptableObjectAsset*>(ConstAsset);
-			if (const FInstancedPropertyBag* AssetContext = Asset->GetContext())
+			UScriptableGraph* Graph = const_cast<UScriptableGraph*>(ConstGraph);
+			if (const FInstancedPropertyBag* AssetContext = Graph->GetContext())
 			{
 				if (AssetContext->IsValid() && AssetContext->GetNumPropertiesInBag() > 0)
 				{
@@ -413,8 +427,7 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 				}
 			}
 
-			bool bFoundLocals = false;
-			if (const FInstancedPropertyBag* LocalsShape = Asset->GetLocalsShape())
+			if (const FInstancedPropertyBag* LocalsShape = Graph->GetLocalsShape())
 			{
 				if (LocalsShape->IsValid() && LocalsShape->GetNumPropertiesInBag() > 0)
 				{
@@ -426,8 +439,26 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 				}
 			}
 
-			// Stop at the first asset hit so we don't accidentally publish two Locals sources (same StructID would be ambiguous).
 			if (bFoundContext || bFoundLocals) break;
+		}
+		// Non-graph asset fallback: still publishes Context. Locals only exist on UScriptableGraph and on
+		// FScriptableContainer, handled above.
+		else if (const UScriptableObjectAsset* ConstAsset = Cast<UScriptableObjectAsset>(CurrentNode))
+		{
+			UScriptableObjectAsset* Asset = const_cast<UScriptableObjectAsset*>(ConstAsset);
+			if (const FInstancedPropertyBag* AssetContext = Asset->GetContext())
+			{
+				if (AssetContext->IsValid() && AssetContext->GetNumPropertiesInBag() > 0)
+				{
+					FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
+					ContextDesc.Name = FName(TEXT("Context"));
+					ContextDesc.Struct = AssetContext->GetPropertyBagStruct();
+					ContextDesc.ID = ScriptableBindingSources::ContextStructID;
+
+					bFoundContext = true;
+					break;
+				}
+			}
 		}
 
 		// Move up to the next parent in the hierarchy

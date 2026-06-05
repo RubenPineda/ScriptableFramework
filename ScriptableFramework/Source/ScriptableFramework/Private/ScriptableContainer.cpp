@@ -30,6 +30,51 @@ bool FScriptableContainer::IsContextBagOutOfSync() const
 	return false;
 }
 
+void FScriptableContainer::ConstructLocals()
+{
+	ResetLocals();
+
+	TArray<FPropertyBagPropertyDesc> Descs;
+	Descs.Reserve(LocalsDefinitions.Num());
+	for (const FKzNamedVariant& Var : LocalsDefinitions)
+	{
+		if (!Var.IsValid()) continue;
+		Descs.Add(Var.ToPropertyDesc());
+	}
+	if (Descs.Num() > 0)
+	{
+		Locals.AddProperties(Descs);
+		for (const FKzNamedVariant& Var : LocalsDefinitions)
+		{
+			if (!Var.IsValid()) continue;
+			Var.WriteToBag(Locals);
+		}
+	}
+}
+
+bool FScriptableContainer::IsLocalsBagOutOfSync() const
+{
+	int32 ValidDefsCount = 0;
+	for (const FKzNamedVariant& Var : LocalsDefinitions)
+	{
+		if (Var.IsValid()) ++ValidDefsCount;
+	}
+
+	const UPropertyBag* BagStruct = Locals.GetPropertyBagStruct();
+	const int32 BagPropertyCount = BagStruct ? BagStruct->GetPropertyDescs().Num() : 0;
+	if (BagPropertyCount != ValidDefsCount) return true;
+
+	if (BagStruct)
+	{
+		for (const FKzNamedVariant& Var : LocalsDefinitions)
+		{
+			if (!Var.IsValid()) continue;
+			if (!BagStruct->FindPropertyDescByName(Var.GetName())) return true;
+		}
+	}
+	return false;
+}
+
 void FScriptableContainer::AddContext(const FScriptableContext& InContext)
 {
 	const UPropertyBag* BagStruct = InContext.GetBag().GetPropertyBagStruct();
@@ -105,9 +150,14 @@ void FScriptableContainer::AddBindingSource(UScriptableObject* InSource)
 			ContextToUse = ScriptableOwner->GetContext();
 		}
 
-		// 2. Inject Data. FScriptableAction-style containers don't expose Locals yet, so Locals stays null.
+		// 2. Inject Data. Locals are handed down when this container declares its own OR has an inherited
+		// bag from a wrapper (nested action / requirement); a null pointer leaves the child without locals.
 		FScriptableRuntimeData Data;
 		Data.Context = ContextToUse;
+		if (LocalsDefinitions.Num() > 0 || InheritedLocalsBag != nullptr)
+		{
+			Data.Locals = &GetLocals();
+		}
 		Data.BindingsMap = &BindingSourceMap;
 		InSource->InitRuntimeData(Data);
 
@@ -127,6 +177,7 @@ void FScriptableContainer::Register(UObject* InOwner)
 
 void FScriptableContainer::Unregister()
 {
+	InheritedLocalsBag = nullptr;
 	BindingSourceMap.Empty();
 	Owner = nullptr;
 }

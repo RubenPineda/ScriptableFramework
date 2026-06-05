@@ -16,6 +16,14 @@ void UScriptableCondition_NestedRequirement::OnRegister()
 		Requirement.Context = *ParentContext;
 	}
 
+	// Inherit the parent scope's Locals when this nested unit doesn't declare its own. Cannot copy
+	// because SetLocal-style writes have to propagate back to the parent's bag; point GetLocals at the
+	// external bag instead. When the nested unit DOES declare its own LocalsDefinitions it stays isolated.
+	if (Requirement.LocalsDefinitions.Num() == 0)
+	{
+		Requirement.SetInheritedLocals(GetMutableLocals());
+	}
+
 	Requirement.Register(GetOwner());
 }
 

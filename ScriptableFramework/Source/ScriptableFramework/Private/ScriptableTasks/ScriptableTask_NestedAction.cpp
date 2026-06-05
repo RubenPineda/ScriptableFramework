@@ -85,6 +85,14 @@ void UScriptableTask_NestedAction::InstantiateRuntimeAction()
 		RuntimeAction.ResetContext();
 	}
 
+	// Inherit the parent scope's Locals when this nested unit doesn't declare its own. Cannot copy
+	// because SetLocal writes have to propagate back to the parent's bag; instead point GetLocals at
+	// the external bag. When the nested unit DOES declare its own LocalsDefinitions it stays isolated.
+	if (RuntimeAction.LocalsDefinitions.Num() == 0)
+	{
+		RuntimeAction.SetInheritedLocals(GetMutableLocals());
+	}
+
 	for (int32 i = 0; i < RuntimeAction.Tasks.Num(); ++i)
 	{
 		UScriptableTask* TemplateTask = RuntimeAction.Tasks[i];

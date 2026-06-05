@@ -63,6 +63,10 @@ public:
 	 * inherits its parent scope instead of carrying its own context. */
 	bool bShowContextButton = true;
 
+	/** Mirrors bShowContextButton for the Locals button. Wrappers turn this off when they want the inner
+	 * scope to use the parent's Locals instead of authoring its own. */
+	bool bShowLocalsButton = true;
+
 protected:
 	TSharedPtr<IPropertyHandle> StructHandle;
 	TSharedPtr<IPropertyHandle> ListHandle;
@@ -77,6 +81,12 @@ private:
 
 	/** Handler for the Context button click. */
 	FReply OnEditContextClicked();
+
+	/** Visibility callback for the Locals button. Mirrors the Context one with bShowLocalsButton swapped in. */
+	EVisibility GetLocalsButtonVisibility() const;
+
+	/** Handler for the Locals button click. Opens a structure view filtered to LocalsDefinitions. */
+	FReply OnEditLocalsClicked();
 
 	/** Callback from Picker. */
 	void OnTypePicked(const UStruct* InStruct, const struct FAssetData& AssetData);

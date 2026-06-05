@@ -21,8 +21,9 @@ void FScriptableTaskNestedActionCustomization::InitCustomization(TSharedRef<IPro
 
 	ActionCustomization = MakeShared<FScriptableActionCustomization>();
 
-	// The nested unit inherits the parent scope's context; hide the inner Context button.
+	// The nested unit inherits the parent scope's context and locals; hide both inner buttons.
 	ActionCustomization->bShowContextButton = false;
+	ActionCustomization->bShowLocalsButton = false;
 
 	TSharedPtr<IPropertyHandle> ActionHandle = PropertyHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(UScriptableTask_NestedAction, Action));
 	if (ActionHandle.IsValid())

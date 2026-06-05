@@ -12,7 +12,7 @@
  * VarName picks the destination from the owning asset's Locals; Value is type-constrained to that local
  * in the details customization. Non-stoppable (the write is atomic, no in-flight work to cancel).
  */
-UCLASS(DisplayName = "Set Local", meta = (NodeCategory = "System|Variables"))
+UCLASS(DisplayName = "Set Local", meta = (TaskCategory = "System|Variables"))
 class SCRIPTABLEFRAMEWORK_API UScriptableTask_SetLocal : public UScriptableTask
 {
 	GENERATED_BODY()
@@ -40,7 +40,7 @@ protected:
 
 private:
 #if WITH_EDITOR
-	/** Backing function for VarName's GetOptions meta. Returns the names of all valid Locals on the owning UScriptableObjectAsset. */
+	/** Backing function for VarName's GetOptions meta. Returns the names of all Locals applicable to this task (graph Locals or container LocalsDefinitions). */
 	UFUNCTION()
 	TArray<FString> GetLocalNames() const;
 

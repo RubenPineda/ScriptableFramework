@@ -111,6 +111,31 @@ TSharedPtr<SHorizontalBox> FScriptableContainerCustomization::GetHeaderNameConte
 								.ColorAndOpacity(FLinearColor::White)
 						]
 				]
+		]
+		// Locals Button (same visibility rules as Context, opens a popup filtered to LocalsDefinitions)
+		+ SHorizontalBox::Slot()
+		.AutoWidth()
+		.Padding(2.0f, 0.0f)
+		[
+			SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "HoverHintOnly")
+				.OnClicked(this, &FScriptableContainerCustomization::OnEditLocalsClicked)
+				.ToolTipText(LOCTEXT("LocalsBtnTooltip", "Edit the Local Variables (mutable per-instance state) for this container."))
+				.Visibility(this, &FScriptableContainerCustomization::GetLocalsButtonVisibility)
+				.ContentPadding(FMargin(4.0f, 2.0f))
+				[
+					SNew(SBorder)
+						.Padding(FMargin(6, 1))
+						.BorderImage(FScriptableFrameworkEditorStyle::Get().GetBrush("ScriptableFramework.Param.Background"))
+						.BorderBackgroundColor(FScriptableFrameworkEditorStyle::ContextColor)
+						.VAlign(VAlign_Center)
+						[
+							SNew(STextBlock)
+								.Text(LOCTEXT("LocalsBtnText", "Locals"))
+								.TextStyle(FScriptableFrameworkEditorStyle::Get(), "ScriptableFramework.Param.Label")
+								.ColorAndOpacity(FLinearColor::White)
+						]
+				]
 		];
 }
 
@@ -239,6 +264,18 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 	return FReply::Handled();
 }
 
+EVisibility FScriptableContainerCustomization::GetLocalsButtonVisibility() const
+{
+	if (!bShowLocalsButton) return EVisibility::Collapsed;
+
+	// Reuse the Context visibility logic: same rules apply (hide when wrapped / inside graph node / not in asset/template).
+	const bool bSaved = bShowContextButton;
+	const_cast<FScriptableContainerCustomization*>(this)->bShowContextButton = true;
+	const EVisibility Result = GetContextButtonVisibility();
+	const_cast<FScriptableContainerCustomization*>(this)->bShowContextButton = bSaved;
+	return Result;
+}
+
 EVisibility FScriptableContainerCustomization::GetContextButtonVisibility() const
 {
 	// Explicit opt-out from the wrapping customization (e.g. NestedRequirement / NestedAction).
@@ -346,15 +383,22 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 		ViewArgs,
 		StructViewArgs,
 		StructOnScope,
-		LOCTEXT("EditContextTitle", "Edit Context Definitions")
+		LOCTEXT("EditDefinitionsTitle", "Edit Definitions")
 	);
 
 	if (StructureView)
 	{
-		// We ONLY want to show "ContextDefinitions".
+		// Show the ContextDefinitions row AND every nested property under it (struct fields, array element children,
+		// inner Variant value slots, etc). Filtering by exact name would hide all inner rows.
 		StructureView->GetDetailsView()->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
 			{
-				return PropertyAndParent.Property.GetFName() == GET_MEMBER_NAME_CHECKED(FScriptableContainer, ContextDefinitions);
+				static const FName TargetName = GET_MEMBER_NAME_CHECKED(FScriptableContainer, ContextDefinitions);
+				if (PropertyAndParent.Property.GetFName() == TargetName) return true;
+				for (const FProperty* Parent : PropertyAndParent.ParentProperties)
+				{
+					if (Parent && Parent->GetFName() == TargetName) return true;
+				}
+				return false;
 			}));
 
 		// Callback: Reconstruct Bag on Change + cascade re-bake to nested tasks.
@@ -394,7 +438,7 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 
 		// Create the Window
 		TSharedRef<SWindow> Window = SNew(SWindow)
-			.Title(LOCTEXT("EditContextTitle", "Edit Context Definitions"))
+			.Title(LOCTEXT("EditDefinitionsTitle", "Edit Definitions"))
 			.ClientSize(FVector2D(450.f, 400.f))
 			.SupportsMinimize(false)
 			.SupportsMaximize(false);
@@ -408,6 +452,103 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 		);
 
 		// Open immediately
+		FSlateApplication::Get().AddWindow(Window);
+	}
+
+	return FReply::Handled();
+}
+
+FReply FScriptableContainerCustomization::OnEditLocalsClicked()
+{
+	if (!StructHandle.IsValid()) return FReply::Handled();
+
+	TArray<void*> RawData;
+	StructHandle->AccessRawData(RawData);
+	if (RawData.Num() != 1 || RawData[0] == nullptr) return FReply::Handled();
+
+	FScriptableContainer* ContainerInstance = static_cast<FScriptableContainer*>(RawData[0]);
+
+	FStructureDetailsViewArgs StructViewArgs;
+	StructViewArgs.bShowObjects = true;
+	StructViewArgs.bShowAssets = true;
+	StructViewArgs.bShowClasses = true;
+	StructViewArgs.bShowInterfaces = true;
+
+	FDetailsViewArgs ViewArgs;
+	ViewArgs.bAllowSearch = false;
+	ViewArgs.bHideSelectionTip = true;
+	ViewArgs.bShowObjectLabel = false;
+
+	TSharedPtr<FStructOnScope> StructOnScope = MakeShareable(new FStructOnScope(FScriptableContainer::StaticStruct(), (uint8*)ContainerInstance));
+
+	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+
+	TSharedPtr<IStructureDetailsView> StructureView = PropertyEditorModule.CreateStructureDetailView(
+		ViewArgs,
+		StructViewArgs,
+		StructOnScope,
+		LOCTEXT("EditDefinitionsTitle", "Edit Definitions")
+	);
+
+	if (StructureView)
+	{
+		StructureView->GetDetailsView()->SetIsPropertyVisibleDelegate(FIsPropertyVisible::CreateLambda([](const FPropertyAndParent& PropertyAndParent)
+			{
+				static const FName TargetName = GET_MEMBER_NAME_CHECKED(FScriptableContainer, LocalsDefinitions);
+				if (PropertyAndParent.Property.GetFName() == TargetName) return true;
+				for (const FProperty* Parent : PropertyAndParent.ParentProperties)
+				{
+					if (Parent && Parent->GetFName() == TargetName) return true;
+				}
+				return false;
+			}));
+
+		// Mirror Context's flow: rebuild the runtime bag + re-bake nested binding caches on every edit.
+		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda([ContainerInstance, this](const FPropertyChangedEvent& Event)
+			{
+				if (!ContainerInstance) return;
+
+				StructHandle->NotifyPreChange();
+
+				ContainerInstance->ConstructLocals();
+
+				if (StructHandle.IsValid())
+				{
+					StructHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
+				}
+
+				TArray<UObject*> OuterObjects;
+				StructHandle->GetOuterObjects(OuterObjects);
+				for (UObject* OuterObj : OuterObjects)
+				{
+					if (!OuterObj) continue;
+
+					TArray<UObject*> NestedObjects;
+					GetObjectsWithOuter(OuterObj, NestedObjects, /*bIncludeNestedObjects*/ true);
+					for (UObject* NestedObj : NestedObjects)
+					{
+						if (UScriptableObject* SO = Cast<UScriptableObject>(NestedObj))
+						{
+							SO->BakeAutoBindings();
+						}
+					}
+				}
+			});
+
+		TSharedRef<SWindow> Window = SNew(SWindow)
+			.Title(LOCTEXT("EditDefinitionsTitle", "Edit Definitions"))
+			.ClientSize(FVector2D(450.f, 400.f))
+			.SupportsMinimize(false)
+			.SupportsMaximize(false);
+
+		Window->SetContent(
+			SNew(SBox)
+			.Padding(4.0f)
+			[
+				StructureView->GetWidget().ToSharedRef()
+			]
+		);
+
 		FSlateApplication::Get().AddWindow(Window);
 	}
 

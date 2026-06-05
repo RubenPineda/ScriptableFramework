@@ -74,6 +74,9 @@ void UScriptableTask_RunAsset::InstantiateRuntimeAction()
 			RuntimeAction.Context = *ParentContext;
 		}
 
+		// Build the runtime LocalsBag from the action's LocalsDefinitions (shape + initial values).
+		RuntimeAction.ConstructLocals();
+
 		// Deep Copy Tasks
 		// The 'Tasks' array currently points to the Asset's archetype objects.
 		for (int32 i = 0; i < RuntimeAction.Tasks.Num(); ++i)

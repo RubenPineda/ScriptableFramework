@@ -79,7 +79,7 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 		RebuildContextBag();
 	}
 
-	const bool bLocalsEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals));
+	const bool bLocalsEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals));
 	if (bLocalsEdit)
 	{
 		DetectAndApplyLocalsRename();

@@ -6,6 +6,7 @@
 #include "ScriptableObjectAsset.h"
 #include "ScriptableNodes/ScriptableGraphConnection.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "Core/KzNamedVariant.h"
 #include "StructUtils/PropertyBag.h"
 #include "ScriptableGraph.generated.h"
 
@@ -44,6 +45,10 @@ public:
 	UPROPERTY()
 	FGuid EntryNodeID;
 
+	/** Per-instance mutable state. Graph-scoped variables seeded with each entry's default value at Launch. */
+	UPROPERTY(EditAnywhere, Category = "Local Variables")
+	TArray<FKzNamedVariant> Locals;
+
 	/**
 	 * User-declared completion outputs. Appended after Exit's built-in "Finished"/"Cancelled" pins
 	 * and mirrored by SubGraph nodes referencing this asset. Order = pin order.
@@ -71,7 +76,7 @@ public:
 #endif
 	//~ End of UObject interface
 
-protected:
+public:
 	//~ UScriptableObjectAsset interface
 	/** Keeps the transient bag in sync with the declared shape so binding discovery always sees the context (e.g. during a save re-bake), then returns it. */
 	virtual FInstancedPropertyBag* GetContext() override
@@ -82,9 +87,13 @@ protected:
 
 #if WITH_EDITOR
 	virtual FName GetContainerName() const override { return NAME_None; }
-	virtual const FInstancedPropertyBag* GetLocalsShape() const override { return &LocalsBagShape; }
 #endif
 	//~ End of UScriptableObjectAsset interface
+
+#if WITH_EDITOR
+	/** Returns the cached design-time shape of the Locals bag. Used by binding discovery for tasks parented to this asset. */
+	const FInstancedPropertyBag* GetLocalsShape() const { return &LocalsBagShape; }
+#endif
 
 private:
 	/** Backing bag holding the declared context shape. Values are not stored at asset level. */

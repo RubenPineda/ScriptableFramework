@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "StructUtils/PropertyBag.h"
 #include "Core/KzParamDef.h"
+#include "Core/KzNamedVariant.h"
 #include "Core/KzPropertyBagHelpers.h"
 #include "ScriptableContainer.generated.h"
 
@@ -26,6 +27,14 @@ public:
 	UPROPERTY(Transient)
 	FInstancedPropertyBag Context;
 
+	/** Per-instance mutable state variables. Seeded with each entry's default value at Register. */
+	UPROPERTY(EditAnywhere, Category = "Locals", meta = (TitleProperty = "Name"))
+	TArray<FKzNamedVariant> LocalsDefinitions;
+
+	/** Runtime mutable bag for LocalsDefinitions. Written by SetLocal-style tasks, read by bindings via FScriptableRuntimeData. */
+	UPROPERTY(Transient)
+	FInstancedPropertyBag Locals;
+
 protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UObject> Owner = nullptr;
@@ -34,6 +43,9 @@ private:
 	/** Runtime lookup map for Sibling bindings (Guid -> Object Instance). */
 	UPROPERTY(Transient)
 	TMap<FGuid, TObjectPtr<UScriptableObject>> BindingSourceMap;
+
+	/** Optional external Locals bag that overrides the local one. Set by wrappers (nested actions / requirements) that share the parent scope's Locals with their inner tasks. Plain ptr because it points at a UPROPERTY of an outer scope which outlives us during the wrapper's lifetime. */
+	FInstancedPropertyBag* InheritedLocalsBag = nullptr;
 
 public:
 	bool HasContext() const { return Context.IsValid(); }
@@ -48,6 +60,30 @@ public:
 
 	/** True when the transient bag does not match the persisted ContextDefinitions (e.g. just after load). */
 	bool IsContextBagOutOfSync() const;
+
+	/** Returns the runtime Locals bag. Resolves to the inherited bag when one was injected (nested-action style); otherwise rebuilds the local shape + initial values from LocalsDefinitions on demand. */
+	FInstancedPropertyBag& GetLocals()
+	{
+		if (InheritedLocalsBag) return *InheritedLocalsBag;
+		if (IsLocalsBagOutOfSync()) { ConstructLocals(); }
+		return Locals;
+	}
+	const FInstancedPropertyBag& GetLocals() const
+	{
+		return InheritedLocalsBag ? *InheritedLocalsBag : Locals;
+	}
+
+	/** True when the transient Locals bag does not match the persisted LocalsDefinitions. */
+	bool IsLocalsBagOutOfSync() const;
+
+	/** Rebuilds the Locals bag's shape from LocalsDefinitions and writes each entry's default value. */
+	void ConstructLocals();
+
+	void ResetLocals() { Locals.Reset(); }
+
+	/** Points GetLocals at an external bag instead of the local one. Used by nested wrappers to share the parent scope's Locals with inner tasks (write-through). Pass null to revert. Cleared on Unregister. */
+	void SetInheritedLocals(FInstancedPropertyBag* External) { InheritedLocalsBag = External; }
+	FInstancedPropertyBag* GetInheritedLocals() const { return InheritedLocalsBag; }
 
 	bool HasContextProperty(const FName& Name) const
 	{

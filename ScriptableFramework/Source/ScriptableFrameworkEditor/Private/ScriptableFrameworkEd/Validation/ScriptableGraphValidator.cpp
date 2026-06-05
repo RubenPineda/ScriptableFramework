@@ -659,7 +659,7 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 				const FScopedTransaction Tx(LOCTEXT("QF_RemoveLocalEntry", "Remove Locals entry"));
 				G->Modify();
 				G->Locals.RemoveAt(IndexToRemove);
-				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableObjectAsset::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals)))
+				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableGraph::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals)))
 				{
 					FPropertyChangedEvent Event(Prop, EPropertyChangeType::ArrayRemove);
 					G->PostEditChangeProperty(Event);

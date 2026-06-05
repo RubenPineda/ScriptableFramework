@@ -10,7 +10,7 @@ class UScriptableGraph;
 class UScriptableGraphInstance;
 
 /** Runs a UScriptableGraph asset as a sub-execution inside the owning runtime. */
-UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Graph"))
+UCLASS(EditInlineNew, BlueprintType, NotBlueprintable, meta = (DisplayName = "Run Graph", TaskCategory = "System"))
 class SCRIPTABLEFRAMEWORK_API UScriptableTask_RunGraph final : public UScriptableTask
 {
 	GENERATED_BODY()

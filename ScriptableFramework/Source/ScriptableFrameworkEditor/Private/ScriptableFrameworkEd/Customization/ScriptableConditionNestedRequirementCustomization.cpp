@@ -21,8 +21,9 @@ void FScriptableConditionNestedRequirementCustomization::InitCustomization(TShar
 
 	RequirementCustomization = MakeShared<FScriptableRequirementCustomization>();
 
-	// The nested unit inherits the parent scope's context; hide the inner Context button.
+	// The nested unit inherits the parent scope's context and locals; hide both inner buttons.
 	RequirementCustomization->bShowContextButton = false;
+	RequirementCustomization->bShowLocalsButton = false;
 
 	TSharedPtr<IPropertyHandle> ReqHandle = PropertyHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(UScriptableCondition_NestedRequirement, Requirement));
 	if (ReqHandle.IsValid())
