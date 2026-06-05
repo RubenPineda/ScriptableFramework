@@ -83,6 +83,7 @@ protected:
 
 #if WITH_EDITOR
 	virtual FName GetContainerName() const override { return NAME_None; }
+	virtual const FInstancedPropertyBag* GetLocalsShape() const override { return &LocalsBagShape; }
 #endif
 	//~ End of UScriptableObjectAsset interface
 
@@ -90,6 +91,12 @@ private:
 	/** Backing bag holding the declared context shape. Values are not stored at asset level. */
 	UPROPERTY(Transient)
 	FInstancedPropertyBag ContextBag;
+
+#if WITH_EDITORONLY_DATA
+	/** Design-time mirror of Locals' shape used by binding discovery. Rebuilt on PostLoad and on every Locals edit. */
+	UPROPERTY(Transient)
+	FInstancedPropertyBag LocalsBagShape;
+#endif
 
 	/** Creates the Entry node if missing and registers its BindingID in EntryNodeID. */
 	void EnsureEntryNode();
@@ -100,24 +107,39 @@ private:
 	/** Rebuilds the transient ContextBag from the persisted Context array. Idempotent. */
 	void RebuildContextBag();
 
+#if WITH_EDITOR
+	/** Rebuilds LocalsBagShape from the persisted Locals array. Idempotent. */
+	void RebuildLocalsBagShape();
+#endif
+
 	/** Drops connections whose endpoint node or pin no longer exists; marks the package dirty if any were removed. Called from PostLoad. */
 	void PruneOrphanConnections();
 
 #if WITH_EDITORONLY_DATA
-	/** Snapshot of Context entry names taken at the last PostLoad / PostEditChange. Diffed on every edit to detect single-entry renames so binding paths can be redirected. Non-transient so transactions restore it on undo (otherwise rename → Ctrl-Z → rename-again would miss the redirect because the snapshot stayed at the first new name). */
+	/** Snapshot of Context entry names taken at the last PostLoad / PostEditChange. Diffed on every edit to detect single-entry renames so binding paths can be redirected. Non-transient so transactions restore it on undo (otherwise rename then Ctrl-Z then rename-again would miss the redirect because the snapshot stayed at the first new name). */
 	UPROPERTY()
 	TArray<FName> PreviousContextNames;
+
+	/** Parallel snapshot of Locals entry names, same semantics as PreviousContextNames. */
+	UPROPERTY()
+	TArray<FName> PreviousLocalsNames;
 #endif
 
 #if WITH_EDITOR
 	/** Mirrors PreviousContextNames to the current Context. */
 	void SnapshotContextNames();
 
+	/** Mirrors PreviousLocalsNames to the current Locals. */
+	void SnapshotLocalsNames();
+
 	/** Diffs PreviousContextNames against current Context; if exactly one entry's Name changed, redirects every Context binding referencing the old name. */
 	void DetectAndApplyContextRename();
 
-	/** Walks every binding holder owned by this graph (nodes + Task-wrappers' inner Tasks) and rewrites the first segment of each Context-bound path. */
-	void RedirectContextBindings(FName OldName, FName NewName);
+	/** Diffs PreviousLocalsNames against current Locals; on a single rename, redirects every Locals binding referencing the old name. */
+	void DetectAndApplyLocalsRename();
+
+	/** Walks every binding holder owned by this graph and rewrites the first segment of paths whose SourceID matches ExpectedSourceID. */
+	void RedirectBindings(const FGuid& ExpectedSourceID, FName OldName, FName NewName);
 #endif
 
 public:

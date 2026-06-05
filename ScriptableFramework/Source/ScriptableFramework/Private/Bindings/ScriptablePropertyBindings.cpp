@@ -3,6 +3,7 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingDataView.h"
 #include "ScriptableObject.h"
+#include "ScriptableRuntimeData.h"
 #include "StructUtils/PropertyBag.h"
 #include "UObject/StructOnScope.h"
 
@@ -324,6 +325,14 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 		ContextView = FPropertyBindingDataView(Context->GetPropertyBagStruct(), const_cast<FInstancedPropertyBag*>(Context)->GetMutableValue().GetMemory());
 	}
 
+	// Locals view: per-instance mutable bag from the host container; null if the container doesn't expose it.
+	FInstancedPropertyBag* Locals = TargetObject->GetMutableLocals();
+	FPropertyBindingDataView LocalsView;
+	if (Locals && Locals->IsValid())
+	{
+		LocalsView = FPropertyBindingDataView(Locals->GetPropertyBagStruct(), Locals->GetMutableValue().GetMemory());
+	}
+
 	// The Target View is always the object requesting the resolution
 	FPropertyBindingDataView TargetView(TargetObject);
 
@@ -331,10 +340,19 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 	{
 		// Determine the Source Data View (Who are we copying FROM?)
 		FPropertyBindingDataView SourceView;
-		if (Binding.SourceID.IsValid())
+		if (Binding.SourceID == ScriptableBindingSources::ContextStructID)
 		{
-			// CASE A: Sibling Binding
-			// Direct lookup via the injected map in TargetObject
+			// CASE A: Context Binding
+			SourceView = ContextView;
+		}
+		else if (Binding.SourceID == ScriptableBindingSources::LocalsStructID)
+		{
+			// CASE B: Locals Binding
+			SourceView = LocalsView;
+		}
+		else
+		{
+			// CASE C: Sibling Binding (Task-to-Task lookup via the injected map in TargetObject)
 			if (UScriptableObject* SourceObj = TargetObject->FindBindingSource(Binding.SourceID))
 			{
 				SourceView = FPropertyBindingDataView(SourceObj);
@@ -344,11 +362,6 @@ void FScriptablePropertyBindings::ResolveBindings(UScriptableObject* TargetObjec
 				// Source object not found (e.g., was deleted or not loaded yet). Skip binding.
 				continue;
 			}
-		}
-		else
-		{
-			// CASE B: Context Binding
-			SourceView = ContextView;
 		}
 
 		// Perform the Copy

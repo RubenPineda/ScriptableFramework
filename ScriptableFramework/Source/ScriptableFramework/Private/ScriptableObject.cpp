@@ -3,6 +3,7 @@
 #include "ScriptableObject.h"
 #include "ScriptableContainer.h"
 #include "ScriptablePropertyUtilities.h"
+#include "ScriptableRuntimeData.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Misc/SecureHash.h"
@@ -500,18 +501,22 @@ FName FScriptableObjectTickFunction::DiagnosticContext(bool bDetailed)
 //  Data Binding & Context
 // -------------------------------------------------------------------
 
-void UScriptableObject::InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap)
+void UScriptableObject::InitRuntimeData(const FScriptableRuntimeData& InData)
 {
-	ContextRef = InContext;
-	BindingsMapRef = InBindingMap;
+	ContextRef = InData.Context;
+	LocalsRef = InData.Locals;
+	BindingsMapRef = InData.BindingsMap;
 }
 
 void UScriptableObject::PropagateRuntimeData(UScriptableObject* Child) const
 {
-	if (Child)
-	{
-		Child->InitRuntimeData(ContextRef, BindingsMapRef);
-	}
+	if (!Child) return;
+
+	FScriptableRuntimeData Data;
+	Data.Context = ContextRef;
+	Data.Locals = LocalsRef;
+	Data.BindingsMap = BindingsMapRef;
+	Child->InitRuntimeData(Data);
 }
 
 void UScriptableObject::ResolveBindings()

@@ -3,6 +3,7 @@
 #include "ScriptableContainer.h"
 #include "ScriptableContext.h"
 #include "ScriptableObject.h"
+#include "ScriptableRuntimeData.h"
 #include "ScriptablePropertyUtilities.h"
 #include "Core/KzBagOps.h"
 #include "UObject/UnrealType.h"
@@ -104,8 +105,11 @@ void FScriptableContainer::AddBindingSource(UScriptableObject* InSource)
 			ContextToUse = ScriptableOwner->GetContext();
 		}
 
-		// 2. Inject Data
-		InSource->InitRuntimeData(ContextToUse, &BindingSourceMap);
+		// 2. Inject Data. FScriptableAction-style containers don't expose Locals yet, so Locals stays null.
+		FScriptableRuntimeData Data;
+		Data.Context = ContextToUse;
+		Data.BindingsMap = &BindingSourceMap;
+		InSource->InitRuntimeData(Data);
 
 		FGuid ID = InSource->GetBindingID();
 		if (ID.IsValid())

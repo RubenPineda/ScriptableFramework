@@ -130,8 +130,8 @@ public:
 	/** Returns the persistent binding ID. */
 	FGuid GetBindingID() const { return BindingID; }
 
-	/** Injects the shared data from the owning container. */
-	virtual void InitRuntimeData(const FInstancedPropertyBag* InContext, const TMap<FGuid, TObjectPtr<UScriptableObject>>* InBindingMap);
+	/** Injects the shared data from the owning container (context, locals, binding source map). */
+	virtual void InitRuntimeData(const struct FScriptableRuntimeData& InData);
 
 	/** Propagates the runtime data to a child object. */
 	void PropagateRuntimeData(UScriptableObject* Child) const;
@@ -140,6 +140,10 @@ public:
 	void ResolveBindings();
 
 	const FInstancedPropertyBag* GetContext() const { return ContextRef; }
+
+	/** Mutable per-instance state bag (graph-scoped variables). Null when the host container doesn't expose locals. */
+	const FInstancedPropertyBag* GetLocals() const { return LocalsRef; }
+	FInstancedPropertyBag* GetMutableLocals() { return LocalsRef; }
 
 	/** Finds a registered task by its persistent ID. */
 	UScriptableObject* FindBindingSource(const FGuid& InID);
@@ -172,6 +176,9 @@ protected:
 private:
 	/** Input data (Context) available for this object and its children. */
 	const FInstancedPropertyBag* ContextRef = nullptr;
+
+	/** Mutable per-instance Locals available for this object and its children. */
+	FInstancedPropertyBag* LocalsRef = nullptr;
 
 	/** Reference to the Action's Binding Source Map. */
 	const TMap<FGuid, TObjectPtr<UScriptableObject>>* BindingsMapRef = nullptr;

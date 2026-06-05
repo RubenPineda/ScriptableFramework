@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Core/KzParamDef.h"
+#include "Core/KzNamedVariant.h"
 #include "ScriptableObjectAsset.generated.h"
 
 /**
@@ -33,7 +34,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config")
 	TArray<FKzParamDef> Context;
 
+	/** Per-instance mutable state. Graph-scoped variables seeded with each entry's default value at Launch. */
+	UPROPERTY(EditAnywhere, Category = "Local Variables")
+	TArray<FKzNamedVariant> Locals;
+
 	virtual FInstancedPropertyBag* GetContext() PURE_VIRTUAL(UScriptableObjectAsset::GetContext(), return nullptr;)
+
+#if WITH_EDITOR
+	/** Returns the cached design-time shape of the Locals bag, or null when the subclass doesn't expose Locals yet. */
+	virtual const FInstancedPropertyBag* GetLocalsShape() const { return nullptr; }
+#endif
 
 protected:
 #if WITH_EDITOR

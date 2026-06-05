@@ -141,6 +141,10 @@ private:
 	UPROPERTY(Transient)
 	FInstancedPropertyBag Context;
 
+	/** Per-instance mutable state bag. Shape comes from Asset->Locals; initial values from each FKzNamedVariant. Written by Set Local-style tasks. */
+	UPROPERTY(Transient)
+	FInstancedPropertyBag LocalsBag;
+
 	/** Output -> Inputs lookup built once in Launch. Iterated when a node fires an output. */
 	TMultiMap<FScriptableGraphPinRef, FScriptableGraphPinRef> OutputToInputs;
 

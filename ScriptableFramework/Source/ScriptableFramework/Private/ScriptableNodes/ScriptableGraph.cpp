@@ -9,6 +9,7 @@
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "ScriptableRuntimeData.h"
 #include "Core/KzBagOps.h"
 
 #if WITH_EDITOR
@@ -52,6 +53,8 @@ void UScriptableGraph::PostLoad()
 
 #if WITH_EDITOR
 	SnapshotContextNames();
+	SnapshotLocalsNames();
+	RebuildLocalsBagShape();
 	OnPostLoaded.Broadcast(this);
 #endif
 }
@@ -62,12 +65,20 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	const FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
 
 	// The base class only refreshes the bag when the property name matches GetContainerName(). For the graph,
 	// the declared context lives directly on the inherited Context array, so refresh whenever it is edited.
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
 	{
 		RebuildContextBag();
+	}
+
+	// Same idea for Locals: customizations on the inner FKzNamedVariant may route through PostEditChangeProperty
+	// instead of the chain variant depending on the path, so we cover both.
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals))
+	{
+		RebuildLocalsBagShape();
 	}
 }
 
@@ -76,12 +87,42 @@ void UScriptableGraph::PostEditChangeChainProperty(FPropertyChangedChainEvent& P
 	Super::PostEditChangeChainProperty(PropertyChangedEvent);
 
 	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
-	if (MemberName != GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context)) return;
 
-	// Rename detection has to run BEFORE the snapshot refresh
-	DetectAndApplyContextRename();
-	SnapshotContextNames();
-	RebuildContextBag();
+	if (MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
+	{
+		// Rename detection has to run BEFORE the snapshot refresh
+		DetectAndApplyContextRename();
+		SnapshotContextNames();
+		RebuildContextBag();
+		return;
+	}
+
+	if (MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals))
+	{
+		DetectAndApplyLocalsRename();
+		SnapshotLocalsNames();
+		RebuildLocalsBagShape();
+		return;
+	}
+}
+
+void UScriptableGraph::RebuildLocalsBagShape()
+{
+	LocalsBagShape.Reset();
+	if (Locals.IsEmpty()) return;
+
+	TArray<FPropertyBagPropertyDesc> Descs;
+	Descs.Reserve(Locals.Num());
+	for (const FKzNamedVariant& Var : Locals)
+	{
+		// IsValid checks both Name (non-None) and Value.Type (non-None). Half-configured entries get skipped.
+		if (!Var.IsValid()) continue;
+		Descs.Add(Var.ToPropertyDesc());
+	}
+	if (Descs.Num() > 0)
+	{
+		LocalsBagShape.AddProperties(Descs);
+	}
 }
 
 void UScriptableGraph::SnapshotContextNames()
@@ -116,20 +157,20 @@ void UScriptableGraph::DetectAndApplyContextRename()
 	const FName NewName = Context[DiffIndex].Name;
 	if (OldName.IsNone() || NewName.IsNone() || OldName == NewName) return;
 
-	RedirectContextBindings(OldName, NewName);
+	RedirectBindings(ScriptableBindingSources::ContextStructID, OldName, NewName);
 }
 
 namespace
 {
-	/** Rewrites the first segment of every Context-bound path on a single holder. */
-	void RedirectInHolder(UScriptableObject* Holder, FName OldName, FName NewName)
+	/** Rewrites the first segment of paths whose SourceID matches the expected one. Context uses an empty FGuid, Locals uses ScriptableBindingSources::LocalsStructID. */
+	void RedirectInHolder(UScriptableObject* Holder, const FGuid& ExpectedSourceID, FName OldName, FName NewName)
 	{
 		if (!Holder) return;
 		FScriptablePropertyBindings& Bindings = Holder->GetPropertyBindings();
 		bool bAnyChanged = false;
 		for (FScriptablePropertyBinding& B : Bindings.Bindings)
 		{
-			if (B.SourceID.IsValid()) continue;
+			if (B.SourceID != ExpectedSourceID) continue;
 			TArrayView<FPropertyBindingPathSegment> Segments = B.SourcePath.GetMutableSegments();
 			if (Segments.Num() > 0 && Segments[0].GetName() == OldName)
 			{
@@ -141,19 +182,52 @@ namespace
 	}
 }
 
-void UScriptableGraph::RedirectContextBindings(FName OldName, FName NewName)
+void UScriptableGraph::RedirectBindings(const FGuid& ExpectedSourceID, FName OldName, FName NewName)
 {
 	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
 	{
 		if (!Node) continue;
-		RedirectInHolder(Node, OldName, NewName);
+		RedirectInHolder(Node, ExpectedSourceID, OldName, NewName);
 
-		/** Task wrappers expose Task-level bindings on the inner UScriptableTask — those reference the graph's Context too. */
+		// Task wrappers expose Task-level bindings on the inner UScriptableTask; those reference the same sources.
 		if (UScriptableNode_Task* TaskWrapper = Cast<UScriptableNode_Task>(Node))
 		{
-			RedirectInHolder(TaskWrapper->Task, OldName, NewName);
+			RedirectInHolder(TaskWrapper->Task, ExpectedSourceID, OldName, NewName);
 		}
 	}
+}
+
+void UScriptableGraph::SnapshotLocalsNames()
+{
+	PreviousLocalsNames.Reset();
+	PreviousLocalsNames.Reserve(Locals.Num());
+	for (const FKzNamedVariant& Var : Locals)
+	{
+		PreviousLocalsNames.Add(Var.GetName());
+	}
+}
+
+void UScriptableGraph::DetectAndApplyLocalsRename()
+{
+	if (Locals.Num() != PreviousLocalsNames.Num()) return;
+
+	int32 DiffIndex = INDEX_NONE;
+	int32 DiffCount = 0;
+	for (int32 i = 0; i < Locals.Num(); ++i)
+	{
+		if (Locals[i].GetName() != PreviousLocalsNames[i])
+		{
+			DiffIndex = i;
+			++DiffCount;
+		}
+	}
+	if (DiffCount != 1 || DiffIndex == INDEX_NONE) return;
+
+	const FName OldName = PreviousLocalsNames[DiffIndex];
+	const FName NewName = Locals[DiffIndex].GetName();
+	if (OldName.IsNone() || NewName.IsNone() || OldName == NewName) return;
+
+	RedirectBindings(ScriptableBindingSources::LocalsStructID, OldName, NewName);
 }
 #endif
 
@@ -227,8 +301,9 @@ void UScriptableGraph::PruneOrphanConnections()
 			UScriptableNode* const* Found = NodesByGuid.Find(Ref.NodeID);
 			if (!Found || !*Found) return false;
 			const UScriptableNode* Node = *Found;
-			/** SubGraph's pin set is driven by a foreign asset; keeping connections to vanished pins (rather than
-			 * silently dropping them) lets the editor render them as orphans on reload so the user can decide. */
+
+			// SubGraph's pin set is driven by a foreign asset; keeping connections to vanished
+			// pins lets the editor render them as orphans on reload so the user can decide.
 			if (Node->IsA<UScriptableNode_SubGraph>()) return true;
 			const TArray<FName> Pins = bExpectOutput ? Node->GetOutputPins() : Node->GetInputPins();
 			return Pins.Contains(Ref.PinName);

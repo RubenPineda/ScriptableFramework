@@ -3,6 +3,7 @@
 #include "ScriptablePropertyUtilities.h"
 #include "ScriptableObject.h"
 #include "ScriptableObjectAsset.h"
+#include "ScriptableRuntimeData.h"
 #include "ScriptableContainer.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
@@ -388,7 +389,7 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 				FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 				ContextDesc.Name = FName(TEXT("Context"));
 				ContextDesc.Struct = Bag.GetPropertyBagStruct();
-				ContextDesc.ID = FGuid(); // Use an empty GUID for Context, just like the UI
+				ContextDesc.ID = ScriptableBindingSources::ContextStructID;
 
 				bFoundContext = true;
 				break;
@@ -406,12 +407,27 @@ void FScriptablePropertyUtilities::GatherAccessibleStructs(const UScriptableObje
 					FPropertyBindingBindableStructDescriptor& ContextDesc = OutStructDescs.AddDefaulted_GetRef();
 					ContextDesc.Name = FName(TEXT("Context"));
 					ContextDesc.Struct = AssetContext->GetPropertyBagStruct();
-					ContextDesc.ID = FGuid();
+					ContextDesc.ID = ScriptableBindingSources::ContextStructID;
 
 					bFoundContext = true;
-					break;
 				}
 			}
+
+			bool bFoundLocals = false;
+			if (const FInstancedPropertyBag* LocalsShape = Asset->GetLocalsShape())
+			{
+				if (LocalsShape->IsValid() && LocalsShape->GetNumPropertiesInBag() > 0)
+				{
+					FPropertyBindingBindableStructDescriptor& LocalsDesc = OutStructDescs.AddDefaulted_GetRef();
+					LocalsDesc.Name = FName(TEXT("Locals"));
+					LocalsDesc.Struct = LocalsShape->GetPropertyBagStruct();
+					LocalsDesc.ID = ScriptableBindingSources::LocalsStructID;
+					bFoundLocals = true;
+				}
+			}
+
+			// Stop at the first asset hit so we don't accidentally publish two Locals sources (same StructID would be ambiguous).
+			if (bFoundContext || bFoundLocals) break;
 		}
 
 		// Move up to the next parent in the hierarchy

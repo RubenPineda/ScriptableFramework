@@ -9,6 +9,9 @@
 #include "ScriptableNodes/ScriptableGraphSubsystem.h"
 #include "ScriptableContext.h"
 #include "ScriptableObject.h"
+#include "ScriptableObjectAsset.h"
+#include "ScriptableRuntimeData.h"
+#include "Core/KzNamedVariant.h"
 
 void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwner, const FScriptableContext& InContext, FName InId)
 {
@@ -36,6 +39,28 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 
 	// Populate the runtime context bag with the values from the external context.
 	Context.MigrateToNewBagInstance(InContext.GetBag());
+
+	// Build the per-instance Locals bag from the asset's declared variables.
+	LocalsBag.Reset();
+	if (!Asset->Locals.IsEmpty())
+	{
+		TArray<FPropertyBagPropertyDesc> Descs;
+		Descs.Reserve(Asset->Locals.Num());
+		for (const FKzNamedVariant& Var : Asset->Locals)
+		{
+			if (!Var.IsValid()) continue;
+			Descs.Add(Var.ToPropertyDesc());
+		}
+		if (Descs.Num() > 0)
+		{
+			LocalsBag.AddProperties(Descs);
+			for (const FKzNamedVariant& Var : Asset->Locals)
+			{
+				if (!Var.IsValid()) continue;
+				Var.WriteToBag(LocalsBag);
+			}
+		}
+	}
 
 	// Deep-copy every node from the asset. Parent to this runner so they share its lifetime.
 	Nodes.Reserve(Asset->Nodes.Num());
@@ -75,6 +100,11 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 	}
 
 	// Wire runtime data and subscribe to every node's pin/inactive notifications.
+	FScriptableRuntimeData RuntimeData;
+	RuntimeData.Context = &Context;
+	RuntimeData.Locals = &LocalsBag;
+	RuntimeData.BindingsMap = &NodeBindingMap;
+
 	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
 	{
 		if (!Node) continue;
@@ -82,7 +112,7 @@ void UScriptableGraphInstance::Launch(UScriptableGraph* InAsset, UObject* InOwne
 		// Nodes resolve against the graph context and, via NodeBindingMap, against other nodes' Outputs.
 		// Cross-node reads resolve at activation time (UScriptableTask::Begin), so an Output is already
 		// populated when a downstream node reads it; ordering across event paths is the author's concern.
-		Node->InitRuntimeData(&Context, &NodeBindingMap);
+		Node->InitRuntimeData(RuntimeData);
 		Node->Register(Owner);
 
 		Node->OnPinFiredNative.AddUObject(this, &UScriptableGraphInstance::HandleNodePinFired);
