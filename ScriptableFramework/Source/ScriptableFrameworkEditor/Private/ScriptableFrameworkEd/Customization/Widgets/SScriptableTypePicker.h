@@ -140,7 +140,7 @@ private:
 
 	TSharedRef<ITableRow> GenerateNodeTypeRow(TSharedPtr<FScriptableTypeItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem> Item, TArray<TSharedPtr<FScriptableTypeItem>>& OutItems) const;
-	void OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type);
+	void OnNodeTypeMouseClick(TSharedPtr<FScriptableTypeItem> ClickedItem);
 
 	/** Commits the currently-selected (non-category) item via OnNodeTypePicked, if any. */
 	void CommitSelection();

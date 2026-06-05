@@ -81,7 +81,7 @@ void SScriptableTypeSelector::Construct(const FArguments& InArgs)
 		.TreeItemsSource(&FilteredRootNode->Children)
 		.OnGenerateRow(this, &SScriptableTypeSelector::GenerateNodeTypeRow)
 		.OnGetChildren(this, &SScriptableTypeSelector::GetNodeTypeChildren)
-		.OnSelectionChanged(this, &SScriptableTypeSelector::OnNodeTypeSelected)
+		.OnMouseButtonClick(this, &SScriptableTypeSelector::OnNodeTypeMouseClick)
 		.OnKeyDownHandler(this, &SScriptableTypeSelector::OnTreeKeyDown)
 		.OnExpansionChanged(this, &SScriptableTypeSelector::OnNodeTypeExpansionChanged);
 
@@ -761,18 +761,14 @@ void SScriptableTypeSelector::GetNodeTypeChildren(TSharedPtr<FScriptableTypeItem
 	}
 }
 
-void SScriptableTypeSelector::OnNodeTypeSelected(TSharedPtr<FScriptableTypeItem> SelectedItem, ESelectInfo::Type Type)
+void SScriptableTypeSelector::OnNodeTypeMouseClick(TSharedPtr<FScriptableTypeItem> ClickedItem)
 {
-	// Only a mouse click commits. Keyboard navigation (OnNavigation) just moves the highlight — Enter
-	// commits via OnTreeKeyDown. Direct (code-driven) selection never commits.
-	if (Type != ESelectInfo::OnMouseClick || !SelectedItem.IsValid())
+	// Per-click commit. OnSelectionChanged misses the case where the user clicks an item that's
+	// already selected (e.g. the search-driven auto-highlight), so we hook the row click directly.
+	if (!ClickedItem.IsValid() || ClickedItem->IsCategory()) return;
+	if (OnNodeTypePicked.IsBound())
 	{
-		return;
-	}
-
-	if (!SelectedItem->IsCategory() && OnNodeTypePicked.IsBound())
-	{
-		OnNodeTypePicked.Execute(SelectedItem->Struct, SelectedItem->AssetData);
+		OnNodeTypePicked.Execute(ClickedItem->Struct, ClickedItem->AssetData);
 	}
 }
 
