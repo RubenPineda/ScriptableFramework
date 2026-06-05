@@ -88,6 +88,9 @@ private:
 	/** Handler for the Locals button click. Opens a structure view filtered to LocalsDefinitions. */
 	FReply OnEditLocalsClicked();
 
+	/** Walks each Instanced UScriptableObject-array field of the container's concrete struct (Action.Tasks / Requirement.Conditions / ...) and rewrites bindings whose SourceID matches and whose first path segment matches OldName. Also rewrites Set Local VarName when applicable. Recurses into nested container struct members (NestedAction's Action / NestedRequirement's Requirement) so inner scopes inherit the redirect. */
+	void RedirectBindingsInContainer(struct FScriptableContainer* Container, const class UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName) const;
+
 	/** Callback from Picker. */
 	void OnTypePicked(const UStruct* InStruct, const struct FAssetData& AssetData);
 

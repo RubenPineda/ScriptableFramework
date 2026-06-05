@@ -8,8 +8,14 @@
 #include "ScriptableContainer.h"
 #include "ScriptableObject.h"
 #include "ScriptableObjectAsset.h"
+#include "ScriptableRuntimeData.h"
 #include "ScriptableNodes/ScriptableNode.h"
+#include "ScriptableTasks/ScriptableTask_SetLocal.h"
+#include "Bindings/ScriptablePropertyBindings.h"
+#include "Core/KzParamDef.h"
+#include "Core/KzNamedVariant.h"
 #include "UObject/UObjectIterator.h"
+#include "UObject/UnrealType.h"
 
 #include "DetailLayoutBuilder.h"
 #include "DetailWidgetRow.h"
@@ -264,6 +270,74 @@ FReply FScriptableContainerCustomization::OnModeClicked()
 	return FReply::Handled();
 }
 
+void FScriptableContainerCustomization::RedirectBindingsInContainer(FScriptableContainer* Container, const UScriptStruct* ConcreteStruct, const FGuid& ExpectedSourceID, FName OldName, FName NewName) const
+{
+	if (!Container || !ConcreteStruct) return;
+
+	const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
+
+	for (TFieldIterator<FArrayProperty> It(ConcreteStruct); It; ++It)
+	{
+		FArrayProperty* ArrayProp = *It;
+		FObjectProperty* InnerObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
+		if (!InnerObjProp || !InnerObjProp->PropertyClass->IsChildOf(UScriptableObject::StaticClass())) continue;
+
+		FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Container));
+		for (int32 i = 0; i < Helper.Num(); ++i)
+		{
+			UObject* Obj = InnerObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i));
+			UScriptableObject* SO = Cast<UScriptableObject>(Obj);
+			if (!SO) continue;
+
+			FScriptablePropertyBindings& Bindings = SO->GetPropertyBindings();
+			bool bAnyBindingChanged = false;
+			for (FScriptablePropertyBinding& B : Bindings.Bindings)
+			{
+				if (B.SourceID != ExpectedSourceID) continue;
+				TArrayView<FPropertyBindingPathSegment> Segments = B.SourcePath.GetMutableSegments();
+				if (Segments.Num() > 0 && Segments[0].GetName() == OldName)
+				{
+					Segments[0].SetName(NewName);
+					bAnyBindingChanged = true;
+				}
+			}
+			if (bAnyBindingChanged) SO->Modify();
+
+			// Direct VarName refs on Set Local. Locals rename only — Context rename never targets this field.
+			if (ExpectedSourceID == ScriptableBindingSources::LocalsStructID)
+			{
+				if (UScriptableTask_SetLocal* SetLocal = Cast<UScriptableTask_SetLocal>(SO))
+				{
+					if (SetLocal->VarName == OldName)
+					{
+						SetLocal->Modify();
+						SetLocal->VarName = NewName;
+					}
+				}
+			}
+
+			// Recurse into nested container struct members (e.g. NestedAction's Action / NestedRequirement's Requirement).
+			// A nested unit that declares its own LocalsDefinitions is an isolated scope: skip it on Locals renames
+			// to avoid rewriting bindings that resolve to the inner bag. Context renames always propagate.
+			for (TFieldIterator<FStructProperty> StructIt(SO->GetClass()); StructIt; ++StructIt)
+			{
+				FStructProperty* StructProp = *StructIt;
+				if (!StructProp->Struct->IsChildOf(BaseContainerStruct)) continue;
+
+				FScriptableContainer* NestedContainer = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(SO);
+				if (!NestedContainer) continue;
+
+				if (ExpectedSourceID == ScriptableBindingSources::LocalsStructID && NestedContainer->LocalsDefinitions.Num() > 0)
+				{
+					continue;
+				}
+
+				RedirectBindingsInContainer(NestedContainer, StructProp->Struct, ExpectedSourceID, OldName, NewName);
+			}
+		}
+	}
+}
+
 EVisibility FScriptableContainerCustomization::GetLocalsButtonVisibility() const
 {
 	if (!bShowLocalsButton) return EVisibility::Collapsed;
@@ -401,10 +475,40 @@ FReply FScriptableContainerCustomization::OnEditContextClicked()
 				return false;
 			}));
 
-		// Callback: Reconstruct Bag on Change + cascade re-bake to nested tasks.
-		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda([ContainerInstance, this](const FPropertyChangedEvent& Event)
+		// Snapshot the current Context name set so single-entry renames can be detected when the popup commits edits.
+		TSet<FName> ContextNameSnapshot;
+		for (const FKzParamDef& Def : ContainerInstance->ContextDefinitions)
+		{
+			if (!Def.Name.IsNone()) ContextNameSnapshot.Add(Def.Name);
+		}
+
+		// Callback: Detect rename, Reconstruct Bag on Change + cascade re-bake to nested tasks.
+		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda(
+			[ContainerInstance, this, ContextNameSnapshot = MoveTemp(ContextNameSnapshot)](const FPropertyChangedEvent& Event) mutable
 			{
 				if (!ContainerInstance) return;
+
+				// Set-diff: TSet iteration order isn't reliable so we compare name sets, not indices. A single
+				// rename shows as exactly one added + one removed; anything else (add, remove, multi-edit)
+				// skips the redirect and is cleaned up via SanitizeObsoleteBindings.
+				TSet<FName> CurrentNames;
+				for (const FKzParamDef& Def : ContainerInstance->ContextDefinitions)
+				{
+					if (!Def.Name.IsNone()) CurrentNames.Add(Def.Name);
+				}
+				const TSet<FName> Removed = ContextNameSnapshot.Difference(CurrentNames);
+				const TSet<FName> Added = CurrentNames.Difference(ContextNameSnapshot);
+				if (Removed.Num() == 1 && Added.Num() == 1)
+				{
+					const FName OldName = *Removed.CreateConstIterator();
+					const FName NewName = *Added.CreateConstIterator();
+					if (!OldName.IsNone() && !NewName.IsNone() && OldName != NewName)
+					{
+						const FStructProperty* RootStructProp = StructHandle.IsValid() ? CastField<FStructProperty>(StructHandle->GetProperty()) : nullptr;
+						RedirectBindingsInContainer(ContainerInstance, RootStructProp ? RootStructProp->Struct : nullptr, ScriptableBindingSources::ContextStructID, OldName, NewName);
+					}
+				}
+				ContextNameSnapshot = MoveTemp(CurrentNames);
 
 				StructHandle->NotifyPreChange();
 
@@ -503,10 +607,37 @@ FReply FScriptableContainerCustomization::OnEditLocalsClicked()
 				return false;
 			}));
 
-		// Mirror Context's flow: rebuild the runtime bag + re-bake nested binding caches on every edit.
-		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda([ContainerInstance, this](const FPropertyChangedEvent& Event)
+		// Snapshot Locals name set so single-entry renames can be detected when the popup commits edits.
+		TSet<FName> LocalsNameSnapshot;
+		for (const FKzNamedVariant& Var : ContainerInstance->LocalsDefinitions)
+		{
+			if (!Var.GetName().IsNone()) LocalsNameSnapshot.Add(Var.GetName());
+		}
+
+		// Mirror Context's flow: detect rename, rebuild the runtime bag, re-bake nested binding caches.
+		StructureView->GetOnFinishedChangingPropertiesDelegate().AddLambda(
+			[ContainerInstance, this, LocalsNameSnapshot = MoveTemp(LocalsNameSnapshot)](const FPropertyChangedEvent& Event) mutable
 			{
 				if (!ContainerInstance) return;
+
+				TSet<FName> CurrentNames;
+				for (const FKzNamedVariant& Var : ContainerInstance->LocalsDefinitions)
+				{
+					if (!Var.GetName().IsNone()) CurrentNames.Add(Var.GetName());
+				}
+				const TSet<FName> Removed = LocalsNameSnapshot.Difference(CurrentNames);
+				const TSet<FName> Added = CurrentNames.Difference(LocalsNameSnapshot);
+				if (Removed.Num() == 1 && Added.Num() == 1)
+				{
+					const FName OldName = *Removed.CreateConstIterator();
+					const FName NewName = *Added.CreateConstIterator();
+					if (!OldName.IsNone() && !NewName.IsNone() && OldName != NewName)
+					{
+						const FStructProperty* RootStructProp = StructHandle.IsValid() ? CastField<FStructProperty>(StructHandle->GetProperty()) : nullptr;
+						RedirectBindingsInContainer(ContainerInstance, RootStructProp ? RootStructProp->Struct : nullptr, ScriptableBindingSources::LocalsStructID, OldName, NewName);
+					}
+				}
+				LocalsNameSnapshot = MoveTemp(CurrentNames);
 
 				StructHandle->NotifyPreChange();
 
