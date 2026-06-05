@@ -79,9 +79,10 @@ void UScriptableObject::BakeAutoBindings()
 		return;
 	}
 
-	// We allow Archetypes because objects edited inside a Blueprint Editor ARE Archetypes.
-	// We only skip the pure C++ Class Default Object (CDO) to save useless processing.
-	if (HasAnyFlags(RF_ClassDefaultObject) && !GetClass()->HasAnyClassFlags(CLASS_CompiledFromBlueprint))
+	// Only bake on templates (CDOs + archetype subobjects). Level / runtime instances inherit
+	// bindings from the archetype; baking here would clear them and re-write a potentially
+	// divergent result against an instance-scope context.
+	if (!IsTemplate())
 	{
 		return;
 	}
