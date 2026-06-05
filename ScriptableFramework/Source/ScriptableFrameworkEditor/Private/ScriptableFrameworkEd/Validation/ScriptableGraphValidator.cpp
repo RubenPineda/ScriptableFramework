@@ -11,6 +11,8 @@
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
 #include "ScriptableTasks/ScriptableTask_RunGraph.h"
+#include "ScriptableTasks/ScriptableTask_SetLocal.h"
+#include "Core/KzNamedVariant.h"
 #include "ScopedTransaction.h"
 
 #define LOCTEXT_NAMESPACE "ScriptableGraphValidator"
@@ -589,6 +591,58 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 				F->PostEditChange();
 			};
 			OutIssues.Add(MoveTemp(Issue));
+		}
+	}
+
+	// --- Set Local tasks: VarName must reference an existing entry in Asset->Locals. Empty VarName warns
+	// (probably mid-edit); orphan VarName errors with a Clear quick-fix (silently no-ops at runtime otherwise). ---
+	{
+		TSet<FName> DeclaredLocals;
+		for (const FKzNamedVariant& Var : Graph->Locals)
+		{
+			if (!Var.GetName().IsNone()) DeclaredLocals.Add(Var.GetName());
+		}
+
+		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
+		{
+			const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(Node);
+			if (!TaskNode) continue;
+
+			const UScriptableTask_SetLocal* SetLocal = Cast<UScriptableTask_SetLocal>(TaskNode->Task);
+			if (!SetLocal) continue;
+
+			const FGuid Id = Node->GetBindingID();
+
+			if (SetLocal->VarName.IsNone())
+			{
+				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Warning,
+					FText::Format(LOCTEXT("SetLocalUnset", "Set Local node '{0}' has no VarName set and will no-op at runtime."),
+						FText::FromString(GetNodeLabel(Node))),
+					GValidatorId, Id));
+				continue;
+			}
+
+			if (!DeclaredLocals.Contains(SetLocal->VarName))
+			{
+				FKzValidationIssue Issue = FKzValidationIssue::WithContextId(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("SetLocalOrphan", "Set Local node '{0}' targets '{1}', which is not declared in Locals."),
+						FText::FromString(GetNodeLabel(Node)), FText::FromName(SetLocal->VarName)),
+					GValidatorId, Id);
+
+				TWeakObjectPtr<UScriptableTask_SetLocal> WeakSetLocal(const_cast<UScriptableTask_SetLocal*>(SetLocal));
+				Issue.QuickFixLabel = LOCTEXT("ClearOrphan", "Clear");
+				Issue.QuickFix = [WeakSetLocal]()
+				{
+					UScriptableTask_SetLocal* S = WeakSetLocal.Get();
+					if (!S) return;
+					const FScopedTransaction Tx(LOCTEXT("QF_ClearSetLocalOrphan", "Clear orphan Set Local VarName"));
+					S->Modify();
+					S->VarName = NAME_None;
+					// PostEditChange runs the task's hook to reset Value (no matching local found).
+					S->PostEditChange();
+				};
+				OutIssues.Add(MoveTemp(Issue));
+			}
 		}
 	}
 }
