@@ -68,7 +68,6 @@ public:
 	virtual void PostLoad() override;
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-	virtual void PostEditChangeChainProperty(struct FPropertyChangedChainEvent& PropertyChangedEvent) override;
 #endif
 	//~ End of UObject interface
 
@@ -140,6 +139,9 @@ private:
 
 	/** Walks every binding holder owned by this graph and rewrites the first segment of paths whose SourceID matches ExpectedSourceID. */
 	void RedirectBindings(const FGuid& ExpectedSourceID, FName OldName, FName NewName);
+
+	/** Walks every Set Local task in this graph and rewrites VarName when it matches OldName. */
+	void RedirectSetLocalVarNames(FName OldName, FName NewName);
 #endif
 
 public:

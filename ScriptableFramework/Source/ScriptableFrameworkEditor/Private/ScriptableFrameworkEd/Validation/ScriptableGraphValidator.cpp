@@ -594,6 +594,110 @@ void UScriptableGraphValidator::Validate_Implementation(const UObject* Asset, TA
 		}
 	}
 
+	// --- Context: no entries with empty Name or invalid Type. Both leave the runtime bag without a usable
+	// slot for that param and silently break bindings that target it. ---
+	{
+		TWeakObjectPtr<UScriptableGraph> WeakGraph(const_cast<UScriptableGraph*>(Graph));
+		auto MakeRemoveContextFix = [WeakGraph](int32 IndexToRemove) -> TFunction<void()>
+		{
+			return [WeakGraph, IndexToRemove]()
+			{
+				UScriptableGraph* G = WeakGraph.Get();
+				if (!G || !G->Context.IsValidIndex(IndexToRemove)) return;
+				const FScopedTransaction Tx(LOCTEXT("QF_RemoveContextEntry", "Remove Context entry"));
+				G->Modify();
+				G->Context.RemoveAt(IndexToRemove);
+				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableObjectAsset::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context)))
+				{
+					FPropertyChangedEvent Event(Prop, EPropertyChangeType::ArrayRemove);
+					G->PostEditChangeProperty(Event);
+				}
+				else
+				{
+					G->PostEditChange();
+				}
+			};
+		};
+
+		for (int32 Index = 0; Index < Graph->Context.Num(); ++Index)
+		{
+			const FKzParamDef& Entry = Graph->Context[Index];
+
+			if (Entry.Name.IsNone())
+			{
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("ContextNoneName", "Context entry #{0} has no Name set."), Index),
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("RemoveEntry", "Remove");
+				Issue.QuickFix = MakeRemoveContextFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
+				continue;
+			}
+
+			if (!Entry.Type.IsValid())
+			{
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("ContextInvalidType", "Context entry '{0}' has no Type set."), FText::FromName(Entry.Name)),
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("RemoveEntry", "Remove");
+				Issue.QuickFix = MakeRemoveContextFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
+			}
+		}
+	}
+
+	// --- Locals: parallel checks to Context. Empty Name or invalid (None) Type leave SetLocal tasks unable
+	// to write a real slot at runtime, and the binding picker won't list the entry as a source. ---
+	{
+		TWeakObjectPtr<UScriptableGraph> WeakGraph(const_cast<UScriptableGraph*>(Graph));
+		auto MakeRemoveLocalFix = [WeakGraph](int32 IndexToRemove) -> TFunction<void()>
+		{
+			return [WeakGraph, IndexToRemove]()
+			{
+				UScriptableGraph* G = WeakGraph.Get();
+				if (!G || !G->Locals.IsValidIndex(IndexToRemove)) return;
+				const FScopedTransaction Tx(LOCTEXT("QF_RemoveLocalEntry", "Remove Locals entry"));
+				G->Modify();
+				G->Locals.RemoveAt(IndexToRemove);
+				if (FProperty* Prop = FindFProperty<FProperty>(UScriptableObjectAsset::StaticClass(), GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals)))
+				{
+					FPropertyChangedEvent Event(Prop, EPropertyChangeType::ArrayRemove);
+					G->PostEditChangeProperty(Event);
+				}
+				else
+				{
+					G->PostEditChange();
+				}
+			};
+		};
+
+		for (int32 Index = 0; Index < Graph->Locals.Num(); ++Index)
+		{
+			const FKzNamedVariant& Entry = Graph->Locals[Index];
+
+			if (Entry.GetName().IsNone())
+			{
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("LocalNoneName", "Locals entry #{0} has no Name set."), Index),
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("RemoveEntry", "Remove");
+				Issue.QuickFix = MakeRemoveLocalFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
+				continue;
+			}
+
+			if (!Entry.GetValue().IsValid())
+			{
+				FKzValidationIssue Issue(EKzValidationSeverity::Error,
+					FText::Format(LOCTEXT("LocalInvalidType", "Locals entry '{0}' has no Type set."), FText::FromName(Entry.GetName())),
+					GValidatorId);
+				Issue.QuickFixLabel = LOCTEXT("RemoveEntry", "Remove");
+				Issue.QuickFix = MakeRemoveLocalFix(Index);
+				OutIssues.Add(MoveTemp(Issue));
+			}
+		}
+	}
+
 	// --- Set Local tasks: VarName must reference an existing entry in Asset->Locals. Empty VarName warns
 	// (probably mid-edit); orphan VarName errors with a Clear quick-fix (silently no-ops at runtime otherwise). ---
 	{

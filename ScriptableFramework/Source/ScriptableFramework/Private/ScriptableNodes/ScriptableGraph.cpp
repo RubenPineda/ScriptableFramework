@@ -8,6 +8,7 @@
 #include "ScriptableNodes/ScriptableNode_SubGraph.h"
 #include "ScriptableNodes/ScriptableNode_Task.h"
 #include "ScriptableTasks/ScriptableTask.h"
+#include "ScriptableTasks/ScriptableTask_SetLocal.h"
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "ScriptableRuntimeData.h"
 #include "Core/KzBagOps.h"
@@ -67,42 +68,23 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 	const FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
 	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
 
-	// The base class only refreshes the bag when the property name matches GetContainerName(). For the graph,
-	// the declared context lives directly on the inherited Context array, so refresh whenever it is edited.
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
+	// FKzNamedVariant has no custom IPropertyTypeCustomization, so editing its Name through the default property editor
+	// fires PostEditChangeProperty without going through PostEditChangeChainProperty. We do all rename + snapshot +
+	// rebuild work here so both paths (customization-driven and default-editor-driven) end up calling the same code.
+	const bool bContextEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context));
+	if (bContextEdit)
 	{
-		RebuildContextBag();
-	}
-
-	// Same idea for Locals: customizations on the inner FKzNamedVariant may route through PostEditChangeProperty
-	// instead of the chain variant depending on the path, so we cover both.
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals))
-	{
-		RebuildLocalsBagShape();
-	}
-}
-
-void UScriptableGraph::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeChainProperty(PropertyChangedEvent);
-
-	const FName MemberName = (PropertyChangedEvent.MemberProperty != nullptr) ? PropertyChangedEvent.MemberProperty->GetFName() : NAME_None;
-
-	if (MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Context))
-	{
-		// Rename detection has to run BEFORE the snapshot refresh
 		DetectAndApplyContextRename();
 		SnapshotContextNames();
 		RebuildContextBag();
-		return;
 	}
 
-	if (MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals))
+	const bool bLocalsEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableObjectAsset, Locals));
+	if (bLocalsEdit)
 	{
 		DetectAndApplyLocalsRename();
 		SnapshotLocalsNames();
 		RebuildLocalsBagShape();
-		return;
 	}
 }
 
@@ -228,6 +210,21 @@ void UScriptableGraph::DetectAndApplyLocalsRename()
 	if (OldName.IsNone() || NewName.IsNone() || OldName == NewName) return;
 
 	RedirectBindings(ScriptableBindingSources::LocalsStructID, OldName, NewName);
+	RedirectSetLocalVarNames(OldName, NewName);
+}
+
+void UScriptableGraph::RedirectSetLocalVarNames(FName OldName, FName NewName)
+{
+	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
+	{
+		UScriptableNode_Task* Wrapper = Cast<UScriptableNode_Task>(Node);
+		if (!Wrapper) continue;
+		UScriptableTask_SetLocal* SetLocal = Cast<UScriptableTask_SetLocal>(Wrapper->Task);
+		if (!SetLocal || SetLocal->VarName != OldName) continue;
+
+		SetLocal->Modify();
+		SetLocal->VarName = NewName;
+	}
 }
 #endif
 
