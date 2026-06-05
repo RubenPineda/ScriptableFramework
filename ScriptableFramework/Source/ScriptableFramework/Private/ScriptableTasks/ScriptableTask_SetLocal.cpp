@@ -1,6 +1,7 @@
 // Copyright 2026 kirzo
 
 #include "ScriptableTasks/ScriptableTask_SetLocal.h"
+#include "ScriptableObjectAsset.h"
 #include "Core/KzNamedVariant.h"
 #include "StructUtils/PropertyBag.h"
 
@@ -29,5 +30,54 @@ FText UScriptableTask_SetLocal::GetDisplayTitle() const
 {
 	if (VarName.IsNone()) return INVTEXT("Set Local");
 	return FText::Format(INVTEXT("Set Local: {0}"), FText::FromName(VarName));
+}
+
+void UScriptableTask_SetLocal::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// Force-sync Value's type to the picked local. No feedback loop because we only mutate on real mismatches.
+	const FKzNamedVariant* Local = FindOwningLocal();
+	if (!Local)
+	{
+		// VarName empty or pointing at a missing local: clear Value so the editor doesn't show a stale slot.
+		if (Value.IsValid()) Value.Reset();
+		return;
+	}
+
+	const EPropertyBagPropertyType DesiredType = Local->GetValue().GetType();
+	const UObject* DesiredTypeObject = Local->GetValue().GetTypeObject();
+	if (Value.GetType() != DesiredType || Value.GetTypeObject() != DesiredTypeObject)
+	{
+		Value.SetType(DesiredType, DesiredTypeObject);
+	}
+}
+
+TArray<FString> UScriptableTask_SetLocal::GetLocalNames() const
+{
+	TArray<FString> Names;
+	const UScriptableObjectAsset* Asset = GetTypedOuter<UScriptableObjectAsset>();
+	if (!Asset) return Names;
+
+	Names.Reserve(Asset->Locals.Num());
+	for (const FKzNamedVariant& Var : Asset->Locals)
+	{
+		if (!Var.GetName().IsNone()) Names.Add(Var.GetName().ToString());
+	}
+	return Names;
+}
+
+const FKzNamedVariant* UScriptableTask_SetLocal::FindOwningLocal() const
+{
+	if (VarName.IsNone()) return nullptr;
+
+	const UScriptableObjectAsset* Asset = GetTypedOuter<UScriptableObjectAsset>();
+	if (!Asset) return nullptr;
+
+	for (const FKzNamedVariant& Var : Asset->Locals)
+	{
+		if (Var.GetName() == VarName) return &Var;
+	}
+	return nullptr;
 }
 #endif
