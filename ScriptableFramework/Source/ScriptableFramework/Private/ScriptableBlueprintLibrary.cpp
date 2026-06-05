@@ -217,18 +217,7 @@ static FScriptableContext* AssignContextParameterToContext(FFrame& Stack, const 
 // --- Thunk Implementations ---
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetScriptableContextProperty)
 {
-	// Note: 'Context' is DEFINE_FUNCTION's implicit UObject* parameter, so name the local differently.
-	FScriptableContext* ResolvedContext = AssignContextParameterToContext(Stack, TEXT("SetScriptableContextProperty"));
-
-	// Echo the same context as the return value so multiple setters can be chained together.
-	if (RESULT_PARAM)
-	{
-		FScriptableContext& Result = *static_cast<FScriptableContext*>(RESULT_PARAM);
-		if (ResolvedContext)
-		{
-			Result = *ResolvedContext;
-		}
-	}
+	AssignContextParameterToContext(Stack, TEXT("SetScriptableContextProperty"));
 }
 
 DEFINE_FUNCTION(UScriptableBlueprintLibrary::execMakeScriptableContext)
@@ -279,10 +268,9 @@ DEFINE_FUNCTION(UScriptableBlueprintLibrary::execSetGraphInstanceContextProperty
 	AssignStackValueToBag(Stack, Runner->GetMutableContextBag(), ParameterName, /*bAddIfMissing=*/true, FunctionName);
 }
 
-FScriptableContext UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
+void UScriptableBlueprintLibrary::AddScriptableContextProperty(UPARAM(Ref)FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type)
 {
 	KzBagOps::AddProperty(Context.GetBag(), FKzParamDef(ParameterName, Type));
-	return Context;
 }
 
 void UScriptableBlueprintLibrary::SetActionContext(UPARAM(Ref) FScriptableAction& Action, const FScriptableContext& Context)

@@ -22,6 +22,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "ScriptableFrameworkUncooked",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "ScriptableFrameworkEditor",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"

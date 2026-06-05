@@ -19,23 +19,22 @@ class SCRIPTABLEFRAMEWORK_API UScriptableBlueprintLibrary : public UBlueprintFun
 
 public:
 	/**
-	 * Adds a context parameter definition by name, inferring the type from the supplied default value.
-	 * Returns the same context so several builder nodes can be chained.
+	 * Adds a context parameter definition by name with the supplied type.
 	 * @param Context        The scriptable context to modify.
 	 * @param ParameterName  The name of the parameter.
 	 * @param Type           The parameter type.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Context", meta = (AutoCreateRefTerm = "Type", ReturnDisplayName = "Context"))
-	static FScriptableContext AddScriptableContextProperty(UPARAM(Ref) FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type);
+	UFUNCTION(BlueprintCallable, Category = "Scriptable Framework|Context", meta = (AutoCreateRefTerm = "Type", BlueprintInternalUseOnly = "true"))
+	static void AddScriptableContextProperty(UPARAM(Ref) FScriptableContext& Context, FName ParameterName, const FKzTypeDef& Type);
 
 	/**
-	 * Sets a context parameter value by name. Returns the same context so several setters can be chained.
+	 * Sets a context parameter value by name.
 	 * @param Context        The scriptable context to modify.
 	 * @param ParameterName  The name of the parameter.
 	 * @param Value          The value to set.
 	 */
-	UFUNCTION(BlueprintCallable, CustomThunk, Category = "Scriptable Framework|Context", meta = (CustomStructureParam = "Value", AutoCreateRefTerm = "Value", ReturnDisplayName = "Context"))
-	static FScriptableContext SetScriptableContextProperty(UPARAM(Ref) FScriptableContext& Context, FName ParameterName, const int32& Value);
+	UFUNCTION(BlueprintCallable, CustomThunk, Category = "Scriptable Framework|Context", meta = (CustomStructureParam = "Value", AutoCreateRefTerm = "Value", BlueprintInternalUseOnly = "true"))
+	static void SetScriptableContextProperty(UPARAM(Ref) FScriptableContext& Context, FName ParameterName, const int32& Value);
 
 	/**
 	 * Creates a context holding a single named parameter, typed from the supplied value. Chain
