@@ -36,6 +36,7 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"GraphEditor",
 				"KzLib",
 				"KzLibUncooked",
+				"StructUtilsEditor",
 				"WorkspaceMenuStructure"
 			});
 	}

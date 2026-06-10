@@ -19,6 +19,7 @@
 
 #include "Utils/KzEditorUtils.h"
 #include "StructUtils/PropertyBag.h"
+#include "PropertyBagDetails.h"
 
 #include "DetailLayoutBuilder.h"
 #include "DetailCategoryBuilder.h"
@@ -764,6 +765,12 @@ private:
 // ------------------------------------------------------------------------------------------------
 // FPropertyBagBindingsBuilder
 // ------------------------------------------------------------------------------------------------
+/**
+ * Fallback "Dynamic X Bindings" section for bags hidden INSIDE foreign structs (e.g.
+ * FStateTreeReference), whose rows are drawn by their own customization and cannot be hooked.
+ * Bags declared directly on a UScriptableObject use FScriptableBagBuilder instead, which puts the
+ * binding UI straight on each member row.
+ */
 class FPropertyBagBindingsBuilder : public IDetailCustomNodeBuilder
 {
 public:
@@ -891,6 +898,121 @@ private:
 	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
 	TWeakPtr<IPropertyUtilities> PropertyUtilities;
 	FSimpleDelegate OnRegenerateChildren;
+};
+
+// ------------------------------------------------------------------------------------------------
+// FScriptableBagInstanceDataDetails
+// ------------------------------------------------------------------------------------------------
+/**
+ * Property bag children with the binding UI injected straight onto each dynamic member row, so a
+ * bag member binds exactly like a regular property. Engine hook: FPropertyBagInstanceDataDetails
+ * calls OnChildRowAdded for every member row it generates.
+ */
+class FScriptableBagInstanceDataDetails : public FPropertyBagInstanceDataDetails
+{
+public:
+	FScriptableBagInstanceDataDetails(const FConstructParams& ConstructParams, UScriptableObject* InObj, const TArray<FPropertyBindingBindableStructDescriptor>& InAccessibleStructs)
+		: FPropertyBagInstanceDataDetails(ConstructParams)
+		, Obj(InObj)
+		, AccessibleStructs(InAccessibleStructs)
+	{
+		ScriptableFrameworkEditor::MakeStructPropertyPathFromPropertyHandle(InObj, ConstructParams.BagStructProperty.ToSharedRef(), BasePath);
+	}
+
+	virtual void OnChildRowAdded(IDetailPropertyRow& ChildRow) override
+	{
+		FPropertyBagInstanceDataDetails::OnChildRowAdded(ChildRow);
+
+		UScriptableObject* ScriptableObject = Obj.Get();
+		TSharedPtr<IPropertyHandle> ChildHandle = ChildRow.GetPropertyHandle();
+		if (!ScriptableObject || !ChildHandle.IsValid() || !ChildHandle->GetProperty()) return;
+
+		// Bag members live in instance memory, so the handle chain cannot produce the full path:
+		// extend the bag's own path with the member name (the same scheme the runtime resolver walks).
+		FPropertyBindingPath TargetPath = BasePath;
+		FString PathStr = TargetPath.ToString();
+		if (!PathStr.IsEmpty())
+		{
+			PathStr += TEXT(".");
+		}
+		PathStr += ChildHandle->GetProperty()->GetName();
+		TargetPath.FromString(PathStr);
+
+		TSharedPtr<ScriptableBindingUI::FCachedBindingData> CachedData =
+			MakeShared<ScriptableBindingUI::FCachedBindingData>(ScriptableObject, TargetPath, ChildHandle, BagStructProperty, AccessibleStructs, PropUtils);
+
+		ScriptableBindingUI::ModifyRow(ScriptableObject, ChildRow, CachedData);
+	}
+
+private:
+	TWeakObjectPtr<UScriptableObject> Obj;
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
+	FPropertyBindingPath BasePath;
+};
+
+// ------------------------------------------------------------------------------------------------
+// FScriptableBagBuilder
+// ------------------------------------------------------------------------------------------------
+/**
+ * Renders a bag declared directly on a UScriptableObject: replicates FPropertyBagDetails' header
+ * (name + add-property button when the layout is editable) and hosts the binding-aware children.
+ */
+class FScriptableBagBuilder : public IDetailCustomNodeBuilder
+{
+public:
+	FScriptableBagBuilder(TSharedRef<IPropertyHandle> InBagHandle, UScriptableObject* InObj, const TArray<FPropertyBindingBindableStructDescriptor>& InAccessibleStructs, TSharedPtr<IPropertyUtilities> InPropertyUtilities)
+		: BagHandle(InBagHandle)
+		, Obj(InObj)
+		, AccessibleStructs(InAccessibleStructs)
+		, PropertyUtilities(InPropertyUtilities)
+	{
+		const FProperty* MetaDataProperty = BagHandle->GetMetaDataProperty();
+		bFixedLayout = MetaDataProperty && MetaDataProperty->HasMetaData(TEXT("FixedLayout"));
+
+		// Regenerate when the bag shape changes (e.g. picking a new function re-syncs the parameters).
+		BagHandle->SetOnPropertyValueChanged(FSimpleDelegate::CreateLambda([this]() { OnRegenerateChildren.ExecuteIfBound(); }));
+	}
+
+	virtual void SetOnRebuildChildren(FSimpleDelegate InOnRegenerateChildren) override { OnRegenerateChildren = InOnRegenerateChildren; }
+	virtual bool RequiresTick() const override { return false; }
+	virtual FName GetName() const override { return BagHandle->GetProperty() ? BagHandle->GetProperty()->GetFName() : FName(TEXT("ScriptableBag")); }
+	virtual bool InitiallyCollapsed() const override { return false; }
+	virtual TSharedPtr<IPropertyHandle> GetPropertyHandle() const override { return BagHandle; }
+
+	virtual void GenerateHeaderRowContent(FDetailWidgetRow& NodeRow) override
+	{
+		NodeRow.NameContent()
+			[
+				BagHandle->CreatePropertyNameWidget()
+			];
+
+		if (!bFixedLayout)
+		{
+			NodeRow.ValueContent()
+				.VAlign(VAlign_Center)
+				[
+					FPropertyBagDetails::MakeAddPropertyWidget(BagHandle, PropertyUtilities).ToSharedRef()
+				];
+		}
+	}
+
+	virtual void GenerateChildContent(IDetailChildrenBuilder& ChildrenBuilder) override
+	{
+		FPropertyBagInstanceDataDetails::FConstructParams Params;
+		Params.BagStructProperty = BagHandle;
+		Params.PropUtils = PropertyUtilities;
+		Params.ChildRowFeatures = bFixedLayout ? EPropertyBagChildRowFeatures::Fixed : EPropertyBagChildRowFeatures::Default;
+
+		ChildrenBuilder.AddCustomBuilder(MakeShared<FScriptableBagInstanceDataDetails>(Params, Obj.Get(), AccessibleStructs));
+	}
+
+private:
+	TSharedRef<IPropertyHandle> BagHandle;
+	TWeakObjectPtr<UScriptableObject> Obj;
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
+	TSharedPtr<IPropertyUtilities> PropertyUtilities;
+	FSimpleDelegate OnRegenerateChildren;
+	bool bFixedLayout = false;
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -1023,12 +1145,11 @@ void FScriptableObjectCustomization::ProcessPropertyHandle(TSharedRef<IPropertyH
 				const FStructProperty* StructProp = CastFieldChecked<FStructProperty>(Prop);
 
 				// 1. DIRECT PROPERTY BAG DETECTION
-				// If the property itself is an InstancedPropertyBag, intercept it immediately.
+				// A bag declared on the scriptable object itself: rendered by our own builder so each
+				// dynamic member row carries the binding UI directly (no side bindings section).
 				if (StructProp->Struct->GetFName() == TEXT("InstancedPropertyBag"))
 				{
-					ChildBuilder.AddProperty(SubPropertyHandle); // Draw native bag UI
-					TSharedRef<FPropertyBagBindingsBuilder> BagBuilder = MakeShared<FPropertyBagBindingsBuilder>(SubPropertyHandle, SubPropertyHandle, Obj, AccessibleStructs, PropertyUtilities);
-					ChildBuilder.AddCustomBuilder(BagBuilder);
+					ChildBuilder.AddCustomBuilder(MakeShared<FScriptableBagBuilder>(SubPropertyHandle, Obj, AccessibleStructs, GetPropertyUtilities()));
 					return;
 				}
 
