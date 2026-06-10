@@ -3,6 +3,7 @@
 #include "Bindings/ScriptablePropertyBindings.h"
 #include "PropertyBindingDataView.h"
 #include "ScriptableObject.h"
+#include "ScriptablePropertyUtilities.h"
 #include "ScriptableRuntimeData.h"
 #include "StructUtils/PropertyBag.h"
 #include "UObject/StructOnScope.h"
@@ -388,80 +389,10 @@ void FScriptablePropertyBindings::CopySingleBinding(const FScriptablePropertyBin
 	// Path resolution for the Target
 	if (!ResolveIndirections(Binding.TargetPath, DestView, TargetProp, TargetAddr, TargetTempMemoryArray)) return;
 
-	if (SourceProp && TargetProp && SourceAddr && TargetAddr)
-	{
-		// Identical Types (Fast Copy)
-		if (SourceProp->SameType(TargetProp))
-		{
-			SourceProp->CopyCompleteValue(TargetAddr, SourceAddr);
-		}
-		else
-		{
-			// Object Reference Handling (TObjectPtr <-> Raw Ptr, Child -> Parent)
-			if (const FObjectPropertyBase* SrcObjProp = CastField<FObjectPropertyBase>(SourceProp))
-			{
-				// TObjectPtr <-> Raw Ptr
-				if (const FObjectPropertyBase* TgtObjProp = CastField<FObjectPropertyBase>(TargetProp))
-				{
-					// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer
-					UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+	FScriptablePropertyUtilities::CopyPropertyValue(SourceProp, SourceAddr, TargetProp, TargetAddr);
+}
 
-					if (!SourceObject || SourceObject->IsA(TgtObjProp->PropertyClass))
-					{
-						TgtObjProp->SetObjectPropertyValue(TargetAddr, SourceObject);
-					}
-				}
-				// Object -> Bool
-				else if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
-				{
-					// Get the pointer (works for TObjectPtr and raw pointers)
-					const UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
-
-					// True if not null, False if null
-					TgtBool->SetPropertyValue(TargetAddr, SourceObject != nullptr);
-				}
-			}
-			// Numeric <-> Numeric Conversion
-			else if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
-			{
-				const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp);
-				const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp);
-
-				if (SrcNum->IsFloatingPoint())
-				{
-					const double Val = SrcNum->GetFloatingPointPropertyValue(SourceAddr);
-					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, Val);
-					else TgtNum->SetIntPropertyValue(TargetAddr, (int64)Val);
-				}
-				else
-				{
-					const int64 Val = SrcNum->GetSignedIntPropertyValue(SourceAddr);
-					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, (double)Val);
-					else TgtNum->SetIntPropertyValue(TargetAddr, Val);
-				}
-			}
-			// Bool -> Numeric (True=1, False=0)
-			else if (const FBoolProperty* SrcBool = CastField<FBoolProperty>(SourceProp))
-			{
-				if (const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp))
-				{
-					const bool bVal = SrcBool->GetPropertyValue(SourceAddr);
-					if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, bVal ? 1.0 : 0.0);
-					else TgtNum->SetIntPropertyValue(TargetAddr, int64(bVal ? 1 : 0));
-				}
-			}
-			// Numeric -> Bool (0=False, !=0 True)
-			else if (const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp))
-			{
-				if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
-				{
-					bool bResult = false;
-					if (SrcNum->IsFloatingPoint()) bResult = !FMath::IsNearlyZero(SrcNum->GetFloatingPointPropertyValue(SourceAddr));
-					else bResult = (SrcNum->GetSignedIntPropertyValue(SourceAddr) != 0);
-
-					TgtBool->SetPropertyValue(TargetAddr, bResult);
-				}
-			}
-		}
-	}
+bool FScriptablePropertyBindings::ResolvePath(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr, TArray<TSharedPtr<FStructOnScope>>& OutTempMemoryArray)
+{
+	return ResolveIndirections(Path, View, OutProp, OutAddr, OutTempMemoryArray);
 }

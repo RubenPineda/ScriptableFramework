@@ -33,7 +33,8 @@ public:
 
 	TSharedPtr<IPropertyUtilities> GetPropertyUtilities() const { return PropertyUtilities; }
 
-	void ProcessPropertyHandle(TSharedRef<IPropertyHandle> SubPropertyHandle, IDetailChildrenBuilder& ChildBuilder, UScriptableObject* Obj, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs);
+	/** Generates the row(s) for one child property. Virtual so per-task customizations can swap the value widget of specific properties (see BindPropertyRow's ValueWidgetOverride). */
+	virtual void ProcessPropertyHandle(TSharedRef<IPropertyHandle> SubPropertyHandle, IDetailChildrenBuilder& ChildBuilder, UScriptableObject* Obj, const TArray<FPropertyBindingBindableStructDescriptor>& AccessibleStructs);
 
 	// --- Overridable Extension Points ---
 

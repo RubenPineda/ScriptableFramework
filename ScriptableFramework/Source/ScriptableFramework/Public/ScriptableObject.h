@@ -8,6 +8,7 @@
 #include "ScriptableObjectTypes.h"
 #include "PropertyBindingPath.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "Core/KzValidationTypes.h"
 #include "ScriptableObject.generated.h"
 
 SCRIPTABLEFRAMEWORK_API DECLARE_LOG_CATEGORY_EXTERN(LogScriptableObject, Log, All);
@@ -46,7 +47,7 @@ public:
 	 */
 	virtual FText GetDisplayTitle() const;
 
-	/** 
+	/**
 	 * Helper to get the display string of a binding for a specific property.
 	 * @param PropertyName The name of the property on this object to check.
 	 * @param OutText The resulting string if a binding exists (e.g., "Health" or "Context.Target.Health").
@@ -54,6 +55,13 @@ public:
 	 * @return True if the property is bound, false otherwise.
 	 */
 	bool GetBindingDisplayText(FName PropertyName, FString& OutText, bool bChopPrefix = true) const;
+
+	/**
+	 * Per-object semantic validation, invoked by the framework validators on every nested
+	 * UScriptableObject. Override to append issues the generic binding pass cannot know about
+	 * (e.g. a referenced function that no longer exists). Base implementation does nothing.
+	 */
+	virtual void ValidateObject(TArray<FKzValidationIssue>& OutIssues) const {}
 #endif
 
 	// -------------------------------------------------------------------

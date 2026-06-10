@@ -7,7 +7,9 @@
 #include "ScriptablePropertyUtilities.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "PropertyBindingDataView.h"
 #include "Engine/Blueprint.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 #include "ScopedTransaction.h"
 
@@ -148,7 +150,14 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			};
 
 			const FProperty* TargetProp = nullptr;
-			const bool bTargetValid = ScriptableFrameworkEditor::ValidateBindingPath(Obj->GetClass(), &Binding.TargetPath, TargetProp);
+			bool bTargetValid = ScriptableFrameworkEditor::ValidateBindingPath(Obj->GetClass(), &Binding.TargetPath, TargetProp);
+			if (!bTargetValid)
+			{
+				/** The static walk cannot see into instance property bags (dynamic layout); retry against live memory. */
+				void* TargetAddr = nullptr;
+				TArray<TSharedPtr<FStructOnScope>> TempMemory;
+				bTargetValid = FScriptablePropertyBindings::ResolvePath(Binding.TargetPath, FPropertyBindingDataView(Obj), TargetProp, TargetAddr, TempMemory);
+			}
 			if (!bTargetValid || !TargetProp)
 			{
 				OutIssues.Add(BuildIssue(FText::Format(
@@ -188,6 +197,17 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 					FText::FromString(Obj->GetName()),
 					TargetName)));
 			}
+		}
+
+		/** (C) Per-object semantic validation (task-specific checks the generic passes cannot know). */
+		{
+			TArray<FKzValidationIssue> ObjectIssues;
+			Obj->ValidateObject(ObjectIssues);
+			for (FKzValidationIssue& Issue : ObjectIssues)
+			{
+				if (!Issue.ContextId.IsValid()) Issue.ContextId = NavId;
+			}
+			OutIssues.Append(MoveTemp(ObjectIssues));
 		}
 	}
 }

@@ -3,58 +3,10 @@
 #include "ScriptableTasks/ScriptableTask_SetLocal.h"
 #include "ScriptableContainer.h"
 #include "ScriptableNodes/ScriptableGraph.h"
+#include "ScriptablePropertyUtilities.h"
 #include "Core/KzNamedVariant.h"
 #include "StructUtils/PropertyBag.h"
 #include "UObject/UnrealType.h"
-
-namespace
-{
-	// Returns a view over whichever Locals declaration applies to this task. Two supported authoring contexts:
-	// 1) Task lives inside a UScriptableGraph: walk outers, return Graph->Locals.
-	// 2) Task lives inside an FScriptableContainer (e.g. FScriptableAction.Tasks): walk outers, reflect each
-	//    owner for a container struct member whose Tasks array holds us, return its LocalsDefinitions.
-	TConstArrayView<FKzNamedVariant> FindLocalsDeclarationFor(const UObject* TaskNode)
-	{
-		if (!TaskNode) return {};
-
-		if (const UScriptableGraph* Graph = TaskNode->GetTypedOuter<UScriptableGraph>())
-		{
-			return TConstArrayView<FKzNamedVariant>(Graph->Locals);
-		}
-
-		const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
-		for (const UObject* Cursor = TaskNode->GetOuter(); Cursor; Cursor = Cursor->GetOuter())
-		{
-			for (TFieldIterator<FProperty> It(Cursor->GetClass()); It; ++It)
-			{
-				const FStructProperty* StructProp = CastField<FStructProperty>(*It);
-				if (!StructProp || !StructProp->Struct->IsChildOf(BaseContainerStruct)) continue;
-
-				const FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Cursor);
-				if (!Container) continue;
-
-				for (TFieldIterator<FProperty> Inner(StructProp->Struct); Inner; ++Inner)
-				{
-					const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*Inner);
-					if (!ArrayProp) continue;
-					const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
-					if (!ObjProp) continue;
-
-					FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(const_cast<FScriptableContainer*>(Container)));
-					for (int32 i = 0; i < Helper.Num(); ++i)
-					{
-						if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == TaskNode)
-						{
-							return TConstArrayView<FKzNamedVariant>(Container->LocalsDefinitions);
-						}
-					}
-				}
-			}
-		}
-
-		return {};
-	}
-}
 
 UScriptableTask_SetLocal::UScriptableTask_SetLocal()
 {
@@ -107,7 +59,7 @@ void UScriptableTask_SetLocal::PostEditChangeProperty(FPropertyChangedEvent& Pro
 TArray<FString> UScriptableTask_SetLocal::GetLocalNames() const
 {
 	TArray<FString> Names;
-	const TConstArrayView<FKzNamedVariant> Locals = FindLocalsDeclarationFor(this);
+	const TConstArrayView<FKzNamedVariant> Locals = FScriptablePropertyUtilities::FindLocalsDeclarationFor(this);
 	Names.Reserve(Locals.Num());
 	for (const FKzNamedVariant& Var : Locals)
 	{
@@ -120,7 +72,7 @@ const FKzNamedVariant* UScriptableTask_SetLocal::FindOwningLocal() const
 {
 	if (VarName.IsNone()) return nullptr;
 
-	const TConstArrayView<FKzNamedVariant> Locals = FindLocalsDeclarationFor(this);
+	const TConstArrayView<FKzNamedVariant> Locals = FScriptablePropertyUtilities::FindLocalsDeclarationFor(this);
 	for (const FKzNamedVariant& Var : Locals)
 	{
 		if (Var.GetName() == VarName) return &Var;

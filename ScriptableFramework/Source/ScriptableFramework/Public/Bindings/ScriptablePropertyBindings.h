@@ -7,6 +7,7 @@
 #include "ScriptablePropertyBindings.generated.h"
 
 struct FPropertyBindingDataView;
+class FStructOnScope;
 
 /** Defines a single binding: Copy from SourcePath -> TargetPath */
 USTRUCT()
@@ -60,6 +61,14 @@ public:
 	 * Handles both Context bindings and Task-to-Task bindings.
 	 */
 	void ResolveBindings(class UScriptableObject* TargetObject);
+
+	/**
+	 * Resolves a path against live instance memory, diving into FInstancedPropertyBags and calling
+	 * pure functions mid-path. Unlike static UStruct walks, this sees dynamic bag layouts, so use it
+	 * wherever a path may target a bag member (e.g. validation of bag-targeted bindings).
+	 * OutTempMemoryArray keeps function return buffers alive while OutAddr is in use.
+	 */
+	static bool ResolvePath(const FPropertyBindingPath& Path, const FPropertyBindingDataView& View, const FProperty*& OutProp, void*& OutAddr, TArray<TSharedPtr<FStructOnScope>>& OutTempMemoryArray);
 
 	UPROPERTY()
 	TArray<FScriptablePropertyBinding> Bindings;

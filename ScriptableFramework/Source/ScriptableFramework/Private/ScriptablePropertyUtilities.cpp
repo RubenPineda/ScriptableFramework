@@ -7,6 +7,7 @@
 #include "ScriptableContainer.h"
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
+#include "Core/KzNamedVariant.h"
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
 #include "StructUtils/PropertyBag.h"
@@ -98,7 +99,127 @@ bool FScriptablePropertyUtilities::ArePropertiesCompatible(const FProperty* Sour
 	return false;
 }
 
+void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp, const void* SourceAddr, const FProperty* TargetProp, void* TargetAddr)
+{
+	if (!SourceProp || !TargetProp || !SourceAddr || !TargetAddr) return;
+
+	// Identical Types (Fast Copy)
+	if (SourceProp->SameType(TargetProp))
+	{
+		SourceProp->CopyCompleteValue(TargetAddr, SourceAddr);
+		return;
+	}
+
+	// Object Reference Handling (TObjectPtr <-> Raw Ptr, Child -> Parent)
+	if (const FObjectPropertyBase* SrcObjProp = CastField<FObjectPropertyBase>(SourceProp))
+	{
+		// TObjectPtr <-> Raw Ptr
+		if (const FObjectPropertyBase* TgtObjProp = CastField<FObjectPropertyBase>(TargetProp))
+		{
+			// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer
+			UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+
+			if (!SourceObject || SourceObject->IsA(TgtObjProp->PropertyClass))
+			{
+				TgtObjProp->SetObjectPropertyValue(TargetAddr, SourceObject);
+			}
+		}
+		// Object -> Bool
+		else if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
+		{
+			// Get the pointer (works for TObjectPtr and raw pointers)
+			const UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+
+			// True if not null, False if null
+			TgtBool->SetPropertyValue(TargetAddr, SourceObject != nullptr);
+		}
+	}
+	// Numeric <-> Numeric Conversion
+	else if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
+	{
+		const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp);
+		const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp);
+
+		if (SrcNum->IsFloatingPoint())
+		{
+			const double Val = SrcNum->GetFloatingPointPropertyValue(SourceAddr);
+			if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, Val);
+			else TgtNum->SetIntPropertyValue(TargetAddr, (int64)Val);
+		}
+		else
+		{
+			const int64 Val = SrcNum->GetSignedIntPropertyValue(SourceAddr);
+			if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, (double)Val);
+			else TgtNum->SetIntPropertyValue(TargetAddr, Val);
+		}
+	}
+	// Bool -> Numeric (True=1, False=0)
+	else if (const FBoolProperty* SrcBool = CastField<FBoolProperty>(SourceProp))
+	{
+		if (const FNumericProperty* TgtNum = CastField<FNumericProperty>(TargetProp))
+		{
+			const bool bVal = SrcBool->GetPropertyValue(SourceAddr);
+			if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, bVal ? 1.0 : 0.0);
+			else TgtNum->SetIntPropertyValue(TargetAddr, int64(bVal ? 1 : 0));
+		}
+	}
+	// Numeric -> Bool (0=False, !=0 True)
+	else if (const FNumericProperty* SrcNum = CastField<FNumericProperty>(SourceProp))
+	{
+		if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
+		{
+			bool bResult = false;
+			if (SrcNum->IsFloatingPoint()) bResult = !FMath::IsNearlyZero(SrcNum->GetFloatingPointPropertyValue(SourceAddr));
+			else bResult = (SrcNum->GetSignedIntPropertyValue(SourceAddr) != 0);
+
+			TgtBool->SetPropertyValue(TargetAddr, bResult);
+		}
+	}
+}
+
 #if WITH_EDITOR
+TConstArrayView<FKzNamedVariant> FScriptablePropertyUtilities::FindLocalsDeclarationFor(const UObject* Node)
+{
+	if (!Node) return {};
+
+	if (const UScriptableGraph* Graph = Node->GetTypedOuter<UScriptableGraph>())
+	{
+		return TConstArrayView<FKzNamedVariant>(Graph->Locals);
+	}
+
+	const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
+	for (const UObject* Cursor = Node->GetOuter(); Cursor; Cursor = Cursor->GetOuter())
+	{
+		for (TFieldIterator<FProperty> It(Cursor->GetClass()); It; ++It)
+		{
+			const FStructProperty* StructProp = CastField<FStructProperty>(*It);
+			if (!StructProp || !StructProp->Struct->IsChildOf(BaseContainerStruct)) continue;
+
+			const FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Cursor);
+			if (!Container) continue;
+
+			for (TFieldIterator<FProperty> Inner(StructProp->Struct); Inner; ++Inner)
+			{
+				const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*Inner);
+				if (!ArrayProp) continue;
+				const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
+				if (!ObjProp) continue;
+
+				FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(const_cast<FScriptableContainer*>(Container)));
+				for (int32 i = 0; i < Helper.Num(); ++i)
+				{
+					if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Node)
+					{
+						return TConstArrayView<FKzNamedVariant>(Container->LocalsDefinitions);
+					}
+				}
+			}
+		}
+	}
+
+	return {};
+}
+
 bool FScriptablePropertyUtilities::IsPropertyBindableInput(const FProperty* Property)
 {
 	if (!Property) return false;
