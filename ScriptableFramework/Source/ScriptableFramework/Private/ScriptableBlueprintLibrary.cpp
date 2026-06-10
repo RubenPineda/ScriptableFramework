@@ -19,6 +19,11 @@ static void AssignStackValueToBag(FFrame& Stack, FInstancedPropertyBag& Bag, FNa
 	// If allowed, define the property from the incoming value's type, which also initializes the bag.
 	if (!BagProp && bAddIfMissing)
 	{
+		// 'self' compiles to EX_Self: the VM writes the raw UObject* into the result buffer but cannot
+		// fill MostRecentProperty ('self' is a constant, not a FProperty), so after stepping there is
+		// nothing to define the slot from. Peek the opcode now to recover the type from the live object.
+		const bool bIsSelfExpression = (Stack.PeekCode() == EX_Self);
+
 		// R-values (self, literals, math results) have no addressable property in BP, so the VM needs
 		// a scratch buffer to write them into. We don't yet know the value's type, so over-allocate
 		// generously — 256 bytes covers every stock UE primitive, FName, FString, FVector, FTransform
@@ -37,33 +42,44 @@ static void AssignStackValueToBag(FFrame& Stack, FInstancedPropertyBag& Bag, FNa
 
 		P_FINISH;
 
-		if (!ValueProp || !ValuePtr)
+		if (ValueProp && ValuePtr)
 		{
-#if WITH_EDITOR
-			FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Could not define parameter '%s' from the supplied value. Define it explicitly with AddScriptableContextProperty first."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
-#endif
+			// Define the property from the value's type, then copy the value into the freshly created slot.
+			Bag.AddProperty(ParameterName, ValueProp);
+
+			const UScriptStruct* NewBagStruct = Bag.GetPropertyBagStruct();
+			const FProperty* NewBagProp = NewBagStruct ? NewBagStruct->FindPropertyByName(ParameterName) : nullptr;
+			uint8* StructMemory = Bag.GetMutableValue().GetMemory();
+
+			if (NewBagProp && StructMemory)
+			{
+				uint8* DestPtr = NewBagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
+				NewBagProp->CopyCompleteValue(DestPtr, ValuePtr);
+			}
+
+			// If the VM landed the r-value in our scratch buffer, destruct it so non-trivial types
+			// (FString, TArray) don't leak. CopyCompleteValue above made an independent copy in the bag.
+			if (ValuePtr == LocalValue)
+			{
+				ValueProp->DestroyValue(LocalValue);
+			}
 			return;
 		}
 
-		// Define the property from the value's type, then copy the value into the freshly created slot.
-		Bag.AddProperty(ParameterName, ValueProp);
-
-		const UScriptStruct* NewBagStruct = Bag.GetPropertyBagStruct();
-		const FProperty* NewBagProp = NewBagStruct ? NewBagStruct->FindPropertyByName(ParameterName) : nullptr;
-		uint8* StructMemory = Bag.GetMutableValue().GetMemory();
-
-		if (NewBagProp && StructMemory)
+		// EX_Self left no property behind; define the slot from the object's runtime class instead.
+		if (bIsSelfExpression && ValuePtr)
 		{
-			uint8* DestPtr = NewBagProp->ContainerPtrToValuePtr<uint8>(StructMemory);
-			NewBagProp->CopyCompleteValue(DestPtr, ValuePtr);
+			if (UObject* SelfObject = *(UObject**)ValuePtr)
+			{
+				Bag.AddProperty(ParameterName, EPropertyBagPropertyType::Object, SelfObject->GetClass());
+				Bag.SetValueObject(ParameterName, SelfObject);
+				return;
+			}
 		}
 
-		// If the VM landed the r-value in our scratch buffer, destruct it so non-trivial types
-		// (FString, TArray) don't leak. CopyCompleteValue above made an independent copy in the bag.
-		if (ValuePtr == LocalValue)
-		{
-			ValueProp->DestroyValue(LocalValue);
-		}
+#if WITH_EDITOR
+		FFrame::KismetExecutionMessage(*FString::Printf(TEXT("%s: Could not define parameter '%s' from the supplied value. Define it explicitly with AddScriptableContextProperty first."), *FunctionName, *ParameterName.ToString()), ELogVerbosity::Warning);
+#endif
 		return;
 	}
 
