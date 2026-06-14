@@ -994,6 +994,8 @@ void FScriptableGraphEditor::BindGraphCommands()
 	Commands->MapAction(SfCommands.ConvertSelectionToSubGraph,
 		FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnConvertSelectionToSubGraph),
 		FCanExecuteAction::CreateSP(this, &FScriptableGraphEditor::CanConvertSelectionToSubGraph));
+
+	Commands->MapAction(SfCommands.OpenSearch, FExecuteAction::CreateSP(this, &FScriptableGraphEditor::OnOpenSearch));
 }
 
 bool FScriptableGraphEditor::HasAnyNodesSelected() const
@@ -2653,6 +2655,61 @@ namespace
 		}
 		return Node->GetClass()->GetDisplayNameText().ToString();
 	}
+
+	/** Appends an object's editable property values ("Name = Value") and binding paths ("Source -> Target") as searchable fragments. */
+	void AppendObjectSearchText(const UScriptableObject* Object, TArray<FString>& OutParts)
+	{
+		if (!Object) return;
+
+		for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+		{
+			const FProperty* Prop = *It;
+			if (!Prop->HasAnyPropertyFlags(CPF_Edit)) continue;
+
+			FString Value;
+			Prop->ExportTextItem_Direct(Value, Prop->ContainerPtrToValuePtr<void>(Object), nullptr, const_cast<UScriptableObject*>(Object), PPF_None);
+			if (!Value.IsEmpty())
+			{
+				OutParts.Add(FString::Printf(TEXT("%s = %s"), *Prop->GetName(), *Value));
+			}
+		}
+
+		for (const FScriptablePropertyBinding& Binding : Object->GetPropertyBindings().Bindings)
+		{
+			OutParts.Add(FString::Printf(TEXT("%s -> %s"), *Binding.SourcePath.ToString(), *Binding.TargetPath.ToString()));
+		}
+	}
+
+	/** Searchable fragments for a node: its title first, then its (and its task's) property values and binding paths. */
+	void GatherNodeSearchParts(const UScriptableNode* Node, TArray<FString>& OutParts)
+	{
+		if (!Node) return;
+
+		OutParts.Add(GetNodeSearchLabel(Node));
+		AppendObjectSearchText(Node, OutParts);
+
+		if (const UScriptableNode_Task* TaskNode = Cast<UScriptableNode_Task>(Node))
+		{
+			AppendObjectSearchText(TaskNode->Task, OutParts);
+		}
+	}
+
+	/** True if any fragment of the node contains Query. OutContext is the matched fragment, or empty when the match is the title. */
+	bool NodeMatchesQuery(const UScriptableNode* Node, const FString& Query, FString& OutContext)
+	{
+		TArray<FString> Parts;
+		GatherNodeSearchParts(Node, Parts);
+
+		for (int32 Index = 0; Index < Parts.Num(); ++Index)
+		{
+			if (Parts[Index].Contains(Query))
+			{
+				OutContext = (Index == 0) ? FString() : Parts[Index];
+				return true;
+			}
+		}
+		return false;
+	}
 }
 
 TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Search(const FSpawnTabArgs& Args)
@@ -2664,13 +2721,13 @@ TSharedRef<SDockTab> FScriptableGraphEditor::SpawnTab_Search(const FSpawnTabArgs
 		.Padding(4.f)
 		[
 			SAssignNew(SearchBox, SSearchBox)
-			.HintText(LOCTEXT("SearchHint", "Search nodes by name..."))
+			.HintText(LOCTEXT("SearchHint", "Search nodes, properties, bindings..."))
 			.OnTextChanged(this, &FScriptableGraphEditor::OnSearchTextChanged)
 		]
 		+ SVerticalBox::Slot()
 		.FillHeight(1.f)
 		[
-			SAssignNew(SearchListView, SListView<TWeakObjectPtr<UScriptableNode>>)
+			SAssignNew(SearchListView, SListView<TSharedPtr<FScriptableGraphSearchResult>>)
 			.ListItemsSource(&SearchResults)
 			.SelectionMode(ESelectionMode::Single)
 			.OnGenerateRow(this, &FScriptableGraphEditor::OnGenerateSearchRow)
@@ -2697,9 +2754,17 @@ void FScriptableGraphEditor::OnSearchTextChanged(const FText& InText)
 		for (const TObjectPtr<UScriptableNode>& Node : Graph->Nodes)
 		{
 			if (!Node) continue;
-			if (Query.IsEmpty() || GetNodeSearchLabel(Node).Contains(Query))
+
+			if (Query.IsEmpty())
 			{
-				SearchResults.Add(Node);
+				SearchResults.Add(MakeShared<FScriptableGraphSearchResult>(FScriptableGraphSearchResult{ Node, FString() }));
+				continue;
+			}
+
+			FString MatchContext;
+			if (NodeMatchesQuery(Node, Query, MatchContext))
+			{
+				SearchResults.Add(MakeShared<FScriptableGraphSearchResult>(FScriptableGraphSearchResult{ Node, MatchContext }));
 			}
 		}
 	}
@@ -2710,20 +2775,42 @@ void FScriptableGraphEditor::OnSearchTextChanged(const FText& InText)
 	}
 }
 
-TSharedRef<ITableRow> FScriptableGraphEditor::OnGenerateSearchRow(TWeakObjectPtr<UScriptableNode> Item, const TSharedRef<STableViewBase>& OwnerTable)
+TSharedRef<ITableRow> FScriptableGraphEditor::OnGenerateSearchRow(TSharedPtr<FScriptableGraphSearchResult> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
-	const FString Label = Item.IsValid() ? GetNodeSearchLabel(Item.Get()) : TEXT("<invalid>");
-	return SNew(STableRow<TWeakObjectPtr<UScriptableNode>>, OwnerTable)
+	const UScriptableNode* Node = Item.IsValid() ? Item->Node.Get() : nullptr;
+	const FString Label = Node ? GetNodeSearchLabel(Node) : TEXT("<invalid>");
+
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+		+ SVerticalBox::Slot()
+		.AutoHeight()
 		[
 			SNew(STextBlock).Text(FText::FromString(Label))
 		];
+
+	if (Item.IsValid() && !Item->MatchContext.IsEmpty())
+	{
+		Box->AddSlot()
+			.AutoHeight()
+			[
+				SNew(STextBlock)
+					.Text(FText::FromString(Item->MatchContext))
+					.ColorAndOpacity(FSlateColor::UseSubduedForeground())
+					.Font(FAppStyle::GetFontStyle("PropertyWindow.ItalicFont"))
+			];
+	}
+
+	return SNew(STableRow<TSharedPtr<FScriptableGraphSearchResult>>, OwnerTable)
+		.Padding(FMargin(4.f, 2.f))
+		[
+			Box
+		];
 }
 
-void FScriptableGraphEditor::OnSearchResultClicked(TWeakObjectPtr<UScriptableNode> Item)
+void FScriptableGraphEditor::OnSearchResultClicked(TSharedPtr<FScriptableGraphSearchResult> Item)
 {
-	if (!Item.IsValid() || !GraphEditorWidget.IsValid()) return;
+	if (!Item.IsValid() || !Item->Node.IsValid() || !GraphEditorWidget.IsValid()) return;
 
-	if (UEdGraphNode* EdNode = FindEdNodeByRuntimeId(Item->GetBindingID()))
+	if (UEdGraphNode* EdNode = FindEdNodeByRuntimeId(Item->Node->GetBindingID()))
 	{
 		GraphEditorWidget->JumpToNode(EdNode, /*bRequestRename*/ false, /*bSelectNode*/ true);
 	}

@@ -22,6 +22,13 @@ class SKzValidationPanel;
 class FScriptableGraphSpawnInputProcessor;
 struct FKzValidationIssue;
 
+/** One Search-tab result: the matched node plus the text fragment that matched (shown dimmed under the label). */
+struct FScriptableGraphSearchResult
+{
+	TWeakObjectPtr<UScriptableNode> Node;
+	FString MatchContext;
+};
+
 /** Asset editor for UScriptableGraph. */
 class FScriptableGraphEditor : public FAssetEditorToolkit
 {
@@ -240,11 +247,11 @@ private:
 	/** Rebuilds the search results from the current query and refreshes the list. */
 	void OnSearchTextChanged(const FText& InText);
 
-	/** Builds a search result row showing the node's label. */
-	TSharedRef<ITableRow> OnGenerateSearchRow(TWeakObjectPtr<UScriptableNode> Item, const TSharedRef<STableViewBase>& OwnerTable);
+	/** Builds a search result row showing the node's label and the matched fragment. */
+	TSharedRef<ITableRow> OnGenerateSearchRow(TSharedPtr<FScriptableGraphSearchResult> Item, const TSharedRef<STableViewBase>& OwnerTable);
 
 	/** Click-to-navigate from a search result to its node. */
-	void OnSearchResultClicked(TWeakObjectPtr<UScriptableNode> Item);
+	void OnSearchResultClicked(TSharedPtr<FScriptableGraphSearchResult> Item);
 
 	/** Returns the ed-node wrapping the runtime node with the given BindingID, or null. */
 	UEdGraphNode* FindEdNodeByRuntimeId(const FGuid& RuntimeId) const;
@@ -264,10 +271,10 @@ private:
 	/** Validation panel shown in the Validation tab. */
 	TSharedPtr<SKzValidationPanel> ValidationPanel;
 
-	/** Search tab widgets + current results (runtime nodes matching the query). */
+	/** Search tab widgets + current results (nodes matching the query, with the matched fragment). */
 	TSharedPtr<SSearchBox> SearchBox;
-	TSharedPtr<SListView<TWeakObjectPtr<UScriptableNode>>> SearchListView;
-	TArray<TWeakObjectPtr<UScriptableNode>> SearchResults;
+	TSharedPtr<SListView<TSharedPtr<FScriptableGraphSearchResult>>> SearchListView;
+	TArray<TSharedPtr<FScriptableGraphSearchResult>> SearchResults;
 
 	/** Handle to the editor-wide property change broadcast, kept so we can unsubscribe at destruction. */
 	FDelegateHandle OnObjectPropertyChangedHandle;
