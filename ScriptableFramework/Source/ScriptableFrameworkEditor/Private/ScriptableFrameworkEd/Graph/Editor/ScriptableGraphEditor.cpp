@@ -677,8 +677,20 @@ void FScriptableGraphEditor::InitEdGraph()
 
 void FScriptableGraphEditor::ReconstructEdGraphFromAsset()
 {
-	UScriptableGraph* Graph = EditedGraph.Get();
-	if (!Graph || !Graph->EdGraph) return;
+	BuildEdGraphForAsset(EditedGraph.Get());
+}
+
+void FScriptableGraphEditor::BuildEdGraphForAsset(UScriptableGraph* Graph)
+{
+	if (!Graph) return;
+
+	// Ensure the ed-graph exists (matches InitEdGraph) so this works on revisions opened outside a toolkit.
+	if (!Graph->EdGraph)
+	{
+		UScriptableEdGraph* NewEdGraph = NewObject<UScriptableEdGraph>(Graph, UScriptableEdGraph::StaticClass(), NAME_None, RF_Transactional);
+		NewEdGraph->Schema = UScriptableEdGraphSchema::StaticClass();
+		Graph->EdGraph = NewEdGraph;
+	}
 
 	// Rebuilding the visual graph is a derived-view sync, not a user edit, so it must not dirty the
 	// asset. AddNode / MakeLinkTo call Modify() internally, so snapshot the package dirty state and

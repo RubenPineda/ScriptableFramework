@@ -38,6 +38,7 @@
 #include "ScriptableNodes/ScriptableNode.h"
 #include "ScriptableNodes/ScriptableGraph.h"
 #include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphEditor.h"
+#include "ScriptableFrameworkEd/Graph/Editor/ScriptableGraphAssetTypeActions.h"
 #include "ScriptableFrameworkEd/Graph/ScriptableEdGraphNode.h"
 #include "ScriptableFrameworkEd/RunnerViewer/SScriptableRunnerViewer.h"
 #include "EdGraph/EdGraph.h"
@@ -80,7 +81,13 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 
 	RegisterAssetTypeAction<UScriptableActionAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Action"), FScriptableFrameworkEditorStyle::ScriptableTaskColor.ToFColor(true));
 	RegisterAssetTypeAction<UScriptableRequirementAsset>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Requirement"), FScriptableFrameworkEditorStyle::ScriptableConditionColor.ToFColor(true));
-	RegisterAssetTypeAction<UScriptableGraph, FScriptableGraphEditor>(ScriptableAssetCategoryBit, INVTEXT("Scriptable Graph"), FScriptableFrameworkEditorStyle::ScriptableGraphColor.ToFColor(true));
+
+	// Registered by hand (not via the template) so it carries a custom PerformAssetDiff.
+	GraphAssetTypeActions = MakeShared<FScriptableGraphAssetTypeActions>(
+		ScriptableAssetCategoryBit, INVTEXT("Scriptable Graph"),
+		FScriptableFrameworkEditorStyle::ScriptableGraphColor.ToFColor(true),
+		UScriptableGraph::StaticClass(), TArray<FText>());
+	FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get().RegisterAssetTypeActions(GraphAssetTypeActions.ToSharedRef());
 
 	RegisterPropertyLayout<UScriptableTask, FScriptableTaskCustomization>();
 	RegisterPropertyLayout<UScriptableCondition, FScriptableConditionCustomization>();
@@ -121,6 +128,12 @@ void FScriptableFrameworkEditorModule::OnStartupModule()
 
 void FScriptableFrameworkEditorModule::OnShutdownModule()
 {
+	if (GraphAssetTypeActions.IsValid() && FModuleManager::Get().IsModuleLoaded("AssetTools"))
+	{
+		FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get().UnregisterAssetTypeActions(GraphAssetTypeActions.ToSharedRef());
+	}
+	GraphAssetTypeActions.Reset();
+
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TEXT("ScriptableRunners"));
 	UScriptableNode::OnNodeActivatedEditor.Remove(NodeActivatedHandle);
 	FEditorDelegates::EndPIE.Remove(EndPIEHandle);

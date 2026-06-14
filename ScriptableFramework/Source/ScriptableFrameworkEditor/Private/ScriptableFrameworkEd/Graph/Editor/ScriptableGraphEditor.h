@@ -60,6 +60,16 @@ private:
 	/** Reconstructs visual UEdGraphNodes from the asset's runtime Nodes list, skipping any already represented. */
 	void ReconstructEdGraphFromAsset();
 
+public:
+	/**
+	 * Ensures Graph has a UEdGraph and rebuilds its visual nodes/links from the runtime Nodes and
+	 * Connections. Standalone (no toolkit) so the diff tool can build the ed-graph for a revision
+	 * loaded outside an editor. Idempotent; does not dirty the package.
+	 */
+	static void BuildEdGraphForAsset(class UScriptableGraph* Graph);
+
+private:
+
 	/** Builds the context menu shown when the user right-clicks on empty graph space or drags from a pin. */
 	FActionMenuContent OnCreateNodeMenu(UEdGraph* InGraph, const FVector2f& InNodePosition, const TArray<UEdGraphPin*>& InDraggedPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed InOnMenuClosed);
 
