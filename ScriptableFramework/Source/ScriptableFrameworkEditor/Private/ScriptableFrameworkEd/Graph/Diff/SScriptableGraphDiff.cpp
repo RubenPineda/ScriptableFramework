@@ -6,6 +6,7 @@
 #include "ScriptableNodes/ScriptableGraph.h"
 
 #include "DiffUtils.h"
+#include "DetailsDiff.h"
 #include "GraphEditor.h"
 #include "EdGraph/EdGraph.h"
 #include "Framework/Application/SlateApplication.h"
@@ -44,6 +45,52 @@ FText SScriptableGraphDiff::MakeRevisionLabel(const FRevisionInfo& Revision, con
 	return FText::Format(LOCTEXT("RevisionLabelFmt", "Revision {0}"), FText::FromString(Revision.Revision));
 }
 
+void SScriptableGraphDiff::BuildAssetPropertyDifferences(const UScriptableGraph* OldGraph, const UScriptableGraph* NewGraph)
+{
+	TArray<TSharedPtr<FBlueprintDifferenceTreeEntry>> Children;
+
+	// Both revisions present: diff the asset's editable fields. The details view only surfaces
+	// EditAnywhere/VisibleAnywhere properties (Context, Locals, Outputs), so Nodes/Connections —
+	// already covered by the graph diff — don't show up here.
+	if (OldGraph && NewGraph)
+	{
+		FDetailsDiff OldDetails(OldGraph);
+		FDetailsDiff NewDetails(NewGraph);
+
+		TArray<FSingleObjectDiffEntry> PropertyDiffs;
+		OldDetails.DiffAgainst(NewDetails, PropertyDiffs);
+
+		for (const FSingleObjectDiffEntry& PropertyDiff : PropertyDiffs)
+		{
+			const FText Label = FText::FromString(PropertyDiff.Identifier.ToDisplayName());
+			TSharedPtr<FBlueprintDifferenceTreeEntry> Entry = MakeShared<FBlueprintDifferenceTreeEntry>(
+				FOnDiffEntryFocused(),
+				FGenerateDiffEntryWidget::CreateLambda([Label]()
+				{
+					return StaticCastSharedRef<SWidget>(SNew(STextBlock)
+						.Text(Label)
+						.ColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.8f, 0.3f))));
+				}));
+
+			Children.Add(Entry);
+			RealDifferences.Add(Entry);
+		}
+	}
+
+	const bool bHasDifferences = Children.Num() > 0;
+	if (Children.Num() == 0)
+	{
+		Children.Add(FBlueprintDifferenceTreeEntry::NoDifferencesEntry());
+	}
+
+	PrimaryDifferencesList.Add(FBlueprintDifferenceTreeEntry::CreateCategoryEntry(
+		LOCTEXT("AssetCategory", "Asset Properties"),
+		LOCTEXT("AssetCategoryTooltip", "Changes to the graph's Context, Locals and Outputs."),
+		FOnDiffEntryFocused(),
+		Children,
+		bHasDifferences));
+}
+
 void SScriptableGraphDiff::Construct(const FArguments& InArgs)
 {
 	// Build the graph editors first; their ed-graphs are what the diff control compares.
@@ -56,6 +103,8 @@ void SScriptableGraphDiff::Construct(const FArguments& InArgs)
 	GraphToDiff = MakeShared<FScriptableGraphToDiff>(OldEdGraph, NewEdGraph,
 		FScriptableGraphToDiff::FOnFocusDiff::CreateSP(this, &SScriptableGraphDiff::OnFocusDiff));
 	GraphToDiff->GenerateTreeEntries(PrimaryDifferencesList, RealDifferences);
+
+	BuildAssetPropertyDifferences(InArgs._OldGraph, InArgs._NewGraph);
 
 	DifferencesTreeView = DiffTreeView::CreateTreeView(&PrimaryDifferencesList);
 	for (const TSharedPtr<FBlueprintDifferenceTreeEntry>& Root : PrimaryDifferencesList)

@@ -99,7 +99,7 @@ void FScriptableGraphToDiff::AppendNodePropertyDiffs()
 			Synthetic.DisplayString = FText::Format(
 				LOCTEXT("PropertyDiffFmt", "{0}: {1}"),
 				FText::FromString(NodeTitle),
-				PropertyDiff.Identifier.ToDisplayName());
+				FText::FromString(PropertyDiff.Identifier.ToDisplayName()));
 			FoundDiffs.Add(Synthetic);
 		}
 	}

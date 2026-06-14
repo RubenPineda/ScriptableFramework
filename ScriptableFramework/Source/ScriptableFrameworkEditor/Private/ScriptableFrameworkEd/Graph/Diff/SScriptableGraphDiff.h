@@ -40,6 +40,9 @@ private:
 
 	static FText MakeRevisionLabel(const FRevisionInfo& Revision, const FText& Fallback);
 
+	/** Appends an "Asset Properties" tree category for changes to the graph's editable fields (Context, Locals, Outputs). */
+	void BuildAssetPropertyDifferences(const UScriptableGraph* OldGraph, const UScriptableGraph* NewGraph);
+
 	/** Centers both graph panels on the node(s) the focused difference refers to. */
 	void OnFocusDiff(const FDiffSingleResult& Diff);
 
