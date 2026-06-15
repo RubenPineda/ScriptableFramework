@@ -11,6 +11,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/EnumProperty.h"
 #include "StructUtils/PropertyBag.h"
+#include "Bindings/ScriptableConversionRegistry.h"
 
 bool FScriptablePropertyUtilities::ArePropertiesCompatible(const FProperty* SourceProp, const FProperty* TargetProp)
 {
@@ -96,6 +97,12 @@ bool FScriptablePropertyUtilities::ArePropertiesCompatible(const FProperty* Sour
 		return true;
 	}
 
+	// Registered type converters (e.g. AActor* -> FKzTransformSource).
+	if (FScriptableConversionRegistry::Get().HasConverter(SourceProp, TargetProp))
+	{
+		return true;
+	}
+
 	return false;
 }
 
@@ -123,16 +130,19 @@ void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp
 			{
 				TgtObjProp->SetObjectPropertyValue(TargetAddr, SourceObject);
 			}
+			return;
 		}
 		// Object -> Bool
-		else if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
+		if (const FBoolProperty* TgtBool = CastField<FBoolProperty>(TargetProp))
 		{
 			// Get the pointer (works for TObjectPtr and raw pointers)
 			const UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
 
 			// True if not null, False if null
 			TgtBool->SetPropertyValue(TargetAddr, SourceObject != nullptr);
+			return;
 		}
+		// Object -> anything else (e.g. a struct): handled by the converter registry below.
 	}
 	// Numeric <-> Numeric Conversion
 	else if (SourceProp->IsA<FNumericProperty>() && TargetProp->IsA<FNumericProperty>())
@@ -152,6 +162,7 @@ void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp
 			if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, (double)Val);
 			else TgtNum->SetIntPropertyValue(TargetAddr, Val);
 		}
+		return;
 	}
 	// Bool -> Numeric (True=1, False=0)
 	else if (const FBoolProperty* SrcBool = CastField<FBoolProperty>(SourceProp))
@@ -161,6 +172,7 @@ void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp
 			const bool bVal = SrcBool->GetPropertyValue(SourceAddr);
 			if (TgtNum->IsFloatingPoint()) TgtNum->SetFloatingPointPropertyValue(TargetAddr, bVal ? 1.0 : 0.0);
 			else TgtNum->SetIntPropertyValue(TargetAddr, int64(bVal ? 1 : 0));
+			return;
 		}
 	}
 	// Numeric -> Bool (0=False, !=0 True)
@@ -173,8 +185,12 @@ void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp
 			else bResult = (SrcNum->GetSignedIntPropertyValue(SourceAddr) != 0);
 
 			TgtBool->SetPropertyValue(TargetAddr, bResult);
+			return;
 		}
 	}
+
+	// Fallback: registered type converters (e.g. AActor* -> FKzTransformSource).
+	FScriptableConversionRegistry::Get().Convert(SourceProp, SourceAddr, TargetProp, TargetAddr);
 }
 
 #if WITH_EDITOR
