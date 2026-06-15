@@ -39,11 +39,14 @@ bool FScriptablePropertyUtilities::ArePropertiesCompatible(const FProperty* Sour
 	// 3. Objects
 	if (const FObjectPropertyBase* SourceObj = CastField<FObjectPropertyBase>(SourceProp))
 	{
-		// 3A. Object <-> Object (Bidirectional QoL for Blueprints)
+		// 3A. Object <-> Object (Bidirectional QoL for Blueprints). Mismatches fall through to the converter registry below.
 		if (const FObjectPropertyBase* TargetObj = CastField<FObjectPropertyBase>(TargetProp))
 		{
-			return SourceObj->PropertyClass->IsChildOf(TargetObj->PropertyClass) ||
-				TargetObj->PropertyClass->IsChildOf(SourceObj->PropertyClass);
+			if (SourceObj->PropertyClass->IsChildOf(TargetObj->PropertyClass) ||
+				TargetObj->PropertyClass->IsChildOf(SourceObj->PropertyClass))
+			{
+				return true;
+			}
 		}
 
 		// 3B. Object -> Bool (IsValid check)
@@ -54,12 +57,12 @@ bool FScriptablePropertyUtilities::ArePropertiesCompatible(const FProperty* Sour
 		}
 	}
 
-	// 4. Structs
+	// 4. Structs (exact match only; mismatches fall through to the converter registry below)
 	if (const FStructProperty* SourceStruct = CastField<FStructProperty>(SourceProp))
 	{
 		if (const FStructProperty* TargetStruct = CastField<FStructProperty>(TargetProp))
 		{
-			return SourceStruct->Struct == TargetStruct->Struct;
+			if (SourceStruct->Struct == TargetStruct->Struct) return true;
 		}
 	}
 

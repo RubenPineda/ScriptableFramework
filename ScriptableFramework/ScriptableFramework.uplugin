@@ -22,6 +22,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "ScriptableFrameworkConverters",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "ScriptableFrameworkUncooked",
 			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"

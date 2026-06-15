@@ -13,10 +13,12 @@
 
 namespace
 {
-	// Declared input parameters: excludes the return value, out params and by-ref params.
+	// Declared input parameters. Excludes the return value and true out params. A const-ref input also
+	// carries CPF_OutParm in UE, so it is kept (distinguished by CPF_ConstParm).
 	bool IsInputParam(const FProperty* Param)
 	{
-		return Param && Param->HasAnyPropertyFlags(CPF_Parm) && !Param->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm);
+		if (!Param || !Param->HasAnyPropertyFlags(CPF_Parm) || Param->HasAnyPropertyFlags(CPF_ReturnParm)) return false;
+		return !Param->HasAnyPropertyFlags(CPF_OutParm) || Param->HasAnyPropertyFlags(CPF_ConstParm);
 	}
 }
 
@@ -252,8 +254,9 @@ bool UScriptableTask_CallFunction::IsFunctionExposable(const UFunction* Func)
 		const FProperty* Param = *It;
 		if (!Param->HasAnyPropertyFlags(CPF_Parm) || Param->HasAnyPropertyFlags(CPF_ReturnParm)) continue;
 
-		// Out and by-ref params have no place to write back to.
-		if (Param->HasAnyPropertyFlags(CPF_OutParm)) return false;
+		// True out params (non-const by-ref) have no place to write back to. A const-ref input also
+		// carries CPF_OutParm in UE, so allow it (distinguished by CPF_ConstParm).
+		if (Param->HasAnyPropertyFlags(CPF_OutParm) && !Param->HasAnyPropertyFlags(CPF_ConstParm)) return false;
 
 		// Every input must be representable as a property bag member.
 		if (FPropertyBagPropertyDesc(Param->GetFName(), Param).ValueType == EPropertyBagPropertyType::None) return false;
