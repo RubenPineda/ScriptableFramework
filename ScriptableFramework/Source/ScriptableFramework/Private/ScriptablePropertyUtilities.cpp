@@ -758,4 +758,42 @@ bool FScriptablePropertyUtilities::FindAutoBindingPath(const FProperty* TargetPr
 	return false;
 }
 
+UClass* FScriptablePropertyUtilities::ResolveBoundSourceClass(const UScriptableObject* Object, const FProperty* TargetProperty)
+{
+	if (!Object || !TargetProperty) return nullptr;
+
+	TArray<FPropertyBindingBindableStructDescriptor> AccessibleStructs;
+	GatherAccessibleStructs(Object, AccessibleStructs);
+
+	for (const FScriptablePropertyBinding& Binding : Object->GetPropertyBindings().Bindings)
+	{
+		// Match the binding whose target is TargetProperty (a top-level object property: single leaf segment).
+		const int32 NumTargetSegments = Binding.TargetPath.NumSegments();
+		if (NumTargetSegments == 0 || Binding.TargetPath.GetSegment(NumTargetSegments - 1).GetName() != TargetProperty->GetFName())
+		{
+			continue;
+		}
+
+		const FPropertyBindingBindableStructDescriptor* SourceDesc = AccessibleStructs.FindByPredicate(
+			[&](const FPropertyBindingBindableStructDescriptor& Desc) { return Desc.ID == Binding.SourcePath.GetStructID(); });
+		if (!SourceDesc) return nullptr;
+
+		// Walk the source path to its leaf property, descending through nested structs.
+		const UStruct* CurrentStruct = SourceDesc->Struct.Get();
+		const FProperty* LeafProp = nullptr;
+		for (int32 i = 0; i < Binding.SourcePath.NumSegments(); ++i)
+		{
+			if (!CurrentStruct) return nullptr;
+			LeafProp = CurrentStruct->FindPropertyByName(Binding.SourcePath.GetSegment(i).GetName());
+			if (!LeafProp) return nullptr;
+			CurrentStruct = nullptr;
+			if (const FStructProperty* StructProp = CastField<FStructProperty>(LeafProp)) CurrentStruct = StructProp->Struct;
+		}
+
+		if (const FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(LeafProp)) return ObjProp->PropertyClass;
+		return nullptr;
+	}
+	return nullptr;
+}
+
 #endif

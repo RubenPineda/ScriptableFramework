@@ -45,5 +45,8 @@ public:
 
 	/** Attempts to automatically discover a compatible binding path for a Context property. */
 	static bool FindAutoBindingPath(const FProperty* TargetProperty, const TArray<struct FPropertyBindingBindableStructDescriptor>& AccessibleStructs, struct FPropertyBindingPath& OutPath);
+
+	/** Resolves the object class a bindable object property is bound to (via its binding's source leaf), or null when unbound or not an object. */
+	static UClass* ResolveBoundSourceClass(const class UScriptableObject* Object, const FProperty* TargetProperty);
 #endif
 };

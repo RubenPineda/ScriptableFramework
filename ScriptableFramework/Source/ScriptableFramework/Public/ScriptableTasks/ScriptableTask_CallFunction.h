@@ -64,6 +64,12 @@ public:
 	/** True if Local's declared type can receive Function's return value (exact, numeric or related object classes). */
 	static bool CanLocalReceiveReturnValue(const UFunction* Function, const FKzNamedVariant& Local);
 
+	/** Class the function list is drawn from: TargetClass when set, otherwise the type Target is bound to. */
+	UClass* GetEffectiveTargetClass() const;
+
+	/** The selected function resolved against the effective target class, or null. */
+	const UFunction* ResolveFunction() const;
+
 private:
 	UFUNCTION()
 	TArray<FString> GetFunctionNames() const;

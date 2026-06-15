@@ -49,7 +49,7 @@ void FScriptableTaskCallFunctionCustomization::ProcessPropertyHandle(TSharedRef<
 				.CurrentName_Lambda([Task]() { return Task.IsValid() ? Task->FunctionName : NAME_None; })
 				.OnGetItems_Lambda([Task]()
 				{
-					const UClass* Class = Task.IsValid() ? Task->TargetClass.Get() : nullptr;
+					const UClass* Class = Task.IsValid() ? Task->GetEffectiveTargetClass() : nullptr;
 					return ScriptableNamePickerItems::FromFunctions(Class, [](const UFunction* Func) { return UScriptableTask_CallFunction::IsFunctionExposable(Func); });
 				})
 				.OnNamePicked_Lambda([Handle = TSharedPtr<IPropertyHandle>(SubPropertyHandle)](FName Picked) { Handle->SetValue(Picked); }));
@@ -67,7 +67,7 @@ void FScriptableTaskCallFunctionCustomization::ProcessPropertyHandle(TSharedRef<
 				.OnGetItems_Lambda([Task]() -> TArray<FScriptableNameItem>
 				{
 					if (!Task.IsValid()) return {};
-					const UFunction* Function = Task->TargetClass ? Task->TargetClass->FindFunctionByName(Task->FunctionName) : nullptr;
+					const UFunction* Function = Task->ResolveFunction();
 					return ScriptableNamePickerItems::FromLocals(Task.Get(), [Function](const FKzNamedVariant& Var)
 					{
 						return UScriptableTask_CallFunction::CanLocalReceiveReturnValue(Function, Var);

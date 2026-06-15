@@ -113,7 +113,7 @@ void UScriptableTask_CallFunction::PostEditChangeProperty(FPropertyChangedEvent&
 	if (PropName == GET_MEMBER_NAME_CHECKED(UScriptableTask_CallFunction, TargetClass))
 	{
 		// Keep the selection only if the new class still offers the same function.
-		if (!TargetClass || !IsFunctionExposable(TargetClass->FindFunctionByName(FunctionName)))
+		if (!IsFunctionExposable(ResolveFunction()))
 		{
 			FunctionName = NAME_None;
 		}
@@ -146,13 +146,21 @@ void UScriptableTask_CallFunction::ValidateObject(TArray<FKzValidationIssue>& Ou
 		return;
 	}
 
-	const UFunction* Function = TargetClass ? TargetClass->FindFunctionByName(FunctionName) : nullptr;
+	const UClass* EffectiveClass = GetEffectiveTargetClass();
+	if (!EffectiveClass)
+	{
+		// No explicit TargetClass and Target's bound type is unknown; the function is resolved on the
+		// actual Target at runtime, so it cannot be verified here.
+		return;
+	}
+
+	const UFunction* Function = EffectiveClass->FindFunctionByName(FunctionName);
 	if (!Function || !IsFunctionExposable(Function))
 	{
 		OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
 			FText::Format(INVTEXT("'{0}': function '{1}' is missing on '{2}' or is no longer callable from here."),
 				FText::FromString(GetName()), FText::FromName(FunctionName),
-				TargetClass ? TargetClass->GetDisplayNameText() : INVTEXT("<no class>")),
+				EffectiveClass->GetDisplayNameText()),
 			GCallFunctionValidatorId));
 		return;
 	}
@@ -214,13 +222,27 @@ void UScriptableTask_CallFunction::ValidateObject(TArray<FKzValidationIssue>& Ou
 	}
 }
 
+UClass* UScriptableTask_CallFunction::GetEffectiveTargetClass() const
+{
+	if (TargetClass) return TargetClass;
+	const FProperty* TargetProperty = GetClass()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(UScriptableTask_CallFunction, Target));
+	return FScriptablePropertyUtilities::ResolveBoundSourceClass(this, TargetProperty);
+}
+
+const UFunction* UScriptableTask_CallFunction::ResolveFunction() const
+{
+	const UClass* Class = GetEffectiveTargetClass();
+	return Class ? Class->FindFunctionByName(FunctionName) : nullptr;
+}
+
 TArray<FString> UScriptableTask_CallFunction::GetFunctionNames() const
 {
 	TArray<FString> Names;
-	if (!TargetClass) return Names;
+	const UClass* Class = GetEffectiveTargetClass();
+	if (!Class) return Names;
 
 	// IncludeSuper iteration revisits overridden functions on parent classes; AddUnique collapses them.
-	for (TFieldIterator<UFunction> It(TargetClass); It; ++It)
+	for (TFieldIterator<UFunction> It(Class); It; ++It)
 	{
 		if (IsFunctionExposable(*It))
 		{
@@ -234,7 +256,7 @@ TArray<FString> UScriptableTask_CallFunction::GetFunctionNames() const
 TArray<FString> UScriptableTask_CallFunction::GetLocalNames() const
 {
 	TArray<FString> Names;
-	const UFunction* Function = TargetClass ? TargetClass->FindFunctionByName(FunctionName) : nullptr;
+	const UFunction* Function = ResolveFunction();
 	for (const FKzNamedVariant& Var : FScriptablePropertyUtilities::FindLocalsDeclarationFor(this))
 	{
 		if (!Var.GetName().IsNone() && CanLocalReceiveReturnValue(Function, Var)) Names.Add(Var.GetName().ToString());
@@ -338,7 +360,7 @@ void UScriptableTask_CallFunction::SanitizeResultLocal()
 {
 	if (ResultLocal.IsNone()) return;
 
-	const UFunction* Function = TargetClass ? TargetClass->FindFunctionByName(FunctionName) : nullptr;
+	const UFunction* Function = ResolveFunction();
 	for (const FKzNamedVariant& Var : FScriptablePropertyUtilities::FindLocalsDeclarationFor(this))
 	{
 		if (Var.GetName() == ResultLocal)
@@ -352,7 +374,7 @@ void UScriptableTask_CallFunction::SanitizeResultLocal()
 
 void UScriptableTask_CallFunction::SyncParametersBag()
 {
-	const UFunction* Function = TargetClass ? TargetClass->FindFunctionByName(FunctionName) : nullptr;
+	const UFunction* Function = ResolveFunction();
 	if (!Function || !IsFunctionExposable(Function))
 	{
 		Parameters.Reset();
