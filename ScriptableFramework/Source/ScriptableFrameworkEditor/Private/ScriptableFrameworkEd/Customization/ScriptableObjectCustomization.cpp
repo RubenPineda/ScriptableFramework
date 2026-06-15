@@ -213,6 +213,8 @@ namespace ScriptableBindingUI
 			ScriptableObject->GetPropertyBindings().AddPropertyBinding(SourcePath, TargetPath);
 			UpdateData();
 
+			ScriptableObject->PostBindingChanged(TargetPath.NumSegments() > 0 ? TargetPath.GetSegment(TargetPath.NumSegments() - 1).GetName() : NAME_None);
+
 			if (NotifierHandle.IsValid())
 			{
 				NotifierHandle->NotifyPostChange(EPropertyChangeType::ValueSet);
@@ -234,6 +236,8 @@ namespace ScriptableBindingUI
 
 			ScriptableObject->GetPropertyBindings().RemovePropertyBindings(TargetPath);
 			UpdateData();
+
+			ScriptableObject->PostBindingChanged(TargetPath.NumSegments() > 0 ? TargetPath.GetSegment(TargetPath.NumSegments() - 1).GetName() : NAME_None);
 
 			if (NotifierHandle.IsValid())
 			{

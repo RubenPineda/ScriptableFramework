@@ -127,6 +127,36 @@ void UScriptableTask_CallFunction::PostEditChangeProperty(FPropertyChangedEvent&
 	}
 }
 
+void UScriptableTask_CallFunction::PostBindingChanged(FName TargetPropertyName)
+{
+	Super::PostBindingChanged(TargetPropertyName);
+
+	if (TargetPropertyName != GET_MEMBER_NAME_CHECKED(UScriptableTask_CallFunction, Target))
+	{
+		return;
+	}
+
+	// Drop an explicit TargetClass that no longer narrows the bound Target type (binding cleared or
+	// rebound to an unrelated type).
+	if (TargetClass)
+	{
+		const UClass* Bound = GetBoundTargetClass();
+		if (!Bound || (!TargetClass->IsChildOf(Bound) && !Bound->IsChildOf(TargetClass)))
+		{
+			TargetClass = nullptr;
+		}
+	}
+
+	// The effective class may have changed; drop a FunctionName that is no longer callable on it.
+	if (!FunctionName.IsNone() && !IsFunctionExposable(ResolveFunction()))
+	{
+		FunctionName = NAME_None;
+	}
+
+	SyncParametersBag();
+	SanitizeResultLocal();
+}
+
 void UScriptableTask_CallFunction::PreSave(FObjectPreSaveContext SaveContext)
 {
 	// Absorb signature drift (e.g. a recompiled Blueprint) before bindings are baked and validated.
@@ -163,6 +193,19 @@ void UScriptableTask_CallFunction::ValidateObject(TArray<FKzValidationIssue>& Ou
 				EffectiveClass->GetDisplayNameText()),
 			GCallFunctionValidatorId));
 		return;
+	}
+
+	// An explicit TargetClass the bound Target can never satisfy makes the runtime IsA guard skip the call.
+	if (TargetClass)
+	{
+		const UClass* BoundClass = GetBoundTargetClass();
+		if (BoundClass && !TargetClass->IsChildOf(BoundClass) && !BoundClass->IsChildOf(TargetClass))
+		{
+			OutIssues.Add(FKzValidationIssue(EKzValidationSeverity::Error,
+				FText::Format(INVTEXT("'{0}': TargetClass '{1}' is unrelated to the bound Target type '{2}'; the call will be skipped at runtime."),
+					FText::FromString(GetName()), TargetClass->GetDisplayNameText(), BoundClass->GetDisplayNameText()),
+				GCallFunctionValidatorId));
+		}
 	}
 
 	// Parameters drift vs the live signature. PreSave resyncs on save, but validation also runs live.
@@ -222,11 +265,15 @@ void UScriptableTask_CallFunction::ValidateObject(TArray<FKzValidationIssue>& Ou
 	}
 }
 
-UClass* UScriptableTask_CallFunction::GetEffectiveTargetClass() const
+UClass* UScriptableTask_CallFunction::GetBoundTargetClass() const
 {
-	if (TargetClass) return TargetClass;
 	const FProperty* TargetProperty = GetClass()->FindPropertyByName(GET_MEMBER_NAME_CHECKED(UScriptableTask_CallFunction, Target));
 	return FScriptablePropertyUtilities::ResolveBoundSourceClass(this, TargetProperty);
+}
+
+UClass* UScriptableTask_CallFunction::GetEffectiveTargetClass() const
+{
+	return TargetClass ? TargetClass.Get() : GetBoundTargetClass();
 }
 
 const UFunction* UScriptableTask_CallFunction::ResolveFunction() const

@@ -62,6 +62,13 @@ public:
 	 * (e.g. a referenced function that no longer exists). Base implementation does nothing.
 	 */
 	virtual void ValidateObject(TArray<FKzValidationIssue>& OutIssues) const {}
+
+	/**
+	 * Called after a property binding on this object is added or removed through the editor binding UI.
+	 * TargetPropertyName is the bound property's leaf name. Lets a subclass reconcile dependent state
+	 * (e.g. a class derived from a bound property's type). Base implementation does nothing.
+	 */
+	virtual void PostBindingChanged(FName TargetPropertyName) {}
 #endif
 
 	// -------------------------------------------------------------------

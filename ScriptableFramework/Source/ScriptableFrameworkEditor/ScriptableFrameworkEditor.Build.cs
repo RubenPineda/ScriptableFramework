@@ -25,6 +25,7 @@ public class ScriptableFrameworkEditor : ModuleRules
 				"SlateCore",
 				"UnrealEd",
 				"PropertyEditor",
+				"ClassViewer",
 				"InputCore",
 				"Projects",
 				"BlueprintGraph",

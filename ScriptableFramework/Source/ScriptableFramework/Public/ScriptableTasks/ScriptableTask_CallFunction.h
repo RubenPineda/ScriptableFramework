@@ -57,6 +57,7 @@ public:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 	virtual void PreSave(FObjectPreSaveContext SaveContext) override;
 	virtual void ValidateObject(TArray<FKzValidationIssue>& OutIssues) const override;
+	virtual void PostBindingChanged(FName TargetPropertyName) override;
 
 	/** True if Func can be offered: BlueprintCallable, non-static, no out/ref params, bag-representable inputs. */
 	static bool IsFunctionExposable(const UFunction* Func);
@@ -64,7 +65,10 @@ public:
 	/** True if Local's declared type can receive Function's return value (exact, numeric or related object classes). */
 	static bool CanLocalReceiveReturnValue(const UFunction* Function, const FKzNamedVariant& Local);
 
-	/** Class the function list is drawn from: TargetClass when set, otherwise the type Target is bound to. */
+	/** The class Target is bound to (its binding source's type), ignoring any TargetClass override; null when Target is unbound or untyped. */
+	UClass* GetBoundTargetClass() const;
+
+	/** Class the function list is drawn from: TargetClass when set, otherwise GetBoundTargetClass(). */
 	UClass* GetEffectiveTargetClass() const;
 
 	/** The selected function resolved against the effective target class, or null. */
