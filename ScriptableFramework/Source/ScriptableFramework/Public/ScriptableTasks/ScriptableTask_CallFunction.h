@@ -27,8 +27,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UObject> Target;
 
-	/** Class the function is picked from. */
-	UPROPERTY(EditAnywhere, Category = "Config", meta = (NoBinding))
+	/** Class the function is picked from. Abstract bases are allowed: the function is resolved on the concrete Target at runtime. */
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (NoBinding, AllowAbstract = "true"))
 	TSubclassOf<UObject> TargetClass;
 
 	/** Function to call. Lists the BlueprintCallable functions of TargetClass. */
