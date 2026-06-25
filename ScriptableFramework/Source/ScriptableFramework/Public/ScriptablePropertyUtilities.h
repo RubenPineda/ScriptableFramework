@@ -30,6 +30,9 @@ public:
 	 */
 	static TConstArrayView<FKzNamedVariant> FindLocalsDeclarationFor(const UObject* Node);
 
+	/** True if the FScriptableContainer holding Node is editable per-instance (EditAnywhere / EditInstanceOnly). False if not found or EditDefaultsOnly. */
+	static bool IsOwningContainerInstanceEditable(const UObject* Node);
+
 	static bool IsPropertyBindableInput(const FProperty* Property);
 	static bool IsPropertyBindableOutput(const FProperty* Property);
 	static bool IsPropertyBindableContext(const FProperty* Property);

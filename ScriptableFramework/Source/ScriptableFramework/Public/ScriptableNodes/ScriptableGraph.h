@@ -151,6 +151,9 @@ private:
 
 	/** Walks every Set Local task in this graph and rewrites VarName when it matches OldName. */
 	void RedirectSetLocalVarNames(FName OldName, FName NewName);
+
+	/** Re-bakes auto-bindings on every node/task so context edits are picked up without a save. */
+	void RebakeNodeAutoBindings();
 #endif
 
 public:

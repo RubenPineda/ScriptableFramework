@@ -70,21 +70,19 @@ void UScriptableObject::PostEditImport()
 #if WITH_EDITOR
 void UScriptableObject::BakeAutoBindings()
 {
-	// Abort if we are cloning or duplicating this object at runtime.
-	// Running this in a GameWorld would wipe valid bindings because
-	// the runtime clone cannot resolve the accessible structs.
-	UWorld* World = GetWorld();
-	if (World && World->IsGameWorld())
+	// No world = design-time owner (CDO/archetype, or an asset subobject like a graph task) -> bake.
+	// With a world: never at runtime (PIE/game); an editor-level instance bakes only if its owning
+	// container is instance-editable, otherwise it inherits the template's bindings.
+	if (UWorld* World = GetWorld())
 	{
-		return;
-	}
-
-	// Only bake on templates (CDOs + archetype subobjects). Level / runtime instances inherit
-	// bindings from the archetype; baking here would clear them and re-write a potentially
-	// divergent result against an instance-scope context.
-	if (!IsTemplate())
-	{
-		return;
+		if (World->IsGameWorld())
+		{
+			return;
+		}
+		if (!FScriptablePropertyUtilities::IsOwningContainerInstanceEditable(this))
+		{
+			return;
+		}
 	}
 
 	bool bChanged = false;
@@ -178,7 +176,13 @@ void UScriptableObject::PostEditChangeChainProperty(FPropertyChangedChainEvent& 
 void UScriptableObject::PostDuplicate(bool bDuplicateForPIE)
 {
 	Super::PostDuplicate(bDuplicateForPIE);
-	BakeAutoBindings();
+
+	// A PIE duplicate inherits the original's bindings and may not be parented to its world yet here,
+	// so the world gate in BakeAutoBindings can't catch it — skip explicitly. Editor duplicates rebake.
+	if (!bDuplicateForPIE)
+	{
+		BakeAutoBindings();
+	}
 }
 
 FText UScriptableObject::GetDisplayTitle() const

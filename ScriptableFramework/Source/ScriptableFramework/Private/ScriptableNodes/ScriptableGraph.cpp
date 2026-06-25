@@ -77,6 +77,7 @@ void UScriptableGraph::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 		DetectAndApplyContextRename();
 		SnapshotContextNames();
 		RebuildContextBag();
+		RebakeNodeAutoBindings();
 	}
 
 	const bool bLocalsEdit = (PropertyName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals) || MemberName == GET_MEMBER_NAME_CHECKED(UScriptableGraph, Locals));
@@ -175,6 +176,20 @@ void UScriptableGraph::RedirectBindings(const FGuid& ExpectedSourceID, FName Old
 		if (UScriptableNode_Task* TaskWrapper = Cast<UScriptableNode_Task>(Node))
 		{
 			RedirectInHolder(TaskWrapper->Task, ExpectedSourceID, OldName, NewName);
+		}
+	}
+}
+
+void UScriptableGraph::RebakeNodeAutoBindings()
+{
+	// Context changed: re-discover auto-bindings on every node and its inner task.
+	for (const TObjectPtr<UScriptableNode>& Node : Nodes)
+	{
+		if (!Node) continue;
+		Node->BakeAutoBindings();
+		if (UScriptableNode_Task* TaskWrapper = Cast<UScriptableNode_Task>(Node))
+		{
+			if (TaskWrapper->Task) { TaskWrapper->Task->BakeAutoBindings(); }
 		}
 	}
 }

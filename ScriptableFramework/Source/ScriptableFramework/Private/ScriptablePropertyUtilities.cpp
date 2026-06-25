@@ -254,6 +254,44 @@ TConstArrayView<FKzNamedVariant> FScriptablePropertyUtilities::FindLocalsDeclara
 	return {};
 }
 
+bool FScriptablePropertyUtilities::IsOwningContainerInstanceEditable(const UObject* Node)
+{
+	if (!Node) return false;
+
+	const UScriptStruct* BaseContainerStruct = FScriptableContainer::StaticStruct();
+	for (const UObject* Cursor = Node->GetOuter(); Cursor; Cursor = Cursor->GetOuter())
+	{
+		for (TFieldIterator<FProperty> It(Cursor->GetClass()); It; ++It)
+		{
+			const FStructProperty* StructProp = CastField<FStructProperty>(*It);
+			if (!StructProp || !StructProp->Struct->IsChildOf(BaseContainerStruct)) continue;
+
+			const FScriptableContainer* Container = StructProp->ContainerPtrToValuePtr<FScriptableContainer>(Cursor);
+			if (!Container) continue;
+
+			for (TFieldIterator<FProperty> Inner(StructProp->Struct); Inner; ++Inner)
+			{
+				const FArrayProperty* ArrayProp = CastField<FArrayProperty>(*Inner);
+				if (!ArrayProp) continue;
+				const FObjectProperty* ObjProp = CastField<FObjectProperty>(ArrayProp->Inner);
+				if (!ObjProp) continue;
+
+				FScriptArrayHelper Helper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(const_cast<FScriptableContainer*>(Container)));
+				for (int32 i = 0; i < Helper.Num(); ++i)
+				{
+					if (ObjProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) == Node)
+					{
+						// EditAnywhere / EditInstanceOnly -> editable per instance; EditDefaultsOnly is not.
+						return StructProp->HasAnyPropertyFlags(CPF_Edit) && !StructProp->HasAnyPropertyFlags(CPF_DisableEditOnInstance);
+					}
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
 bool FScriptablePropertyUtilities::IsPropertyBindableInput(const FProperty* Property)
 {
 	if (!Property) return false;
