@@ -123,11 +123,26 @@ void FScriptablePropertyUtilities::CopyPropertyValue(const FProperty* SourceProp
 	// Object Reference Handling (TObjectPtr <-> Raw Ptr, Child -> Parent)
 	if (const FObjectPropertyBase* SrcObjProp = CastField<FObjectPropertyBase>(SourceProp))
 	{
-		// TObjectPtr <-> Raw Ptr
+		// TObjectPtr <-> Raw Ptr (and soft source -> hard target)
 		if (const FObjectPropertyBase* TgtObjProp = CastField<FObjectPropertyBase>(TargetProp))
 		{
-			// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer
+			// This gets the UObject* regardless of whether it's stored as TObjectPtr or raw pointer.
 			UObject* SourceObject = SrcObjProp->GetObjectPropertyValue(SourceAddr);
+
+			// A soft source resolves to null until it's loaded; load it so a HARD target receives the
+			// asset (binding a TSoftObjectPtr<X> to a TObjectPtr<X>). Skip when the target is itself soft:
+			// matching soft->soft is a same-type fast copy above, and we must not force a load there.
+			if (!SourceObject && !TgtObjProp->IsA<FSoftObjectProperty>())
+			{
+				if (const FSoftObjectProperty* SrcSoftProp = CastField<FSoftObjectProperty>(SourceProp))
+				{
+					const FSoftObjectPtr& SoftValue = SrcSoftProp->GetPropertyValue(SourceAddr);
+					if (!SoftValue.IsNull())
+					{
+						SourceObject = SoftValue.LoadSynchronous();
+					}
+				}
+			}
 
 			if (!SourceObject || SourceObject->IsA(TgtObjProp->PropertyClass))
 			{
