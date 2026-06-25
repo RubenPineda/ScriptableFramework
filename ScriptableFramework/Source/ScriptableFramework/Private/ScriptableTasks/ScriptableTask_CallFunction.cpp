@@ -102,7 +102,15 @@ void UScriptableTask_CallFunction::WriteReturnValueToLocal(const UFunction* Func
 FText UScriptableTask_CallFunction::GetDisplayTitle() const
 {
 	if (FunctionName.IsNone()) return INVTEXT("Call Function");
-	return FText::Format(INVTEXT("Call Function: {0}"), FText::FromName(FunctionName));
+
+	// Show it code-style as "Target.Function()" when the Target is bound (e.g. "Quiz.ShowCurrentQuestion()").
+	FString TargetName;
+	if (GetBindingDisplayText(GET_MEMBER_NAME_CHECKED(UScriptableTask_CallFunction, Target), TargetName))
+	{
+		return FText::Format(INVTEXT("{0}.{1}()"), FText::FromString(TargetName), FText::FromName(FunctionName));
+	}
+
+	return FText::Format(INVTEXT("Call Function: {0}()"), FText::FromName(FunctionName));
 }
 
 void UScriptableTask_CallFunction::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
