@@ -43,6 +43,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config", meta = (EditCondition = "bPlayAutomatically"))
 	bool bWaitUntilFinished = true;
 
+	/** If set, stopping the task mid-play jumps the sequence to its last frame (GoToEndAndStop) instead of freezing where it is. Only reachable while playing-and-waiting (otherwise the task has already finished). */
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (EditCondition = "bPlayAutomatically && bWaitUntilFinished"))
+	bool bGoToEndOnCancel = false;
+
 	/** The created Level Sequence Player. Bind subsequent Sequencer tasks (Play / Wait / SetPosition) to this. */
 	UPROPERTY(VisibleAnywhere, Transient, BlueprintReadOnly, Category = "Output")
 	TObjectPtr<ULevelSequencePlayer> Player = nullptr;

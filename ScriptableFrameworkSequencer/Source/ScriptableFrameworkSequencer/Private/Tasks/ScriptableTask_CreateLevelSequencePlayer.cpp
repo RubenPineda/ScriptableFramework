@@ -61,13 +61,21 @@ void UScriptableTask_CreateLevelSequencePlayer::FinishTask()
 void UScriptableTask_CreateLevelSequencePlayer::StopTask()
 {
 	// Cancel mid-play: unbind first so a Stop-triggered OnFinished can't try to Finish() this
-	// already-stopped task, then halt the player. ResetTask will destroy the actor on re-run.
+	// already-stopped task, then halt the player — landing on the final frame if requested, so the
+	// sequence's end state applies. ResetTask will destroy the actor on re-run.
 	if (Player)
 	{
 		Player->OnFinished.RemoveDynamic(this, &UScriptableTask_CreateLevelSequencePlayer::HandleSequenceFinished);
 		if (Player->IsPlaying())
 		{
-			Player->Stop();
+			if (bGoToEndOnCancel)
+			{
+				Player->GoToEndAndStop();
+			}
+			else
+			{
+				Player->Stop();
+			}
 		}
 	}
 }

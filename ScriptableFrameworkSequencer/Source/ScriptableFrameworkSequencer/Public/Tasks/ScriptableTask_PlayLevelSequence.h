@@ -23,6 +23,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Config")
 	bool bWaitUntilFinished = true;
 
+	/** If set, stopping the task mid-play jumps the sequence to its last frame (GoToEndAndStop) instead of freezing where it is. Only reachable while waiting (otherwise the task has already finished). */
+	UPROPERTY(EditAnywhere, Category = "Config", meta = (EditCondition = "bWaitUntilFinished"))
+	bool bGoToEndOnCancel = false;
+
 protected:
 	virtual void BeginTask() override;
 	virtual void FinishTask() override;

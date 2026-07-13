@@ -42,7 +42,16 @@ void UScriptableTask_PlayLevelSequence::StopTask()
 	{
 		// Unbind first so the Stop-triggered OnFinished can't try to Finish() this already-stopped task.
 		Player->OnFinished.RemoveDynamic(this, &UScriptableTask_PlayLevelSequence::HandleSequenceFinished);
-		Player->Stop();
+
+		// Cancelled mid-play: land on the final frame if requested, so the sequence's end state applies.
+		if (bGoToEndOnCancel)
+		{
+			Player->GoToEndAndStop();
+		}
+		else
+		{
+			Player->Stop();
+		}
 	}
 }
 
