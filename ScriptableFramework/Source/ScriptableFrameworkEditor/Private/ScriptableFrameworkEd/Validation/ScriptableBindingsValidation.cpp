@@ -7,6 +7,7 @@
 #include "ScriptablePropertyUtilities.h"
 #include "ScriptableFrameworkEditorHelpers.h"
 #include "Bindings/ScriptablePropertyBindings.h"
+#include "GameFramework/Actor.h"
 #include "PropertyBindingDataView.h"
 #include "Engine/Blueprint.h"
 #include "UObject/StructOnScope.h"
@@ -33,6 +34,22 @@ namespace
 			return OuterNode->GetBindingID();
 		}
 		return Obj->GetBindingID();
+	}
+
+	/**
+	 * Where the object lives, for issue messages: the owning actor's outliner label plus the subobject
+	 * chain below it (falls back to the package-relative path for non-actor roots). Without this, a
+	 * save-time error only names the inner task ("ScriptableTask_X_0") and gives no clue which
+	 * Blueprint or placed actor to open.
+	 */
+	FText GetOwnerContextText(const UScriptableObject* Obj)
+	{
+		if (!Obj) return LOCTEXT("UnknownOwner", "<unknown>");
+		if (const AActor* OwnerActor = Obj->GetTypedOuter<AActor>())
+		{
+			return FText::FromString(FString::Printf(TEXT("%s: %s"), *OwnerActor->GetActorNameOrLabel(), *Obj->GetPathName(OwnerActor)));
+		}
+		return FText::FromString(Obj->GetPathName(Obj->GetPackage()));
 	}
 
 	/** Returns the leaf property name from a target path, or the path's last segment if it cannot be resolved. */
@@ -100,7 +117,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			{
 				const FText Msg = FText::Format(
 					LOCTEXT("MissingInputBindingError", "'{0}': Input '{1}' must be connected to a value."),
-					FText::FromString(Obj->GetName()),
+					GetOwnerContextText(Obj),
 					Prop->GetDisplayNameText());
 				OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
 			}
@@ -111,7 +128,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 				{
 					const FText Msg = FText::Format(
 						LOCTEXT("MissingContextBindingError", "'{0}': Context '{1}' could not be auto-resolved and requires a manual wire."),
-						FText::FromString(Obj->GetName()),
+						GetOwnerContextText(Obj),
 						Prop->GetDisplayNameText());
 					OutIssues.Add(FKzValidationIssue::WithContextId(EKzValidationSeverity::Error, Msg, GBindingValidatorId, NavId));
 				}
@@ -162,7 +179,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			{
 				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingTargetGone", "'{0}': Binding targets property '{1}' that no longer exists."),
-					FText::FromString(Obj->GetName()),
+					GetOwnerContextText(Obj),
 					TargetName)));
 				continue;
 			}
@@ -174,7 +191,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			{
 				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingSourceContext", "'{0}': Binding on '{1}' points to a source context that no longer exists."),
-					FText::FromString(Obj->GetName()),
+					GetOwnerContextText(Obj),
 					TargetName)));
 				continue;
 			}
@@ -185,7 +202,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			{
 				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingSourceProp", "'{0}': Binding on '{1}' points to a source property that no longer exists."),
-					FText::FromString(Obj->GetName()),
+					GetOwnerContextText(Obj),
 					TargetName)));
 				continue;
 			}
@@ -194,7 +211,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 			{
 				OutIssues.Add(BuildIssue(FText::Format(
 					LOCTEXT("ObsoleteBindingTypeMismatch", "'{0}': Binding on '{1}' has an incompatible source type."),
-					FText::FromString(Obj->GetName()),
+					GetOwnerContextText(Obj),
 					TargetName)));
 			}
 		}
