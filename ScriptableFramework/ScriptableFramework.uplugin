@@ -1,9 +1,9 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.2",
+	"Version": 2,
+	"VersionName": "2.0",
 	"FriendlyName": "Scriptable Framework",
-	"Description": "Data-driven logic system for Unreal Engine. It empowers designers and programmers to embed modular logic sequences (Actions) and validation rules (Requirements) directly into Actors, Data Assets, or any UObject, without the overhead of creating unique Blueprint graphs for every specific interaction.",
+	"Description": "Data-driven logic system for Unreal Engine. Designers and programmers compose modular logic sequences (Actions), validation rules (Requirements) and event-driven visual Scriptable Graphs, and embed them directly into Actors, Data Assets, or any UObject. Includes automatic property bindings, reusable assets, mutable Locals, and a full node-graph editor with live debugging, without the overhead of a unique Blueprint graph per interaction.",
 	"Category": "Scripting",
 	"CreatedBy": "kirzo",
 	"CreatedByURL": "https://kirzo.dev",
