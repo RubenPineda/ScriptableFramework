@@ -52,6 +52,14 @@ public:
 
 	bool IsEmpty() const { return Conditions.IsEmpty(); }
 
+	/**
+	 * Creates a deep copy of this requirement with its Instanced conditions re-owned by NewOuter. A plain struct copy
+	 * only duplicates the condition POINTERS (still owned by this requirement's outer), so to store a requirement in
+	 * different, cook-safe memory — e.g. baking an editor-graph node's condition into a runtime data asset — copy it
+	 * via Clone. Returns an un-registered copy ready to evaluate.
+	 */
+	FScriptableRequirement Clone(UObject* NewOuter) const;
+
 public:
 	/** Static entry point to evaluate a requirement. */
 	static bool EvaluateRequirement(UObject* Owner, const FScriptableRequirement& Requirement);

@@ -60,6 +60,30 @@ void FScriptableRequirement::Unregister()
 	Super::Unregister();
 }
 
+FScriptableRequirement FScriptableRequirement::Clone(UObject* NewOuter) const
+{
+	// Shallow copy carries the persisted fields (Mode, bNegate, context/locals definitions) and the condition
+	// pointers; the deep copy below re-owns the Instanced conditions under NewOuter.
+	FScriptableRequirement Cloned = *this;
+	Cloned.bIsRegistered = false;
+
+	// Rebuild the transient context so the copy doesn't share the template's runtime bag.
+	Cloned.ConstructContext();
+
+	// Deep-copy the Instanced conditions under NewOuter. A plain struct copy only duplicated the pointers, which stay
+	// owned by this requirement's outer (e.g. an editor-only graph node stripped on cook) — so the copy would lose them.
+	Cloned.Conditions.Empty(Conditions.Num());
+	for (const TObjectPtr<UScriptableCondition>& Condition : Conditions)
+	{
+		if (Condition)
+		{
+			Cloned.Conditions.Add(DuplicateObject<UScriptableCondition>(Condition, NewOuter));
+		}
+	}
+
+	return Cloned;
+}
+
 bool FScriptableRequirement::Evaluate() const
 {
 	bool bResult = true;
