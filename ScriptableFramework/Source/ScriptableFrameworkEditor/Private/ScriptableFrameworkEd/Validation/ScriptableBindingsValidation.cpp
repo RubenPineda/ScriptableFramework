@@ -52,6 +52,30 @@ namespace
 		return FText::FromString(Obj->GetPathName(Obj->GetPackage()));
 	}
 
+	/**
+	 * True for leftovers of a Blueprint recompile. Trashed components keep hanging off the actor until the
+	 * next GC, carrying their old bindings, and validating them reports problems about objects that no
+	 * longer run and are never saved.
+	 */
+	bool IsStaleSubobject(const UObject* Object)
+	{
+		for (const UObject* Current = Object; Current; Current = Current->GetOuter())
+		{
+			if (!IsValid(Current) || Current->HasAnyFlags(RF_NewerVersionExists))
+			{
+				return true;
+			}
+
+			const FString Name = Current->GetName();
+			if (Name.StartsWith(TEXT("TRASH_")) || Name.StartsWith(TEXT("REINST_")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/** Returns the leaf property name from a target path, or the path's last segment if it cannot be resolved. */
 	FText GetTargetDisplayName(const UScriptableObject* Obj, const FPropertyBindingPath& TargetPath)
 	{
@@ -86,7 +110,7 @@ void FScriptableBindingsValidation::ValidateBindings(const UObject* Root, TArray
 	for (UObject* RawObj : NestedObjects)
 	{
 		UScriptableObject* Obj = Cast<UScriptableObject>(RawObj);
-		if (!Obj) continue;
+		if (!Obj || IsStaleSubobject(Obj)) continue;
 
 		/**
 		 * Read-only pass. SanitizeObsoleteBindings would wipe valid bindings without re-baking,
